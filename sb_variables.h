@@ -11,9 +11,9 @@ uint16_t gu16_parameterWord = PARAMETER_WORD;
 uint8_t UART_BaudRate=BAUD_57600;//,UART_DataBits=3,UART_Parity=0,UART_StopBit=0;
 uint8_t DeviceID=0;
 uint32_t gu32_SrNumber=0;
-uint8_t RTC_data[6]={0};
+uint8_t RTC_data[7]={0};
 uint8_t mode=NORMAL_MODE;
-uint8_t Normal_para_cnt=0,prog_para_cnt=0,autoCal_para_cnt=0,para_cnt1=0,Lastpara_cnt=0;
+uint8_t Normal_para_cnt=0,autoCal_para_cnt=0,para_cnt1=0;
 uint8_t gu8_SetACKPwd=0,gu8_deviceIDChangeTry=0;
 int16_t dummy=0,dummy1=0;
 uint8_t last_sec=0,last_min=0,last_hr=0,current_sec=0,current_min=0,current_hr=0;
@@ -65,6 +65,7 @@ uint32_t ul1=0,ul2=0,ul3=0;
 float tempfloat=0,tempfloat1=0,tempfloat2=0;
 uint32_t templong=0;
 
+uint8_t gu8_IsCOMDisable=0,gu8_IsLCDDisable=0;
 uint8_t gu8_rxMode=0,RxInd=0,XbeeRxInd=0,RxTimeout=0;
 uint8_t crcVal=0;
 uint16_t CustPassword=0,FactCustPassword=0;
@@ -79,6 +80,32 @@ uint8_t RxBuffer1[RX_IND_MAX]={0};
 uint8_t RxBuffer[RX_IND_MAX]={0};
 uint8_t TxBuffer[TX_IND_MAX]={0};
 uint8_t XbeeRxBuffer[XBEE_RX_IND_MAX]={0};
+
+
+bool bool_RH_TEMP_NC=0;
+bool bool_TMLog=0;
+bool bool_RHLog=0;
+uint8_t TM_Unit=0;
+uint8_t TM_Alrm_ON=0;
+uint8_t RH_Alrm_ON=0;
+uint8_t LastTM_Alrm_ON=0;
+uint8_t LastRH_Alrm_ON=0;
+float humidityRH=0;            
+float temperatureC=0,temperatureF=0;          
+float RealtemperatureC=0,RealtemperatureF=0;
+float RealhumidityRH=0;
+float TM_Min=0,TM_Max=0,TM_Mean=0;
+float RH_Min=0,RH_Max=0,RH_Mean=0;
+float TM_Cal_float_Value_F=0,TM_Cal_float_Value_C=0;
+float RH_Cal_float_Value_F=0,RH_Cal_float_Value_C=0;
+int16_t TM_Upper_Alm_ON=0,TM_Upper_Alm_OFF=0,TM_Lower_Alm_ON=0,TM_Lower_Alm_OFF=0;
+int16_t RH_Upper_Alm_ON=0,RH_Upper_Alm_OFF=0,RH_Lower_Alm_ON=0,RH_Lower_Alm_OFF=0;
+uint8_t TMRH_StartUpTimer=0;
+uint8_t TM_UserCalDateInd=0,RH_UserCalDateInd=0;
+int16_t TM_Cal_Value_F=0,RH_Cal_Value_F=0;
+int16_t TM_Cal_Value_C=0,RH_Cal_Value_C=0;
+uint8_t HrTMSampleInd=0,HrRHSampleInd=0;
+float HourTM_Mean=0.0,HourRH_Mean=0.0;
 
 bool bool_DP_NC[MAX_SUPPORTED_DP]={0};
 bool bool_DPLog[MAX_SUPPORTED_DP]={0};
@@ -117,7 +144,7 @@ uint8_t gu8_DPAutoCalDoorCnt[MAX_SUPPORTED_DP] = {0};
 uint32_t LowEpoch=0,MidEpoch=0,MidEpoch1=0,HighEpoch=0,MidLogInd=0;
 uint32_t InitLogInd=0,LastLogInd=0,StartEpoch=0,EndEpoch=0,StartEpochTime=0,EndEpochTime=0,TotalLog=0,StartLogInd=0,EndLogInd=0;
 
-uint8_t gu8_AutoSentTimeout=60,gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL,gu8_DeviceInGroup=DEFAULT_DEVICES_IN_GROUP,gu8_AutoSentTimer=0,gu8_groupID=0,gu8_broadcast=0,gu8_Mac2ValidTimer = 0;
+uint8_t gu8_AutoSentTimeout=60,gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL,gu8_DeviceInGroup=DEFAULT_DEVICES_IN_GROUP,gu8_AutoSentTimer=0,gu8_groupID=0,gu8_broadcast=0;
 uint32_t gu32_triggerXbeeResetTimer=0;
 
 uint8_t Temp_RTC_ARR[5]={0};
@@ -200,7 +227,54 @@ struct lcdbits
 	uint8_t reserver2 : 1;
 	
 }lcd={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+typedef enum
+{
+	PROG_PAGE_DISP=0,
+	DEVICE_ID_DISP,
 	
+	DP1_ALM_UP_ON_DISP,
+	DP1_ALM_UP_OFF_DISP,
+	DP1_ALM_LO_OFF_DISP,
+	DP1_ALM_LO_ON_DISP,
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+	DP2_ALM_UP_ON_DISP,
+	DP2_ALM_UP_OFF_DISP,
+	DP2_ALM_LO_OFF_DISP,
+	DP2_ALM_LO_ON_DISP,
+	
+	DP3_ALM_UP_ON_DISP,
+	DP3_ALM_UP_OFF_DISP,
+	DP3_ALM_LO_OFF_DISP,
+	DP3_ALM_LO_ON_DISP,
+	#else
+	TM_ALM_UP_ON_DISP,
+	TM_ALM_UP_OFF_DISP,
+	TM_ALM_LO_OFF_DISP,
+	TM_ALM_LO_ON_DISP,
+	TM_UNIT_DISP,
+	
+	RH_ALM_UP_ON_DISP,
+	RH_ALM_UP_OFF_DISP,
+	RH_ALM_LO_OFF_DISP,
+	RH_ALM_LO_ON_DISP,
+	#endif
+	
+	RTC_HR_DISP,
+	RTC_MN_DISP,
+	RTC_DT_DISP,
+	RTC_MH_DISP,
+	RTC_YR_DISP,
+	BUZ_ON_DISP,
+	BUZ_OFF_DISP,
+	UART_BDT_DISP,
+	
+	CAL_DISP,
+	
+}enum_ProgPara;
+
+enum_ProgPara emProgpara,emLastProgpara;
+
 uint8_t final_buffer[32];
 uint8_t disp_buffer[NO_DIGIT];
 uint8_t data[NO_DIGIT];

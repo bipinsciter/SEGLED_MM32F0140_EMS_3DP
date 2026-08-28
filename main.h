@@ -92,16 +92,18 @@ void Kalman_Init(KalmanFilter *kf, float qr, float rs, float initial_estimate);
 float Kalman_Update(KalmanFilter *kf, float measurement);
 ////----------------------------------------------------------------------------------------------------------------------------
 static inline int leapyear (long int year);
-unsigned long ydhms_diff (unsigned long int year1, unsigned long int yday1, unsigned int hour1, unsigned int min1, unsigned int sec1, unsigned int year0, unsigned int yday0, unsigned int hour0, unsigned int min0, unsigned int sec0);
+unsigned long ydhms_diff (signed long int year1, signed long int yday1, signed int hour1, signed int min1, signed int sec1, signed int year0, signed int yday0, signed int hour0, signed int min0, signed int sec0);
 unsigned long get_epoch_time(RTCData);
 void get_date_time(RTCData* t1,unsigned long epoch);
 void Check_RTC(void);
 void SecondTick(void);
 void boot_data(void);
+void Read_SHT25(void);
 //----------------------------------------------------------------------------------------------------------------------------
 void LogReading(uint8_t logtype,uint8_t userID,uint16_t password);
 void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password);
 void ResetMinMax(void);
+void TMUnitChange(void);
 //----------------------------------------------------------------------------------------------------------------------------
 void opstr(char *str);
 void opchar(uint8_t str);
@@ -116,7 +118,7 @@ uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd
 void ServePCMsg(void);
 void print_short(long val,char *data1,uint8_t no_of_digit);
 //----------------------------------------------------------------------------------------------------------------------------
-void ReadDiffPressure(uint8_t, uint32_t);
+void ReadDiffPressure(uint8_t);
 //----------------------------------------------------------------------------------------------------------------------------
 #ifdef ENABLE_KEY_LOGIC
 void check_key(void);

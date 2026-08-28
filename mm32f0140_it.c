@@ -131,6 +131,13 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 		static uint8_t mcnt=0,mcnt1=0,mcnt2=0;
 	
 		bool_msec50_flag = 1;
+		
+		mcnt2++;
+		if(mcnt2>=5)
+		{
+			mcnt2=0;
+			bool_msec250_flag = 1;
+		}
 	
 		mcnt1++;
 		if(mcnt1>=10)
@@ -141,6 +148,7 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 			
 			bool_dp_sw_factor_add[DP1] = 1;
 			bool_dp_sw_factor_add[DP2] = 1;
+			bool_dp_sw_factor_add[DP3] = 1;
 		}
 		
 		//---------------------------------------------

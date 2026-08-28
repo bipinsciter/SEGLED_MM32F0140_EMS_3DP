@@ -1,29 +1,8 @@
 /***********************************************************************************************************************
     @file    main.c
-    @author  FAE Team
-    @date    25-May-2023
+    @author  SAP
+    @date    22-August-2026
     @brief   THIS FILE PROVIDES ALL THE SYSTEM FUNCTIONS.
-  **********************************************************************************************************************
-    @attention
-
-    <h2><center>&copy; Copyright(c) <2023> <MindMotion></center></h2>
-
-      Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-    following conditions are met:
-    1. Redistributions of source code must retain the above copyright notice,
-       this list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and
-       the following disclaimer in the documentation and/or other materials provided with the distribution.
-    3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or
-       promote products derived from this software without specific prior written permission.
-
-      THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-    INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-    DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-    WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   *********************************************************************************************************************/
 
 /* Define to prevent recursive inclusion */
@@ -37,6 +16,7 @@
 #include "gpio.h"
 #include "TM1680.h"
 #include "XGZP6891D.h"
+#include "SHT25.h"
 //#include "DS1307.h"
 #include "PCF8563.h"
 #include "AT45DB321D.h"
@@ -72,6 +52,8 @@
 /* Private macro ******************************************************************************************************/
 
 /* Private variables **************************************************************************************************/
+nt16 sRH;                    //variable for raw humidity ticks
+nt16 sT;                     //variable for raw temperature ticks
 
 /* Private functions **************************************************************************************************/
 void ReadADCChannel(void)
@@ -103,7 +85,7 @@ static inline int leapyear (long int year)
     return((year & 3) == 0 && (year % 100 != 0 || ((year / 100) & 3) == (- (TM_YEAR_BASE / 100) & 3)));
 }
 
-unsigned long ydhms_diff (unsigned long int year1, unsigned long int yday1, unsigned int hour1, unsigned int min1, unsigned int sec1, unsigned int year0, unsigned int yday0, unsigned int hour0, unsigned int min0, unsigned int sec0)
+unsigned long ydhms_diff (signed long int year1, signed long int yday1, signed int hour1, signed int min1, signed int sec1, signed int year0, signed int yday0, signed int hour0, signed int min0, signed int sec0)
 {
     /* Compute intervening leap days correctly even if year is negative.
      Take care to avoid integer overflow here.  */
@@ -175,62 +157,24 @@ void get_date_time(RTCData* t1,unsigned long epoch)
 	//t1->year += 2000;
 }
 
-//void Check_RTC(void)
-//{
-//	static uint8_t current_sec=0, last_sec=0;
-//	
-//	RTC_data[0]=Read_byte_PCF8563(RTC_TIMESEC_REG);
-//	current_sec=RTC_data[0];
-//	
-//	if(last_sec != current_sec)
-//	{
-//		last_sec = current_sec;
-//		
-//		Read_PCF8563(RTC_TIMEMIN_REG,&RTC_data[1],5);
-//		
-//		bool_Sec_blink_flag ^= 1;
-//		
-//		RTC_data[0] &= ~BIT7;
-//		
-//		RTC_data[0] &= 0x7F;
-//		RTC_data[1] &= 0x7F;
-//		RTC_data[2] &= 0x3F;
-//		RTC_data[3] &= 0x3F;
-//		RTC_data[4] &= 0x1F;
-//		
-//		rtc.second = BCD2HEX(RTC_data[0]);		//Second
-//		rtc.minute = BCD2HEX(RTC_data[1]);		//Minute
-//		rtc.hour = BCD2HEX(RTC_data[2]);		//Hour
-//		rtc.day = BCD2HEX(RTC_data[3]);			//Date
-//		rtc.month = BCD2HEX(RTC_data[4]);		//Month
-//		rtc.year = BCD2HEX(RTC_data[5]);		//Year
-//		
-//		if(rtc.hour>=12) 
-//		{
-//			bool_AM_PM_Flag=0;
-//		}
-//		else                    
-//		{
-//			bool_AM_PM_Flag=1;
-//		}
-//		
-//		rtc1.second = rtc.second;				//Second
-//		rtc1.minute = rtc.minute;				//Minute
-//		rtc1.hour = rtc.hour;					//Hour
-//		rtc1.day = rtc.day;						//Date
-//		rtc1.month = rtc.month;					//Month
-//		rtc1.year = rtc.year + 2000;			//Year
-
-//		ep.currentEpochTime = get_epoch_time(rtc1);
-//	}
-//}
-
 void Check_RTC(void)
 {
+//	//---------------------------------------------------------------		
 //	bool_Sec_blink_flag ^= 1;
 
 //	ep.currentEpochTime++;
 //	get_date_time(&rtc,ep.currentEpochTime);
+	
+//	if(rtc.hour>=12) 
+//	{
+//		bool_AM_PM_Flag=0;
+//	}
+//	else                    
+//	{
+//		bool_AM_PM_Flag=1;
+//	}
+
+//	//---------------------------------------------------------------	
 	
 	RTC_data[0]=Read_byte_PCF8563(RTC_TIMESEC_REG);
 	current_sec=RTC_data[0];
@@ -239,7 +183,7 @@ void Check_RTC(void)
 	{
 		last_sec = current_sec;
 		
-		Read_PCF8563(RTC_TIMEMIN_REG,&RTC_data[1],5);
+		Read_PCF8563(RTC_TIMEMIN_REG,&RTC_data[1],6);
 		
 		bool_Sec_blink_flag ^= 1;
 
@@ -247,14 +191,14 @@ void Check_RTC(void)
 		RTC_data[1] &= 0x7F;
 		RTC_data[2] &= 0x3F;
 		RTC_data[3] &= 0x3F;
-		RTC_data[4] &= 0x1F;
+		RTC_data[5] &= 0x1F;
 		
 		rtc.second = BCD2HEX(RTC_data[0]);		//Second
 		rtc.minute = BCD2HEX(RTC_data[1]);		//Minute
 		rtc.hour = BCD2HEX(RTC_data[2]);		//Hour
 		rtc.day = BCD2HEX(RTC_data[3]);			//Date
-		rtc.month = BCD2HEX(RTC_data[4]);		//Month
-		rtc.year = BCD2HEX(RTC_data[5]);		//Year
+		rtc.month = BCD2HEX(RTC_data[5]);		//Month
+		rtc.year = BCD2HEX(RTC_data[6]);		//Year
 		
 		if(rtc.hour>=12) 
 		{
@@ -301,7 +245,9 @@ void Check_RTC(void)
 				HourDP_Mean[DP1] += Dpressure[DP1];
 				HrDPSampleInd[DP1]++;
 			}
-		
+			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+
 			if(gu16_parameterWord & ENABLE_DP2)
 			{
 				HourDP_Mean[DP2] += Dpressure[DP2];
@@ -314,12 +260,21 @@ void Check_RTC(void)
 				HrDPSampleInd[DP3]++;
 			}
 
-			/*opstr("\r\nMinute: ");
-			print_float(HourDP_Mean[DP1],test,1);	opstr("      ");
-			print_float(HourDP_Mean[DP2],test,1);	opstr("      ");
-			print_float(HourDP_Mean[DP3],test,1);
-			opstr("\r\n");
-			*/
+			#else
+
+			if(gu16_parameterWord & ENABLE_TEMP)
+			{
+				HourTM_Mean += temperatureC;
+				HrTMSampleInd++;
+			}
+		
+			if(gu16_parameterWord & ENABLE_RH)
+			{
+				HourRH_Mean += humidityRH;
+				HrRHSampleInd++;
+			}
+
+			#endif
 		}
 	}
 	
@@ -335,7 +290,9 @@ void Check_RTC(void)
 				HourDP_Mean[DP1]=0.0;
 				HrDPSampleInd[DP1]=0;
 			}
-		
+			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+
 			if(gu16_parameterWord & ENABLE_DP2)
 			{
 				HourDP_Mean[DP2] /= HrDPSampleInd[DP2];
@@ -351,6 +308,26 @@ void Check_RTC(void)
 				HourDP_Mean[DP3]=0.0;
 				HrDPSampleInd[DP3]=0;
 			}
+
+			#else
+
+			if(gu16_parameterWord & ENABLE_TEMP)
+			{
+				HourTM_Mean /= HrTMSampleInd;
+				WriteLog(TM_CURR_24HR_MEAN_OFFSET,last_hr,(uint8_t*)&HourTM_Mean,4);
+				HourTM_Mean=0.0;
+				HrTMSampleInd=0;
+			}
+		
+			if(gu16_parameterWord & ENABLE_RH)
+			{
+				HourRH_Mean /= HrRHSampleInd;
+				WriteLog(RH_CURR_24HR_MEAN_OFFSET,last_hr,(uint8_t*)&HourRH_Mean,4);
+				HourRH_Mean=0.0;
+				HrRHSampleInd=0;
+			}
+			
+			#endif
 		}
 		
 		last_hr = current_hr;
@@ -386,7 +363,9 @@ void Check_RTC(void)
 					memcpy(&MinMaxMeanDayLogArr[12],(uint8_t*)&DP_Mean[DP1],4);
 					WriteLog(LAST_DP1_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
 				}
-			
+				
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+
 				//Find DP2 Mean Value from last 24 Hour and Store it ---------------------------------------------
 				if(gu16_parameterWord & ENABLE_DP2)
 				{
@@ -426,6 +405,50 @@ void Check_RTC(void)
 					memcpy(&MinMaxMeanDayLogArr[12],(uint8_t*)&DP_Mean[DP3],4);
 					WriteLog(LAST_DP3_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
 				}
+
+				#else
+
+				//Find TM Mean Value from last 24 Hour and Store it ---------------------------------------------
+				if(gu16_parameterWord & ENABLE_TEMP)
+				{
+					ReadMinMaxLog(TM_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+					TM_Mean=0;
+					a2=0;
+					for(a1=0;a1<TOTAL_MEAN_HOUR;a1++)
+					{
+						memcpy((unsigned char*)&tempfloat1,&Buffer1[a2],4);
+						a2 += 4;
+						TM_Mean += tempfloat1;
+					}
+					TM_Mean /= TOTAL_MEAN_HOUR;
+				
+					memcpy(&MinMaxMeanDayLogArr[4],(unsigned char*)&TM_Min,4);
+					memcpy(&MinMaxMeanDayLogArr[8],(unsigned char*)&TM_Max,4);
+					memcpy(&MinMaxMeanDayLogArr[12],(unsigned char*)&TM_Mean,4);
+					WriteLog(LAST_TM_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
+				}
+				
+				//Find RH Mean Value from last 24 Hour and Store it ---------------------------------------------
+				if(gu16_parameterWord & ENABLE_RH)
+				{
+					ReadMinMaxLog(RH_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+					RH_Mean=0;
+					a2=0;
+					for(a1=0;a1<TOTAL_MEAN_HOUR;a1++)
+					{
+						memcpy((unsigned char*)&tempfloat1,&Buffer1[a2],4);
+						a2 += 4;
+						RH_Mean += tempfloat1;
+					}
+					RH_Mean /= TOTAL_MEAN_HOUR;
+			
+					memcpy(&MinMaxMeanDayLogArr[4],(unsigned char*)&RH_Min,4);
+					memcpy(&MinMaxMeanDayLogArr[8],(unsigned char*)&RH_Max,4);
+					memcpy(&MinMaxMeanDayLogArr[12],(unsigned char*)&RH_Mean,4);
+					WriteLog(LAST_RH_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
+				}
+				
+				#endif
 			
 				//Clear all Hour mean value for next day
 				memset(Buffer1,0,100);
@@ -435,6 +458,9 @@ void Check_RTC(void)
 					HourDP_Mean[DP1]=0;
 					HrDPSampleInd[DP1]=0;
 				}
+				
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+
 				if(gu16_parameterWord & ENABLE_DP2)
 				{
 					WriteLog(DP2_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
@@ -447,6 +473,23 @@ void Check_RTC(void)
 					HourDP_Mean[DP3]=0;
 					HrDPSampleInd[DP3]=0;
 				}
+				
+				#else
+
+				if(gu16_parameterWord & ENABLE_TEMP)
+				{
+					WriteLog(TM_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+					HourTM_Mean=0;
+					HrTMSampleInd=0;
+				}
+				if(gu16_parameterWord & ENABLE_RH)
+				{
+					WriteLog(RH_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+					HourRH_Mean=0;
+					HrRHSampleInd=0;
+				}
+				
+				#endif
 			
 				MinMaxMeanDayLogInd++;
 				if(MinMaxMeanDayLogInd>=TOTAL_MIN_MAX_MEAN_LOG) MinMaxMeanDayLogInd=0;
@@ -464,16 +507,6 @@ void Check_RTC(void)
 	{
 		bool_resetMinMax=0;
 	}
-//	//---------------------------------------------------------------	
-//	if(rtc.hour>=12) 
-//	{
-//		bool_AM_PM_Flag=0;
-//	}
-//	else                    
-//	{
-//		bool_AM_PM_Flag=1;
-//	}
-	//---------------------------------------------------------------
 }
 
 static uint8_t changeNibbles(uint8_t byte)
@@ -525,8 +558,8 @@ void InitLEDController(void)
 	data[2] = E;
 	data[3] = r;
 	
-	data[5] = 11;
-	data[6] = 0;
+	data[5] = FW_MAJOR+10;
+	data[6] = FW_MINOR;
 						
 	disp_value();
 	PLATFORM_DelayMS(1000);
@@ -571,7 +604,7 @@ void InitLEDController(void)
 
 //	convert_float(gu32_SrNumber,&data[4],0);
 //	disp_value();
-	PLATFORM_DelayMS(2000);
+	PLATFORM_DelayMS(1000);
 }
 
 void disp_value(void)
@@ -677,6 +710,7 @@ void disp_value(void)
 			DP_MIN_on;	
 			DP_MIN_ALM_on;
 		}
+		
 		if(lcd.Sym_DP_LOGO_ALM) DP_LOGO_ALM_on;
 		
 		if(disp_buffer[4] & 0x01) final_buffer[24] |= BIT4;//DP_A1_on;
@@ -730,8 +764,7 @@ void disp_value(void)
 		if(disp_buffer[6] & 0x40) final_buffer[22] |= BIT3;//DP_G3_on;
 	}
 	
-	if(lcd.Sym_TM_UNIT_C) TM_UNIT_C_on;
-	if(lcd.Sym_TM_UNIT_F) TM_UNIT_F_on;
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	
 	if(DP_Alrm_ON[DP2]==NO_ALARM)
 	{
@@ -766,7 +799,6 @@ void disp_value(void)
 	else if(DP_Alrm_ON[DP2]==LOWER_ALARM)
 	{
 		if(lcd.Sym_TM_MIN_ALM) TM_MIN_ALM_on;
-		//if(lcd.Sym_TM_LOGO_ALM) TM_LOGO_ALM_on;
 		
 		if(disp_buffer[7] & 0x01) final_buffer[8] |= BIT3;//TM_A1_on;
 		if(disp_buffer[7] & 0x02) final_buffer[9] |= BIT3;//TM_B1_on;
@@ -800,7 +832,248 @@ void disp_value(void)
 			TM_MIN_on;
 			TM_MIN_ALM_on;
 		}
-		//if(lcd.Sym_TM_LOGO_ALM) TM_LOGO_ALM_on;
+		
+		if(disp_buffer[7] & 0x01) final_buffer[8] |= BIT2;//TM_A1_on;
+		if(disp_buffer[7] & 0x02) final_buffer[9] |= BIT2;//TM_B1_on;
+		if(disp_buffer[7] & 0x04) final_buffer[10] |= BIT2;//TM_C1_on;
+		if(disp_buffer[7] & 0x08) final_buffer[11] |= BIT2;//TM_D1_on;
+		if(disp_buffer[7] & 0x10) final_buffer[12] |= BIT2;//TM_E1_on;
+		if(disp_buffer[7] & 0x20) final_buffer[13] |= BIT2;//TM_F1_on;
+		if(disp_buffer[7] & 0x40) final_buffer[14] |= BIT2;//TM_G1_on;
+
+		if(disp_buffer[8] & 0x01) final_buffer[0] |= BIT4;//TM_A2_on;
+		if(disp_buffer[8] & 0x02) final_buffer[1] |= BIT4;//TM_B2_on;
+		if(disp_buffer[8] & 0x04) final_buffer[2] |= BIT4;//TM_C2_on;
+		if(disp_buffer[8] & 0x08) final_buffer[3] |= BIT4;//TM_D2_on;
+		if(disp_buffer[8] & 0x10) final_buffer[4] |= BIT4;//TM_E2_on;
+		if(disp_buffer[8] & 0x20) final_buffer[5] |= BIT4;//TM_F2_on;
+		if(disp_buffer[8] & 0x40) final_buffer[6] |= BIT4;//TM_G2_on;
+		if(disp_buffer[8] & 0x80) final_buffer[7] |= BIT4;//TM_H2_on;
+
+		if(disp_buffer[9] & 0x01) final_buffer[8] |= BIT4;//TM_A3_on;
+		if(disp_buffer[9] & 0x02) final_buffer[9] |= BIT4;//TM_B3_on;
+		if(disp_buffer[9] & 0x04) final_buffer[10] |= BIT4;//TM_C3_on;
+		if(disp_buffer[9] & 0x08) final_buffer[11] |= BIT4;//TM_D3_on;
+		if(disp_buffer[9] & 0x10) final_buffer[12] |= BIT4;//TM_E3_on;
+		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT4;//TM_F3_on;
+		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT4;//TM_G3_on;
+		
+		if(disp_buffer[7] & 0x01) final_buffer[8] |= BIT3;//TM_A1_on;
+		if(disp_buffer[7] & 0x02) final_buffer[9] |= BIT3;//TM_B1_on;
+		if(disp_buffer[7] & 0x04) final_buffer[10] |= BIT3;//TM_C1_on;
+		if(disp_buffer[7] & 0x08) final_buffer[11] |= BIT3;//TM_D1_on;
+		if(disp_buffer[7] & 0x10) final_buffer[12] |= BIT3;//TM_E1_on;
+		if(disp_buffer[7] & 0x20) final_buffer[13] |= BIT3;//TM_F1_on;
+		if(disp_buffer[7] & 0x40) final_buffer[14] |= BIT3;//TM_G1_on;
+
+		if(disp_buffer[8] & 0x01) final_buffer[0] |= BIT5;//TM_A2_on;
+		if(disp_buffer[8] & 0x02) final_buffer[1] |= BIT5;//TM_B2_on;
+		if(disp_buffer[8] & 0x04) final_buffer[2] |= BIT5;//TM_C2_on;
+		if(disp_buffer[8] & 0x08) final_buffer[3] |= BIT5;//TM_D2_on;
+		if(disp_buffer[8] & 0x10) final_buffer[4] |= BIT5;//TM_E2_on;
+		if(disp_buffer[8] & 0x20) final_buffer[5] |= BIT5;//TM_F2_on;
+		if(disp_buffer[8] & 0x40) final_buffer[6] |= BIT5;//TM_G2_on;
+		if(disp_buffer[8] & 0x80) final_buffer[7] |= BIT5;//TM_H2_on;
+
+		if(disp_buffer[9] & 0x01) final_buffer[8] |= BIT5;//TM_A3_on;
+		if(disp_buffer[9] & 0x02) final_buffer[9] |= BIT5;//TM_B3_on;
+		if(disp_buffer[9] & 0x04) final_buffer[10] |= BIT5;//TM_C3_on;
+		if(disp_buffer[9] & 0x08) final_buffer[11] |= BIT5;//TM_D3_on;
+		if(disp_buffer[9] & 0x10) final_buffer[12] |= BIT5;//TM_E3_on;
+		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT5;//TM_F3_on;
+		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT5;//TM_G3_on;
+	}
+	
+	if(DP_Alrm_ON[DP3]==NO_ALARM)
+	{
+		if(lcd.Sym_RH_MIN) RH_MIN_on;
+		
+		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT0;//RH_A1_on;
+		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT0;//RH_B1_on;
+		if(disp_buffer[10] & 0x04) final_buffer[2] |= BIT0;//RH_C1_on;
+		if(disp_buffer[10] & 0x08) final_buffer[3] |= BIT0;//RH_D1_on;
+		if(disp_buffer[10] & 0x10) final_buffer[4] |= BIT0;//RH_E1_on;
+		if(disp_buffer[10] & 0x20) final_buffer[5] |= BIT0;//RH_F1_on;
+		if(disp_buffer[10] & 0x40) final_buffer[6] |= BIT0;//RH_G1_on;
+
+		if(disp_buffer[11] & 0x01) final_buffer[8] |= BIT0;//RH_A2_on;
+		if(disp_buffer[11] & 0x02) final_buffer[9] |= BIT0;//RH_B2_on;
+		if(disp_buffer[11] & 0x04) final_buffer[10] |= BIT0;//RH_C2_on;
+		if(disp_buffer[11] & 0x08) final_buffer[11] |= BIT0;//RH_D2_on;
+		if(disp_buffer[11] & 0x10) final_buffer[12] |= BIT0;//RH_E2_on;
+		if(disp_buffer[11] & 0x20) final_buffer[13] |= BIT0;//RH_F2_on;
+		if(disp_buffer[11] & 0x40) final_buffer[14] |= BIT0;//RH_G2_on;
+		if(disp_buffer[11] & 0x80) final_buffer[15] |= BIT0;//RH_H2_on;
+
+		if(disp_buffer[12] & 0x01) final_buffer[0] |= BIT2;//RH_A3_on;
+		if(disp_buffer[12] & 0x02) final_buffer[1] |= BIT2;//RH_B3_on;
+		if(disp_buffer[12] & 0x04) final_buffer[2] |= BIT2;//RH_C3_on;
+		if(disp_buffer[12] & 0x08) final_buffer[3] |= BIT2;//RH_D3_on;
+		if(disp_buffer[12] & 0x10) final_buffer[4] |= BIT2;//RH_E3_on;
+		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
+		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
+	}
+	else if(DP_Alrm_ON[DP3]==LOWER_ALARM)
+	{
+		if(lcd.Sym_RH_MIN_ALM) RH_MIN_ALM_on;
+		
+		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT1;//RH_A1_on;
+		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT1;//RH_B1_on;
+		if(disp_buffer[10] & 0x04) final_buffer[2] |= BIT1;//RH_C1_on;
+		if(disp_buffer[10] & 0x08) final_buffer[3] |= BIT1;//RH_D1_on;
+		if(disp_buffer[10] & 0x10) final_buffer[4] |= BIT1;//RH_E1_on;
+		if(disp_buffer[10] & 0x20) final_buffer[5] |= BIT1;//RH_F1_on;
+		if(disp_buffer[10] & 0x40) final_buffer[6] |= BIT1;//RH_G1_on;
+
+		if(disp_buffer[11] & 0x01) final_buffer[8] |= BIT1;//RH_A2_on;
+		if(disp_buffer[11] & 0x02) final_buffer[9] |= BIT1;//RH_B2_on;
+		if(disp_buffer[11] & 0x04) final_buffer[10] |= BIT1;//RH_C2_on;
+		if(disp_buffer[11] & 0x08) final_buffer[11] |= BIT1;//RH_D2_on;
+		if(disp_buffer[11] & 0x10) final_buffer[12] |= BIT1;//RH_E2_on;
+		if(disp_buffer[11] & 0x20) final_buffer[13] |= BIT1;//RH_F2_on;
+		if(disp_buffer[11] & 0x40) final_buffer[14] |= BIT1;//RH_G2_on;
+		if(disp_buffer[11] & 0x80) final_buffer[15] |= BIT1;//RH_H2_on;
+
+		if(disp_buffer[12] & 0x01) final_buffer[0] |= BIT3;//RH_A3_on;
+		if(disp_buffer[12] & 0x02) final_buffer[1] |= BIT3;//RH_B3_on;
+		if(disp_buffer[12] & 0x04) final_buffer[2] |= BIT3;//RH_C3_on;
+		if(disp_buffer[12] & 0x08) final_buffer[3] |= BIT3;//RH_D3_on;
+		if(disp_buffer[12] & 0x10) final_buffer[4] |= BIT3;//RH_E3_on;
+		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT3;//RH_F3_on;
+		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT3;//RH_G3_on;
+	}	
+	else
+	{
+		if(lcd.Sym_RH_MIN) 
+		{
+			RH_MIN_on;
+			RH_MIN_ALM_on;
+		}
+		
+		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT0;//RH_A1_on;
+		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT0;//RH_B1_on;
+		if(disp_buffer[10] & 0x04) final_buffer[2] |= BIT0;//RH_C1_on;
+		if(disp_buffer[10] & 0x08) final_buffer[3] |= BIT0;//RH_D1_on;
+		if(disp_buffer[10] & 0x10) final_buffer[4] |= BIT0;//RH_E1_on;
+		if(disp_buffer[10] & 0x20) final_buffer[5] |= BIT0;//RH_F1_on;
+		if(disp_buffer[10] & 0x40) final_buffer[6] |= BIT0;//RH_G1_on;
+
+		if(disp_buffer[11] & 0x01) final_buffer[8] |= BIT0;//RH_A2_on;
+		if(disp_buffer[11] & 0x02) final_buffer[9] |= BIT0;//RH_B2_on;
+		if(disp_buffer[11] & 0x04) final_buffer[10] |= BIT0;//RH_C2_on;
+		if(disp_buffer[11] & 0x08) final_buffer[11] |= BIT0;//RH_D2_on;
+		if(disp_buffer[11] & 0x10) final_buffer[12] |= BIT0;//RH_E2_on;
+		if(disp_buffer[11] & 0x20) final_buffer[13] |= BIT0;//RH_F2_on;
+		if(disp_buffer[11] & 0x40) final_buffer[14] |= BIT0;//RH_G2_on;
+		if(disp_buffer[11] & 0x80) final_buffer[15] |= BIT0;//RH_H2_on;
+
+		if(disp_buffer[12] & 0x01) final_buffer[0] |= BIT2;//RH_A3_on;
+		if(disp_buffer[12] & 0x02) final_buffer[1] |= BIT2;//RH_B3_on;
+		if(disp_buffer[12] & 0x04) final_buffer[2] |= BIT2;//RH_C3_on;
+		if(disp_buffer[12] & 0x08) final_buffer[3] |= BIT2;//RH_D3_on;
+		if(disp_buffer[12] & 0x10) final_buffer[4] |= BIT2;//RH_E3_on;
+		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
+		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
+		
+		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT1;//RH_A1_on;
+		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT1;//RH_B1_on;
+		if(disp_buffer[10] & 0x04) final_buffer[2] |= BIT1;//RH_C1_on;
+		if(disp_buffer[10] & 0x08) final_buffer[3] |= BIT1;//RH_D1_on;
+		if(disp_buffer[10] & 0x10) final_buffer[4] |= BIT1;//RH_E1_on;
+		if(disp_buffer[10] & 0x20) final_buffer[5] |= BIT1;//RH_F1_on;
+		if(disp_buffer[10] & 0x40) final_buffer[6] |= BIT1;//RH_G1_on;
+
+		if(disp_buffer[11] & 0x01) final_buffer[8] |= BIT1;//RH_A2_on;
+		if(disp_buffer[11] & 0x02) final_buffer[9] |= BIT1;//RH_B2_on;
+		if(disp_buffer[11] & 0x04) final_buffer[10] |= BIT1;//RH_C2_on;
+		if(disp_buffer[11] & 0x08) final_buffer[11] |= BIT1;//RH_D2_on;
+		if(disp_buffer[11] & 0x10) final_buffer[12] |= BIT1;//RH_E2_on;
+		if(disp_buffer[11] & 0x20) final_buffer[13] |= BIT1;//RH_F2_on;
+		if(disp_buffer[11] & 0x40) final_buffer[14] |= BIT1;//RH_G2_on;
+		if(disp_buffer[11] & 0x80) final_buffer[15] |= BIT1;//RH_H2_on;
+
+		if(disp_buffer[12] & 0x01) final_buffer[0] |= BIT3;//RH_A3_on;
+		if(disp_buffer[12] & 0x02) final_buffer[1] |= BIT3;//RH_B3_on;
+		if(disp_buffer[12] & 0x04) final_buffer[2] |= BIT3;//RH_C3_on;
+		if(disp_buffer[12] & 0x08) final_buffer[3] |= BIT3;//RH_D3_on;
+		if(disp_buffer[12] & 0x10) final_buffer[4] |= BIT3;//RH_E3_on;
+		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT3;//RH_F3_on;
+		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT3;//RH_G3_on;
+	}
+	
+	#else
+	
+	if(lcd.Sym_TM_UNIT_C) TM_UNIT_C_on;
+	if(lcd.Sym_TM_UNIT_F) TM_UNIT_F_on;
+	
+	if(TM_Alrm_ON==NO_ALARM)
+	{
+		if(lcd.Sym_TM_MIN) TM_MIN_on;
+		if(lcd.Sym_TM_LOGO) TM_LOGO_on;
+		
+		if(disp_buffer[7] & 0x01) final_buffer[8] |= BIT2;//TM_A1_on;
+		if(disp_buffer[7] & 0x02) final_buffer[9] |= BIT2;//TM_B1_on;
+		if(disp_buffer[7] & 0x04) final_buffer[10] |= BIT2;//TM_C1_on;
+		if(disp_buffer[7] & 0x08) final_buffer[11] |= BIT2;//TM_D1_on;
+		if(disp_buffer[7] & 0x10) final_buffer[12] |= BIT2;//TM_E1_on;
+		if(disp_buffer[7] & 0x20) final_buffer[13] |= BIT2;//TM_F1_on;
+		if(disp_buffer[7] & 0x40) final_buffer[14] |= BIT2;//TM_G1_on;
+
+		if(disp_buffer[8] & 0x01) final_buffer[0] |= BIT4;//TM_A2_on;
+		if(disp_buffer[8] & 0x02) final_buffer[1] |= BIT4;//TM_B2_on;
+		if(disp_buffer[8] & 0x04) final_buffer[2] |= BIT4;//TM_C2_on;
+		if(disp_buffer[8] & 0x08) final_buffer[3] |= BIT4;//TM_D2_on;
+		if(disp_buffer[8] & 0x10) final_buffer[4] |= BIT4;//TM_E2_on;
+		if(disp_buffer[8] & 0x20) final_buffer[5] |= BIT4;//TM_F2_on;
+		if(disp_buffer[8] & 0x40) final_buffer[6] |= BIT4;//TM_G2_on;
+		if(disp_buffer[8] & 0x80) final_buffer[7] |= BIT4;//TM_H2_on;
+
+		if(disp_buffer[9] & 0x01) final_buffer[8] |= BIT4;//TM_A3_on;
+		if(disp_buffer[9] & 0x02) final_buffer[9] |= BIT4;//TM_B3_on;
+		if(disp_buffer[9] & 0x04) final_buffer[10] |= BIT4;//TM_C3_on;
+		if(disp_buffer[9] & 0x08) final_buffer[11] |= BIT4;//TM_D3_on;
+		if(disp_buffer[9] & 0x10) final_buffer[12] |= BIT4;//TM_E3_on;
+		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT4;//TM_F3_on;
+		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT4;//TM_G3_on;
+	}
+	else if(TM_Alrm_ON==LOWER_ALARM)
+	{
+		if(lcd.Sym_TM_MIN_ALM) TM_MIN_ALM_on;
+		if(lcd.Sym_TM_LOGO_ALM) TM_LOGO_ALM_on;
+		
+		if(disp_buffer[7] & 0x01) final_buffer[8] |= BIT3;//TM_A1_on;
+		if(disp_buffer[7] & 0x02) final_buffer[9] |= BIT3;//TM_B1_on;
+		if(disp_buffer[7] & 0x04) final_buffer[10] |= BIT3;//TM_C1_on;
+		if(disp_buffer[7] & 0x08) final_buffer[11] |= BIT3;//TM_D1_on;
+		if(disp_buffer[7] & 0x10) final_buffer[12] |= BIT3;//TM_E1_on;
+		if(disp_buffer[7] & 0x20) final_buffer[13] |= BIT3;//TM_F1_on;
+		if(disp_buffer[7] & 0x40) final_buffer[14] |= BIT3;//TM_G1_on;
+
+		if(disp_buffer[8] & 0x01) final_buffer[0] |= BIT5;//TM_A2_on;
+		if(disp_buffer[8] & 0x02) final_buffer[1] |= BIT5;//TM_B2_on;
+		if(disp_buffer[8] & 0x04) final_buffer[2] |= BIT5;//TM_C2_on;
+		if(disp_buffer[8] & 0x08) final_buffer[3] |= BIT5;//TM_D2_on;
+		if(disp_buffer[8] & 0x10) final_buffer[4] |= BIT5;//TM_E2_on;
+		if(disp_buffer[8] & 0x20) final_buffer[5] |= BIT5;//TM_F2_on;
+		if(disp_buffer[8] & 0x40) final_buffer[6] |= BIT5;//TM_G2_on;
+		if(disp_buffer[8] & 0x80) final_buffer[7] |= BIT5;//TM_H2_on;
+
+		if(disp_buffer[9] & 0x01) final_buffer[8] |= BIT5;//TM_A3_on;
+		if(disp_buffer[9] & 0x02) final_buffer[9] |= BIT5;//TM_B3_on;
+		if(disp_buffer[9] & 0x04) final_buffer[10] |= BIT5;//TM_C3_on;
+		if(disp_buffer[9] & 0x08) final_buffer[11] |= BIT5;//TM_D3_on;
+		if(disp_buffer[9] & 0x10) final_buffer[12] |= BIT5;//TM_E3_on;
+		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT5;//TM_F3_on;
+		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT5;//TM_G3_on;
+	}
+	else
+	{
+		if(lcd.Sym_TM_MIN) 
+		{
+			TM_MIN_on;
+			TM_MIN_ALM_on;
+		}
+		if(lcd.Sym_TM_LOGO_ALM) TM_LOGO_ALM_on;
 		
 		if(disp_buffer[7] & 0x01) final_buffer[8] |= BIT2;//TM_A1_on;
 		if(disp_buffer[7] & 0x02) final_buffer[9] |= BIT2;//TM_B1_on;
@@ -855,10 +1128,10 @@ void disp_value(void)
 
 	if(lcd.Sym_RH_UNIT) RH_UNIT_on;
 	
-	if(DP_Alrm_ON[DP3]==NO_ALARM)
+	if(RH_Alrm_ON==NO_ALARM)
 	{
 		if(lcd.Sym_RH_MIN) RH_MIN_on;
-		//if(lcd.Sym_RH_LOGO) RH_LOGO_on;
+		if(lcd.Sym_RH_LOGO) RH_LOGO_on;
 		
 		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT0;//RH_A1_on;
 		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT0;//RH_B1_on;
@@ -885,10 +1158,10 @@ void disp_value(void)
 		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
 		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
 	}
-	else if(DP_Alrm_ON[DP3]==LOWER_ALARM)
+	else if(RH_Alrm_ON==LOWER_ALARM)
 	{
 		if(lcd.Sym_RH_MIN_ALM) RH_MIN_ALM_on;
-		//if(lcd.Sym_RH_LOGO_ALM) RH_LOGO_ALM_on;
+		if(lcd.Sym_RH_LOGO_ALM) RH_LOGO_ALM_on;
 		
 		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT1;//RH_A1_on;
 		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT1;//RH_B1_on;
@@ -922,7 +1195,7 @@ void disp_value(void)
 			RH_MIN_on;
 			RH_MIN_ALM_on;
 		}
-		//if(lcd.Sym_RH_LOGO_ALM) RH_LOGO_ALM_on;
+		if(lcd.Sym_RH_LOGO_ALM) RH_LOGO_ALM_on;
 		
 		if(disp_buffer[10] & 0x01) final_buffer[0] |= BIT0;//RH_A1_on;
 		if(disp_buffer[10] & 0x02) final_buffer[1] |= BIT0;//RH_B1_on;
@@ -974,6 +1247,7 @@ void disp_value(void)
 		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT3;//RH_F3_on;
 		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT3;//RH_G3_on;
 	}
+	#endif
 	
 	if(lcd.Sym_DOOR) DOOR_on;
 	if(lcd.Sym_DOOR_SYM) DOOR_SYM_on;
@@ -1169,6 +1443,8 @@ void conv_value(void)
 						}
 					}
 					
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+					
 					if(gu16_parameterWord & ENABLE_DP2)
 					{
 						if(bool_DP_NC[DP2])
@@ -1302,6 +1578,129 @@ void conv_value(void)
 							lcd.Sym_RH_LOGO = 1;
 						}
 					}
+					
+					#else
+					
+					if(gu16_parameterWord & ENABLE_TEMP)
+					{
+						if(bool_RH_TEMP_NC)
+						{
+							data[7]=E;
+							data[8]=r;
+							data[9]=r;
+						}
+						else
+						{
+							//----------------------------------------------------
+							if(!TM_Unit)
+							{
+								tempfloat = temperatureC;
+							}
+							else
+							{
+								tempfloat = temperatureF;
+							}
+						
+							if(tempfloat<0.0)
+							{
+								tempfloat *= (-1.0);
+								
+								if(TM_Alrm_ON) 
+								{
+									lcd.Sym_TM_MIN_ALM = 1;
+								}
+								else
+								{
+									lcd.Sym_TM_MIN = 1;
+								}
+							}
+							//----------------------------------------------------
+							if(tempfloat < 10.0)
+							{
+								convert_float(tempfloat,&data[8],1);
+							}
+							else if(tempfloat < 100.0)
+							{
+								convert_float(tempfloat,&data[7],1);
+							}
+							else
+							{
+								convert_float(99.9,&data[7],0);
+							}
+							//----------------------------------------------------
+						}
+						if(!TM_Unit)
+						{
+							lcd.Sym_TM_UNIT_C = 1;
+						}
+						else
+						{
+							lcd.Sym_TM_UNIT_F = 1;
+						}
+						
+						if(TM_Alrm_ON) 
+						{
+							lcd.Sym_TM_LOGO_ALM = 1;
+						}
+						else
+						{
+							lcd.Sym_TM_LOGO = 1;
+						}
+					}
+					
+					if(gu16_parameterWord & ENABLE_RH)
+					{
+						if(bool_RH_TEMP_NC)
+						{
+							data[10]=E;
+							data[11]=r;
+							data[12]=r;
+						}
+						else
+						{
+							//----------------------------------------------------
+							tempfloat = humidityRH;
+						
+							if(tempfloat<0.0)
+							{
+								tempfloat *= (-1.0);
+								if(RH_Alrm_ON) 
+								{
+									lcd.Sym_RH_MIN_ALM = 1;
+								}
+								else
+								{
+									lcd.Sym_RH_MIN = 1;
+								}
+							}
+							//----------------------------------------------------
+							if(tempfloat < 10.0)
+							{
+								convert_float(tempfloat,&data[11],1);
+							}
+							else if(tempfloat < 100.0)
+							{
+								convert_float(tempfloat,&data[10],1);
+							}
+							else
+							{
+								convert_float(99.9,&data[10],0);
+							}
+							//----------------------------------------------------
+						}
+						
+						if(RH_Alrm_ON) 
+						{
+							lcd.Sym_RH_LOGO_ALM = 1;
+						}
+						else
+						{
+							lcd.Sym_RH_LOGO = 1;
+						}
+						lcd.Sym_RH_UNIT = 1;
+					}
+					
+					#endif
 			
 				break;
 				
@@ -1374,7 +1773,9 @@ void conv_value(void)
 						lcd.Sym_DP_UNIT = 1;
 						lcd.Sym_DP_LOGO = 1;
 					}
-				
+					
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+					
 					if(gu16_parameterWord & ENABLE_DP2)
 					{
 						if(bool_DP_NC[DP2])
@@ -1445,14 +1846,106 @@ void conv_value(void)
 						}
 					}
 					
+					#else
+				
+					if(gu16_parameterWord & ENABLE_TEMP)
+					{
+						if(bool_RH_TEMP_NC)
+						{
+							data[7]=E;
+							data[8]=r;
+							data[9]=r;
+						}
+						else
+						{
+							//----------------------------------------------------
+							if(!TM_Unit)
+							{
+								tempfloat = TM_Min;
+								lcd.Sym_TM_UNIT_C = 1;
+							}
+							else
+							{
+								tempfloat = (TM_Min * 1.8) + 32.0;
+								lcd.Sym_TM_UNIT_F = 1;
+							}
+						
+							if(tempfloat<0.0)
+							{
+								tempfloat *= (-1.0);
+								lcd.Sym_TM_MIN = 1;
+							}
+							//----------------------------------------------------
+							if(tempfloat < 10.0)
+							{
+								convert_float(tempfloat,&data[8],1);
+							}
+							else if(tempfloat < 100.0)
+							{
+								convert_float(tempfloat,&data[7],1);
+							}
+							else
+							{
+								convert_float(99.9,&data[7],0);
+							}
+							//----------------------------------------------------
+							if(TM_Alrm_ON) 
+							{
+								lcd.Sym_TM_LOGO_ALM = 1;
+							}
+							else
+							{
+								lcd.Sym_TM_LOGO = 1;
+							}
+						}
+					}
+					
+					if(gu16_parameterWord & ENABLE_RH)
+					{
+						if(bool_RH_TEMP_NC)
+						{
+							data[10]=E;
+							data[11]=r;
+							data[12]=r;
+						}
+						else
+						{
+							//----------------------------------------------------
+							tempfloat = RH_Min;
+							
+							if(tempfloat<0.0)
+							{
+								tempfloat *= (-1.0);
+								lcd.Sym_RH_MIN = 1;
+							}
+							//----------------------------------------------------
+							if(tempfloat < 10.0)
+							{
+								convert_float(tempfloat,&data[11],1);
+							}
+							else if(tempfloat < 100.0)
+							{
+								convert_float(tempfloat,&data[10],1);
+							}
+							else
+							{
+								convert_float(99.9,&data[10],0);
+							}
+							//----------------------------------------------------
+						}
+		
+						lcd.Sym_RH_LOGO = 1;
+						lcd.Sym_RH_UNIT = 1;
+					}
+					
+					#endif
+					
 				break;
 					
 				case 4:
 					
 					lcd.Sym_MAX = 1;
-					lcd.Sym_DP_UNIT = 1;
-					lcd.Sym_DP_LOGO = 1;
-				
+					
 					if(gu16_parameterWord & ENABLE_DP1)
 					{
 						if(bool_DP_NC[DP1])
@@ -1487,8 +1980,13 @@ void conv_value(void)
 							
 							//----------------------------------------------------
 						}
+						
+						lcd.Sym_DP_UNIT = 1;
+						lcd.Sym_DP_LOGO = 1;
 					}
 					
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+
 					if(gu16_parameterWord & ENABLE_DP2)
 					{
 						if(bool_DP_NC[DP2])
@@ -1558,6 +2056,107 @@ void conv_value(void)
 							//----------------------------------------------------
 						}
 					}
+					
+					#else
+					
+					if(gu16_parameterWord & ENABLE_TEMP)
+					{
+						if(bool_RH_TEMP_NC)
+						{
+							data[7]=E;
+							data[8]=r;
+							data[9]=r;
+						}
+						else
+						{
+							//----------------------------------------------------
+							if(!TM_Unit)
+							{
+								tempfloat = TM_Max;
+							}
+							else
+							{
+								tempfloat = (TM_Max * 1.8) + 32.0;
+							}
+							
+							if(tempfloat<0.0)
+							{
+								tempfloat *= (-1.0);
+								lcd.Sym_TM_MIN = 1;
+							}
+							//----------------------------------------------------
+							if(tempfloat < 10.0)
+							{
+								convert_float(tempfloat,&data[8],1);
+							}
+							else if(tempfloat < 100.0)
+							{
+								convert_float(tempfloat,&data[7],1);
+							}
+							else
+							{
+								convert_float(99.9,&data[7],0);
+							}
+							//----------------------------------------------------
+						}
+						if(!TM_Unit)
+						{
+							lcd.Sym_TM_UNIT_C = 1;
+						}
+						else
+						{
+							lcd.Sym_TM_UNIT_F = 1;
+						}
+
+						if(TM_Alrm_ON) 
+						{
+							lcd.Sym_TM_LOGO_ALM = 1;
+						}
+						else
+						{
+							lcd.Sym_TM_LOGO = 1;
+						}
+					}
+
+					if(gu16_parameterWord & ENABLE_RH)
+					{
+						if(bool_RH_TEMP_NC)
+						{
+							data[10]=E;
+							data[11]=r;
+							data[12]=r;
+						}
+						else
+						{
+							//----------------------------------------------------
+							tempfloat = RH_Max;
+							
+							if(tempfloat<0.0)
+							{
+								tempfloat *= (-1.0);
+								lcd.Sym_RH_MIN = 1;
+							}
+							//----------------------------------------------------
+							if(tempfloat < 10.0)
+							{
+								convert_float(tempfloat,&data[11],1);
+							}
+							else if(tempfloat < 100.0)
+							{
+								convert_float(tempfloat,&data[10],1);
+							}
+							else
+							{
+								convert_float(99.9,&data[10],0);
+							}
+							//----------------------------------------------------
+						}
+						
+						lcd.Sym_RH_LOGO = 1;
+						lcd.Sym_RH_UNIT = 1;
+					}
+					
+					#endif
 					
 				break;
 					
@@ -1741,6 +2340,8 @@ void conv_value(void)
 					}
 				}
 			
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				
 				//DP2 ------------------------------
 				if(gu16_parameterWord & ENABLE_DP2)
 				{
@@ -1805,6 +2406,91 @@ void conv_value(void)
 						//----------------------------------------------------
 					}
 				}
+				
+				#else
+				
+				//Temperature ------------------------------
+				if(gu16_parameterWord & ENABLE_TEMP)
+				{
+					if(bool_noData)
+					{
+						data[7]=DASH;
+						data[8]=DASH;
+						data[9]=DASH;
+					}
+					else
+					{
+						if(TM_Unit)
+						{
+							tempfloat1 = (tempfloat1 * 1.8) + 32.0;
+						}
+					
+						if(tempfloat1<0.0)
+						{
+							tempfloat1 *= (-1.0);
+						}
+						//----------------------------------------------------
+						if(tempfloat1 < 10.0)
+						{
+							convert_float(tempfloat1,&data[8],1);
+						}
+						else if(tempfloat < 100.0)
+						{
+							convert_float(tempfloat1,&data[7],1);
+						}
+						else
+						{
+							convert_float(tempfloat1,&data[7],0);
+						}
+					}
+					//----------------------------------------------------				
+					if(!TM_Unit)
+					{
+						lcd.Sym_TM_UNIT_C = 1;
+					}
+					else
+					{
+						lcd.Sym_TM_UNIT_F = 1;
+					}
+						
+					lcd.Sym_TM_LOGO = 1;
+				}
+				
+				// RH -----------------------------
+				if(gu16_parameterWord & ENABLE_RH)
+				{
+					if(bool_noData)
+					{
+						data[10]=DASH;
+						data[11]=DASH;
+						data[12]=DASH;
+					}
+					else
+					{
+						if(tempfloat2<0.0)
+						{
+							tempfloat2 *= (-1.0);
+						}
+						//----------------------------------------------------
+						if(tempfloat2 < 10.0)
+						{
+							convert_float(tempfloat2,&data[11],1);
+						}
+						else if(tempfloat2 < 100.0)
+						{
+							convert_float(tempfloat2,&data[10],1);
+						}
+						else
+						{
+							convert_float(tempfloat2,&data[10],0);
+						}
+						//----------------------------------------------------
+					}
+					lcd.Sym_RH_LOGO = 1;
+					lcd.Sym_RH_UNIT = 1;
+				}
+
+				#endif
 			}
 			
 		break;
@@ -1858,6 +2544,9 @@ void conv_value(void)
 						}
 					}
 				}
+				
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				
 				//--------------------------------------------------
 				if(gu16_parameterWord & ENABLE_DP2)
 				{
@@ -1920,15 +2609,91 @@ void conv_value(void)
 						}
 					}
 				}
+				#else
+				//--------------------------------------------------
+				if(gu16_parameterWord & ENABLE_TEMP)
+				{
+					if(bool_RH_TEMP_NC)
+					{
+						data[7]=E;
+						data[8]=r;
+						data[9]=r;
+					}
+					else
+					{							
+						if(tempfloat1<0.0)
+						{
+							tempfloat1 *= (-1.0);
+						}
+						//----------------------------------------------------
+						if(tempfloat1 < 10.0)
+						{
+							convert_float(tempfloat1,&data[8],1);
+						}
+						else if(tempfloat1 < 100.0)
+						{
+							convert_float(tempfloat1,&data[7],1);
+						}
+						else
+						{
+							convert_float(tempfloat1,&data[7],0);
+						}
+						//----------------------------------------------------
+					}
+					if(!TM_Unit)
+					{
+						lcd.Sym_TM_UNIT_C = 1;
+					}
+					else
+					{
+						lcd.Sym_TM_UNIT_F = 1;
+					}
+						
+					lcd.Sym_TM_LOGO = 1;
+				}
+				//--------------------------------------------------
+				if(gu16_parameterWord & ENABLE_RH)
+				{
+					if(bool_RH_TEMP_NC)
+					{
+						data[10]=E;
+						data[11]=r;
+						data[12]=r;
+					}
+					else
+					{
+						if(tempfloat2<0.0)
+						{
+							tempfloat2 *= (-1.0);
+						}
+						//----------------------------------------------------
+						if(tempfloat2 < 10.0)
+						{
+							convert_float(tempfloat2,&data[11],1);
+						}
+						else if(tempfloat2 < 100.0)
+						{
+							convert_float(tempfloat2,&data[10],1);
+						}
+						else
+						{
+							convert_float(tempfloat2,&data[10],0);
+						}
+						//----------------------------------------------------
+					}
+					lcd.Sym_RH_LOGO = 1;
+					lcd.Sym_RH_UNIT = 1;
+				}
+				#endif
 			}
 			
 		break;
 		
 		case PROG_MODE:
 		
-			switch(prog_para_cnt)
+			switch(emProgpara)
 			{
-				case 0:
+				case PROG_PAGE_DISP:
 				
 					data[4] = P;
 					data[5] = r;
@@ -1936,7 +2701,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 1:
+				case DEVICE_ID_DISP:
 				
 					data[4] = D;
 					data[5] = V;
@@ -1949,7 +2714,11 @@ void conv_value(void)
 				
 				break;
 				
-				case 2:
+				case DP1_ALM_UP_ON_DISP:
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				case DP2_ALM_UP_ON_DISP:
+				case DP3_ALM_UP_ON_DISP:
+				#endif
 				
 					lcd.Sym_DP_LOGO = 1;
 					lcd.Sym_DP_UNIT = 1;
@@ -1972,7 +2741,11 @@ void conv_value(void)
 				
 				break;
 				
-				case 3:
+				case DP1_ALM_UP_OFF_DISP:
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				case DP2_ALM_UP_OFF_DISP:
+				case DP3_ALM_UP_OFF_DISP:
+				#endif
 				
 					lcd.Sym_DP_LOGO = 1;
 					lcd.Sym_DP_UNIT = 1;
@@ -1996,8 +2769,12 @@ void conv_value(void)
 				
 				break;
 				
-				case 4:
-				
+				case DP1_ALM_LO_OFF_DISP:
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				case DP2_ALM_LO_OFF_DISP:
+				case DP3_ALM_LO_OFF_DISP:
+				#endif
+					
 					lcd.Sym_DP_LOGO = 1;
 					lcd.Sym_DP_UNIT = 1;
 				
@@ -2020,8 +2797,12 @@ void conv_value(void)
 				
 				break;
 				
-				case 5:
-				
+				case DP1_ALM_LO_ON_DISP:
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				case DP2_ALM_LO_ON_DISP:
+				case DP3_ALM_LO_ON_DISP:
+				#endif
+					
 					lcd.Sym_DP_LOGO = 1;
 					lcd.Sym_DP_UNIT = 1;
 				
@@ -2043,195 +2824,218 @@ void conv_value(void)
 				
 				break;
 					
-				case 6:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
+				#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+
+				case TM_ALM_UP_ON_DISP:
 					
-					data[1] = 0;
-					data[2] = N;
-					
-					data[10] = U;
-					data[11] = P;
-					
-					if(dummy<0)
+					if(!TM_Unit)
 					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
+						lcd.Sym_TM_UNIT_C = 1;
 					}
 					else
 					{
-						convert_char(dummy,&data[6],4);
+						lcd.Sym_TM_UNIT_F = 1;
 					}
-				
-				break;
-				
-				case 7:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-				
-					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
-				
-					data[10] = U;
-					data[11] = P;
-	
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
-				
-				case 8:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-				
-					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
-				
-					data[10] = L;
-					data[11] = 0;
-				
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
-				
-				case 9:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-				
-					data[1] = 0;
-					data[2] = N;
-				
-					data[10] = L;
-					data[11] = 0;
-				
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
-					
-				case 10:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-					
-					data[1] = 0;
-					data[2] = N;
-					
-					data[10] = U;
-					data[11] = P;
-					
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
-				
-				case 11:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-				
-					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
-				
-					data[10] = U;
-					data[11] = P;
-	
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
-				
-				case 12:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-				
-					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
-				
-					data[10] = L;
-					data[11] = 0;
-				
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
-				
-				case 13:
-				
-					lcd.Sym_DP_LOGO = 1;
-					lcd.Sym_DP_UNIT = 1;
-				
-					data[1] = 0;
-					data[2] = N;
-				
-					data[10] = L;
-					data[11] = 0;
-				
-					if(dummy<0)
-					{
-						lcd.Sym_TM_MIN = 1;
-						convert_char(-dummy,&data[6],4);
-					}
-					else
-					{
-						convert_char(dummy,&data[6],4);
-					}
-				
-				break;
 						
-				case 14:
+					lcd.Sym_TM_LOGO = 1;
+				
+					data[1] = 0;
+					data[2] = N;
+				
+					data[10] = U;
+					data[11] = P;
+				
+					if(dummy<0)
+					{
+						lcd.Sym_TM_MIN = 1;
+						convert_char(-dummy,&data[6],4);
+					}
+					else
+					{
+						convert_char(dummy,&data[6],4);
+					}
+				
+				break;
+				
+				case TM_ALM_UP_OFF_DISP:
+				
+					if(!TM_Unit)
+					{
+						lcd.Sym_TM_UNIT_C = 1;
+					}
+					else
+					{
+						lcd.Sym_TM_UNIT_F = 1;
+					}
+						
+					lcd.Sym_TM_LOGO = 1;
+				
+					data[1] = 0;
+					data[2] = F;
+					data[3] = F;
+				
+					data[10] = U;
+					data[11] = P;
+				
+					if(dummy<0)
+					{
+						lcd.Sym_TM_MIN = 1;
+						convert_char(-dummy,&data[6],4);
+					}
+					else
+					{
+						convert_char(dummy,&data[6],4);
+					}
+				
+				break;
+				
+				case TM_ALM_LO_OFF_DISP:
+					
+					if(!TM_Unit)
+					{
+						lcd.Sym_TM_UNIT_C = 1;
+					}
+					else
+					{
+						lcd.Sym_TM_UNIT_F = 1;
+					}
+						
+					lcd.Sym_TM_LOGO = 1;
+				
+					data[1] = 0;
+					data[2] = F;
+					data[3] = F;
+				
+					data[10] = L;
+					data[11] = 0;
+
+					if(dummy<0)
+					{
+						lcd.Sym_TM_MIN = 1;
+						convert_char(-dummy,&data[6],4);
+					}
+					else
+					{
+						convert_char(dummy,&data[6],4);
+					}
+				
+				break;
+				
+				case TM_ALM_LO_ON_DISP:
+				
+					if(!TM_Unit)
+					{
+						lcd.Sym_TM_UNIT_C = 1;
+					}
+					else
+					{
+						lcd.Sym_TM_UNIT_F = 1;
+					}
+						
+					lcd.Sym_TM_LOGO = 1;
+				
+					data[1] = 0;
+					data[2] = N;
+				
+					data[10] = L;
+					data[11] = 0;
+				
+					if(dummy<0)
+					{
+						lcd.Sym_TM_MIN = 1;
+						convert_char(-dummy,&data[6],4);
+					}
+					else
+					{
+						convert_char(dummy,&data[6],4);
+					}
+				
+				break;
+				
+				case TM_UNIT_DISP:
+				
+					if(!dummy)
+					{
+						lcd.Sym_TM_UNIT_C = 1;
+					}
+					else
+					{
+						lcd.Sym_TM_UNIT_F = 1;
+					}
+						
+					lcd.Sym_TM_LOGO = 1;
+				
+					data[7] = U;
+					data[8] = N;
+					data[9] = t;
+				
+				break;
+				
+				case RH_ALM_UP_ON_DISP:
+
+					lcd.Sym_RH_LOGO = 1;
+					lcd.Sym_RH_UNIT = 1;
+					
+					data[1] = 0;
+					data[2] = N;
+					
+					data[10] = U;
+					data[11] = P;
+
+					convert_char(dummy,&data[6],4);
+						
+				break;
+				
+				case RH_ALM_UP_OFF_DISP:
+				
+					lcd.Sym_RH_LOGO = 1;
+					lcd.Sym_RH_UNIT = 1;
+				
+					data[1] = 0;
+					data[2] = F;
+					data[3] = F;
+				
+					data[10] = U;
+					data[11] = P;
+				
+					convert_char(dummy,&data[6],4);
+				
+				break;
+				
+				case RH_ALM_LO_OFF_DISP:
+
+					lcd.Sym_RH_LOGO = 1;
+					lcd.Sym_RH_UNIT = 1;
+				
+					data[1] = 0;
+					data[2] = F;
+					data[3] = F;
+				
+					data[10] = L;
+					data[11] = 0;
+
+					convert_char(dummy,&data[6],4);
+				
+				break;
+				
+				case RH_ALM_LO_ON_DISP:
+
+					lcd.Sym_RH_LOGO = 1;
+					lcd.Sym_RH_UNIT = 1;
+				
+					data[1] = 0;
+					data[2] = N;
+				
+					data[10] = L;
+					data[11] = 0;
+
+					convert_char(dummy,&data[6],4);
+				
+				break;	
+				
+				#endif
+				
+				case RTC_HR_DISP:
 				
 					data[1] = r;
 					data[2] = t;
@@ -2244,7 +3048,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 15:
+				case RTC_MN_DISP:
 				
 					data[1] = r;
 					data[2] = t;
@@ -2257,7 +3061,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 16:
+				case RTC_DT_DISP:
 				
 					data[1] = r;
 					data[2] = t;
@@ -2270,7 +3074,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 17:
+				case RTC_MH_DISP:
 				
 					data[1] = r;
 					data[2] = t;
@@ -2283,7 +3087,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 18:
+				case RTC_YR_DISP:
 				
 					data[1] = r;
 					data[2] = t;
@@ -2296,7 +3100,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 19:
+				case BUZ_ON_DISP:
 				
 					data[4] = B;
 					data[5] = 2;
@@ -2309,7 +3113,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 20:
+				case BUZ_OFF_DISP:
 				
 					data[4] = B;
 					data[5] = 2;
@@ -2323,21 +3127,7 @@ void conv_value(void)
 				
 				break;
 				
-				case 21:
-				
-					data[4] = L;
-					data[5] = 0;
-					data[6] = 9;
-				
-					data[1] = t;
-					data[2] = M;
-					data[3] = E;
-				
-					convert_char(dummy,&data[7],3);
-				
-				break;
-				
-				case 22:
+				case UART_BDT_DISP:
 				
 					data[1] = U;
 					data[2] = r;
@@ -2358,12 +3148,12 @@ void conv_value(void)
 						case BAUD_28800:	convert_char(28800,&data[4],5);		break;
 						case BAUD_38400:	convert_char(38400,&data[4],5);		break;
 						case BAUD_57600:	convert_char(57600,&data[4],5);		break;
-						case BAUD_115200:	convert_float(115200,&data[4],6);	break;
+						case BAUD_115200:	convert_float(115200,&data[4],0);	break;
 					}
 
 				break;
-				
-				case 23:
+					
+				case CAL_DISP:
 				
 					data[1] = C;
 					data[2] = A;
@@ -2376,59 +3166,6 @@ void conv_value(void)
 			
 		break;
 	}
-}
-
-void SetMAC2Xbee(uint8_t *mac,uint8_t ReadSelfMac)
-{
-	uint8_t buffer[5]={0};
-	
-	PLATFORM_DelayMS(1000);
-	//-------------------------
-	opstr("+++");
-	PLATFORM_DelayMS(1000);
-	//-------------------------
-	opstr("ATDH");
-	SendToUART(&mac[0],8);
-	opchar('\r');
-	PLATFORM_DelayMS(50);
-	//-------------------------
-	opstr("ATDL");
-	SendToUART(&mac[8],8);
-	opchar('\r');
-	PLATFORM_DelayMS(50);
-	//-------------------------
-	if(ReadSelfMac==1)
-	{
-		memset(gu8arr_XbeeSelfMac,'0',XBEE_MAC_SIZE);
-		memset(XbeeRxBuffer,0,XBEE_RX_IND_MAX);
-		XbeeRxInd=0;
-		opstr("ATSH?\r");
-		PLATFORM_DelayMS(50);
-		memcpy(&gu8arr_XbeeSelfMac[2],&XbeeRxBuffer[0],6);
-		//-------------------------
-		memset(XbeeRxBuffer,0,XBEE_RX_IND_MAX);
-		XbeeRxInd=0;
-		opstr("ATSL?\r");
-		PLATFORM_DelayMS(50);
-		memcpy(&gu8arr_XbeeSelfMac[8],&XbeeRxBuffer[0],8);
-		//-------------------------
-		chartostr(DeviceID,&buffer[0],3);
-		opstr("ATBISAP");
-		SendToUART(&buffer[0],3);
-		opchar('-');
-		SendToUART(&gu8ar_SrNumber[8],8);
-		opchar('\r');
-		PLATFORM_DelayMS(50);
-	}
-	//-------------------------
-	opstr("ATWR\r");
-	PLATFORM_DelayMS(50);
-	//-------------------------
-	opstr("ATCN\r");
-	PLATFORM_DelayMS(50);
-	//-------------------------
-	
-	//SendToUART(gu8arr_XbeeSelfMac,XBEE_MAC_SIZE);
 }
 
 #ifdef ENABLE_KEY_LOGIC
@@ -2542,51 +3279,52 @@ void CheckUpDnKey(void)
 			if(DPAutoCalTimer > 10)
 			{
 				DPAutoCalTimer=0;
+						
+				DP_Cal_Value_C[DP1] = (int16_t)((RealDpressure[DP1] - DP_Cal_float_Value_F[DP1])*10.0);
+				WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
+				DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
+
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				DP_Cal_Value_C[DP2] = (int16_t)((RealDpressure[DP2] - DP_Cal_float_Value_F[DP2])*10.0);
+				//DP_Cal_Value_C[DP2] = RealDpressure[DP2]*10.0;
+				WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
+				DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
+		
+				DP_Cal_Value_C[DP3] = (int16_t)((RealDpressure[DP3] - DP_Cal_float_Value_F[DP3])*10.0);
+				//DP_Cal_Value_C[DP3] = RealDpressure[DP3]*10.0;
+				WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
+				DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
+				#endif
 				
-				switch(autoCal_para_cnt)
-				{
-					case 0:
-						
-						DP_Cal_Value_C[DP1] = (int16_t)((RealDpressure[DP1] - DP_Cal_float_Value_F[DP1])*10.0);
-						//DP_Cal_Value_C[DP1] = RealDpressure[DP1]*10.0;
-						WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
-						DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
-						
-						/*AutocalCnt = (signed short)(Dpressure[DP1] * 10.0);
-						DP_Cal_Count_C[DP1] -= AutocalCnt;
-						WriteEEPROMData(DP1_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP1]);
-						*/
-						
-					break;
-				
-					case 1:
-				
-						DP_Cal_Value_C[DP2] = (int16_t)((RealDpressure[DP2] - DP_Cal_float_Value_F[DP2])*10.0);
-						//DP_Cal_Value_C[DP2] = RealDpressure[DP2]*10.0;
-						WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
-						DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
-						
-						/*AutocalCnt = (signed short)(Dpressure[DP2] * 10.0);
-						DP_Cal_Count_C[DP2] -= AutocalCnt;
-						WriteEEPROMData(DP2_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP2]);
-						*/
-						
-					break;
-					
-					case 2:
-				
-						DP_Cal_Value_C[DP3] = (int16_t)((RealDpressure[DP3] - DP_Cal_float_Value_F[DP3])*10.0);
-						//DP_Cal_Value_C[DP3] = RealDpressure[DP3]*10.0;
-						WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
-						DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
-						
-						/*AutocalCnt = (signed short)(Dpressure[DP3] * 10.0);
-						DP_Cal_Count_C[DP3] -= AutocalCnt;
-						WriteEEPROMData(DP3_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP3]);
-						*/
-						
-					break;
-				}
+//				switch(autoCal_para_cnt)
+//				{
+//					case 0:
+//						
+//						DP_Cal_Value_C[DP1] = (int16_t)((RealDpressure[DP1] - DP_Cal_float_Value_F[DP1])*10.0);
+//						//DP_Cal_Value_C[DP1] = RealDpressure[DP1]*10.0;
+//						WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
+//						DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
+//						
+//					break;
+//				
+//					case 1:
+//				
+//						DP_Cal_Value_C[DP2] = (int16_t)((RealDpressure[DP2] - DP_Cal_float_Value_F[DP2])*10.0);
+//						//DP_Cal_Value_C[DP2] = RealDpressure[DP2]*10.0;
+//						WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
+//						DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
+//						
+//					break;
+//					
+//					case 2:
+//				
+//						DP_Cal_Value_C[DP3] = (int16_t)((RealDpressure[DP3] - DP_Cal_float_Value_F[DP3])*10.0);
+//						//DP_Cal_Value_C[DP3] = RealDpressure[DP3]*10.0;
+//						WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
+//						DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
+//
+//					break;
+//				}
 				
 				for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
 				data[4] = D;
@@ -2611,16 +3349,26 @@ void CheckUpDnKey(void)
 			
 				DP_Cal_Value_C[DP1]=0;
 				DP_Cal_float_Value_C[DP1] = 0.0;
-				WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
+				WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
 				
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				DP_Cal_Value_C[DP2]=0;
 				DP_Cal_float_Value_C[DP2] = 0.0;
-				WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
+				WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
 				
 				DP_Cal_Value_C[DP3]=0;
 				DP_Cal_float_Value_C[DP3] = 0.0;
-				WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
+				WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
+				#else
+				TM_Cal_Value_C=0;
+				TM_Cal_float_Value_C = 0.0;
+				WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
 				
+				RH_Cal_Value_C=0;
+				RH_Cal_float_Value_C = 0.0;
+				WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,sizeof(RH_Cal_Value_C));
+				#endif
+
 				Normal_para_cnt=0;
 				progTimeout=0;
 
@@ -2649,12 +3397,12 @@ void CheckUpDnKey(void)
 			if(mode==NORMAL_MODE)
 			{
 				mode=PROG_MODE;
-				prog_para_cnt=0;
+				emProgpara=PROG_PAGE_DISP;
 				
 				Normal_para_cnt=0;
 				bool_RTCChangeOccure=0;
 				bool_UARTChanged=0;
-				Lastpara_cnt=0;
+				emLastProgpara=PROG_PAGE_DISP;
 				progTimeout=60;
 				gu8_SetACKPwd=0;
 			}
@@ -2695,7 +3443,11 @@ void CheckUpDnKey(void)
 
 					if(Normal_para_cnt==5)
 					{
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						if((DP_Alrm_ON[DP1]) || (DP_Alrm_ON[DP2]) || (DP_Alrm_ON[DP3]))
+						#else
+						if((DP_Alrm_ON[DP1]) || (TM_Alrm_ON) || (RH_Alrm_ON))
+						#endif
 						{
 							dummy1=0;
 							dummy=0;
@@ -2756,6 +3508,7 @@ void CheckUpDnKey(void)
 							memset(MinMaxMeanDayLogArr4Disp,0,MIN_MAX_MEAN_LOG_SIZE);
 						}
 					}
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 					if(gu16_parameterWord & ENABLE_DP2) 
 					{
 						ReadMinMaxLog(LAST_DP2_MIN_MAX_OFFSET,dispMinMaxMeanLogInd,&MinMaxMeanDayLogArr4Disp1[0],MIN_MAX_MEAN_LOG_SIZE);
@@ -2772,6 +3525,24 @@ void CheckUpDnKey(void)
 							memset(MinMaxMeanDayLogArr4Disp2,0,MIN_MAX_MEAN_LOG_SIZE);
 						}
 					}	
+					#else
+					if(gu16_parameterWord & ENABLE_TEMP) 
+					{
+						ReadMinMaxLog(LAST_TM_MIN_MAX_OFFSET,dispMinMaxMeanLogInd,&MinMaxMeanDayLogArr4Disp1[0],MIN_MAX_MEAN_LOG_SIZE);
+						if(MinMaxMeanDayLogArr4Disp1[3]==0xFF)	//If no log then set Log to Zero
+						{
+							memset(MinMaxMeanDayLogArr4Disp1,0,MIN_MAX_MEAN_LOG_SIZE);
+						}
+					}
+					if(gu16_parameterWord & ENABLE_RH) 
+					{
+						ReadMinMaxLog(LAST_RH_MIN_MAX_OFFSET,dispMinMaxMeanLogInd,&MinMaxMeanDayLogArr4Disp2[0],MIN_MAX_MEAN_LOG_SIZE);
+						if(MinMaxMeanDayLogArr4Disp2[3]==0xFF)	//If no log then set Log to Zero
+						{
+							memset(MinMaxMeanDayLogArr4Disp2,0,MIN_MAX_MEAN_LOG_SIZE);
+						}
+					}
+					#endif
 					//--------------------------------------------------------------------------------------------
 					if(gu16_parameterWord & ENABLE_DP1)
 					{
@@ -2779,6 +3550,7 @@ void CheckUpDnKey(void)
 					}
 					else
 					{
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						if(gu16_parameterWord & ENABLE_DP2)
 						{
 							memcpy((uint8_t*)&ep1.currentEpochTime,&MinMaxMeanDayLogArr4Disp1[0],4);
@@ -2787,6 +3559,16 @@ void CheckUpDnKey(void)
 						{
 							memcpy((uint8_t*)&ep1.currentEpochTime,&MinMaxMeanDayLogArr4Disp2[0],4);
 						}
+						#else
+						if(gu16_parameterWord & ENABLE_TEMP)
+						{
+							memcpy((uint8_t*)&ep1.currentEpochTime,&MinMaxMeanDayLogArr4Disp1[0],4);
+						}
+						else
+						{
+							memcpy((uint8_t*)&ep1.currentEpochTime,&MinMaxMeanDayLogArr4Disp2[0],4);
+						}
+						#endif
 					}		
 				
 					if(!ep1.currentEpochTime) 
@@ -2832,6 +3614,7 @@ void CheckUpDnKey(void)
 					{
 						ReadMinMaxLog(DP1_CURR_24HR_MEAN_OFFSET,0,&MeanHrLogArr4Disp[0],HOUR_MEAN_VALUE_SPACE);
 					}
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 					if(gu16_parameterWord & ENABLE_DP2)
 					{
 						ReadMinMaxLog(DP2_CURR_24HR_MEAN_OFFSET,0,&MeanHrLogArr4Disp1[0],HOUR_MEAN_VALUE_SPACE);
@@ -2840,10 +3623,26 @@ void CheckUpDnKey(void)
 					{
 						ReadMinMaxLog(DP3_CURR_24HR_MEAN_OFFSET,0,&MeanHrLogArr4Disp2[0],HOUR_MEAN_VALUE_SPACE);
 					}
+					#else
+					if(gu16_parameterWord & ENABLE_TEMP)
+					{
+						ReadMinMaxLog(TM_CURR_24HR_MEAN_OFFSET,0,&MeanHrLogArr4Disp1[0],HOUR_MEAN_VALUE_SPACE);
+					}
+					if(gu16_parameterWord & ENABLE_RH)
+					{
+						ReadMinMaxLog(RH_CURR_24HR_MEAN_OFFSET,0,&MeanHrLogArr4Disp2[0],HOUR_MEAN_VALUE_SPACE);
+					}
+					#endif
 				}
 				
 				memcpy(&tempfloat,&MeanHrLogArr4Disp[dispMinMaxMeanLogInd*4],4);
 				memcpy(&tempfloat1,&MeanHrLogArr4Disp1[dispMinMaxMeanLogInd*4],4);
+				#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+				if(TM_Unit)
+				{
+					tempfloat1 = (tempfloat1 * 1.8) + 32.0;
+				}
+				#endif
 				memcpy(&tempfloat2,&MeanHrLogArr4Disp2[dispMinMaxMeanLogInd*4],4);
 				dispMinMaxMeanLogInd++;
 			
@@ -2854,113 +3653,151 @@ void CheckUpDnKey(void)
 				if(!PARA_SELECT_KEY)
 				{
 					//opstr("\r\nProg Mode + Up Key + Para_Select key pressed\r\n");
-					prog_para_cnt++;
+					emProgpara++;
 					
-					if((prog_para_cnt==2) && !(gu16_parameterWord & ENABLE_DP1))
+					if((emProgpara==DP1_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP1))
 					{
-						prog_para_cnt=6;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						emProgpara=DP2_ALM_UP_ON_DISP;
+						#else
+						emProgpara=TM_ALM_UP_ON_DISP;
+						#endif
 					}
 					
-					if((prog_para_cnt==6) && !(gu16_parameterWord & ENABLE_DP2))
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+					if((emProgpara==DP2_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP2))
 					{
-						prog_para_cnt=10;
+						emProgpara=DP3_ALM_UP_ON_DISP;
 					}
-					
-					if((prog_para_cnt==10) && !(gu16_parameterWord & ENABLE_DP3))
+					if((emProgpara==DP3_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP3))
 					{
-						prog_para_cnt=14;
+						emProgpara=RTC_HR_DISP;
 					}
-					
-					if((prog_para_cnt==14) && (gu16_parameterWord & ENABLE_LOG))
+					#else
+					if((emProgpara==TM_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_TEMP))
 					{
-						prog_para_cnt=19;
+						emProgpara=RH_ALM_UP_ON_DISP;
 					}
-					
-					if((prog_para_cnt==21) && !(gu16_parameterWord & ENABLE_LOG))
+					if((emProgpara==RH_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_RH))
 					{
-						prog_para_cnt=22;
+						emProgpara=RTC_HR_DISP;
 					}
+					#endif
 					
-					if(prog_para_cnt>23)
+					if(emProgpara>CAL_DISP)
 					{
-						prog_para_cnt=1;
+						emProgpara=DEVICE_ID_DISP;
 					}
 					
 					dummy=0;
 					
-					Lastpara_cnt=prog_para_cnt;
+					emLastProgpara=emProgpara;
 					//----------------------------------------------------------------------
-					switch(prog_para_cnt)
+					switch(emProgpara)
 					{
-						case 1:		dummy = DeviceID;				break;
-						case 2:		dummy = DP_Upper_Alm_ON[DP1]; 		break;
-						case 3:		dummy = DP_Upper_Alm_OFF[DP1]; 		break;
-						case 4:		dummy = DP_Lower_Alm_OFF[DP1];  	break;
-						case 5:		dummy = DP_Lower_Alm_ON[DP1];  		break;
-						case 6:		dummy = DP_Upper_Alm_ON[DP2]; 		break;
-						case 7:		dummy = DP_Upper_Alm_OFF[DP2]; 		break;
-						case 8:		dummy = DP_Lower_Alm_OFF[DP2];  	break;
-						case 9:		dummy = DP_Lower_Alm_ON[DP2];  		break;
-						case 10:	dummy = DP_Upper_Alm_ON[DP3]; 		break;
-						case 11:	dummy = DP_Upper_Alm_OFF[DP3]; 		break;
-						case 12:	dummy = DP_Lower_Alm_OFF[DP3];  	break;
-						case 13:	dummy = DP_Lower_Alm_ON[DP3];  		break;
-						case 14:
+						case DEVICE_ID_DISP:			dummy = DeviceID;					break;
+						case DP1_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP1]; 		break;
+						case DP1_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP1]; 		break;
+						case DP1_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP1];  	break;
+						case DP1_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP1];  		break;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						case DP2_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP2]; 		break;
+						case DP2_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP2]; 		break;
+						case DP2_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP2];  	break;
+						case DP2_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP2];  		break;
+						case DP3_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP3]; 		break;
+						case DP3_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP3]; 		break;
+						case DP3_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP3];  	break;
+						case DP3_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP3];  		break;
+						#else
+						case TM_ALM_UP_ON_DISP:			dummy = TM_Upper_Alm_ON;  		break;
+						case TM_ALM_UP_OFF_DISP:		dummy = TM_Upper_Alm_OFF; 		break;
+						case TM_ALM_LO_OFF_DISP:		dummy = TM_Lower_Alm_OFF; 		break;
+						case TM_ALM_LO_ON_DISP:			dummy = TM_Lower_Alm_ON;  		break;
+						case TM_UNIT_DISP:				dummy = TM_Unit;				break;
+						case RH_ALM_UP_ON_DISP:			dummy = RH_Upper_Alm_ON;  		break;
+						case RH_ALM_UP_OFF_DISP:		dummy = RH_Upper_Alm_OFF;  		break;
+						case RH_ALM_LO_OFF_DISP:		dummy = RH_Lower_Alm_OFF;  		break;
+						case RH_ALM_LO_ON_DISP:			dummy = RH_Lower_Alm_ON;  		break;
+						#endif
+						
+						case RTC_HR_DISP:
 							Temp_RTC_ARR[0] = rtc.hour;
 							dummy = rtc.hour;
 						break;
-						case 15:
+						case RTC_MN_DISP:
 							Temp_RTC_ARR[1] = rtc.minute;
 							dummy = rtc.minute;
 						break;
-						case 16:
+						case RTC_DT_DISP:
 							Temp_RTC_ARR[2] = rtc.day;
 							dummy = rtc.day;
 						break;
-						case 17:
+						case RTC_MH_DISP:
 							Temp_RTC_ARR[3] = rtc.month;
 							dummy = rtc.month;
 						break;
-						case 18:
+						case RTC_YR_DISP:
 							Temp_RTC_ARR[4] = (uint8_t)rtc.year;
 							dummy = rtc.year;
 						break;
-						case 19:	dummy = Buzzer_ON_Time;	  		break;
-						case 20:	dummy = Buzzer_OFF_Time;	  	break;
-						case 21:	dummy = LogInterval;			break;
-						case 22:	dummy = UART_BaudRate;		  	break;
-						case 23:	dummy = 0;						break;
+						case BUZ_ON_DISP:	dummy = Buzzer_ON_Time;	  		break;
+						case BUZ_OFF_DISP:	dummy = Buzzer_OFF_Time;	  	break;
+						case UART_BDT_DISP:	dummy = UART_BaudRate;		  	break;
+						case CAL_DISP:	dummy = 0;							break;
+						default: break;
 					}
 				}
 				else
 				{
 					progTimeout=60;
 					
-					switch(prog_para_cnt)
+					switch(emProgpara)
 					{
-						case 1:		if(dummy>250)dummy=250;										break;
-						case 2:		if(dummy>DEFAUT_DP1_MIN*10.0)dummy=DEFAUT_DP1_MIN*10.0;		break;
-						case 3:		if(dummy>DP_Upper_Alm_ON[DP1]) dummy=(DP_Upper_Alm_ON[DP1]-1);		break;
-						case 4:		if(dummy>DP_Upper_Alm_OFF[DP1])dummy=(DP_Upper_Alm_OFF[DP1]-1);		break;
-						case 5:		if(dummy>DP_Lower_Alm_OFF[DP1])dummy=(DP_Lower_Alm_OFF[DP1]-1);		break;
-						case 6:		if(dummy>DEFAUT_DP2_MIN*10.0)dummy=DEFAUT_DP2_MIN*10.0;		break;
-						case 7:		if(dummy>DP_Upper_Alm_ON[DP2]) dummy=(DP_Upper_Alm_ON[DP2]-1);		break;
-						case 8:		if(dummy>DP_Upper_Alm_OFF[DP2])dummy=(DP_Upper_Alm_OFF[DP2]-1);		break;
-						case 9:		if(dummy>DP_Lower_Alm_OFF[DP2])dummy=(DP_Lower_Alm_OFF[DP2]-1);		break;
-						case 10:	if(dummy>DEFAUT_DP3_MIN*10.0)dummy=DEFAUT_DP3_MIN*10.0;		break;
-						case 11:	if(dummy>DP_Upper_Alm_ON[DP3]) dummy=(DP_Upper_Alm_ON[DP3]-1);		break;
-						case 12:	if(dummy>DP_Upper_Alm_OFF[DP3])dummy=(DP_Upper_Alm_OFF[DP3]-1);		break;
-						case 13:	if(dummy>DP_Lower_Alm_OFF[DP3])dummy=(DP_Lower_Alm_OFF[DP3]-1);		break;
-						case 14: 	if(dummy>23)dummy=23; 	bool_RTCChangeOccure = 1;			break;
-						case 15: 	if(dummy>59)dummy=59; 	bool_RTCChangeOccure = 1;			break;
-						case 16: 	if(dummy>31)dummy=31; 	bool_RTCChangeOccure = 1;			break;
-						case 17: 	if(dummy>12)dummy=12; 	bool_RTCChangeOccure = 1;			break;
-						case 18: 	if(dummy>99)dummy=99;	bool_RTCChangeOccure = 1;			break;
-						case 19:	if(dummy>60)dummy=60;									break;
-						case 20:	if(dummy>960)dummy=960;									break;
-						case 21:	if(dummy>MAX_LOG_INTERVAL)dummy=MAX_LOG_INTERVAL;		break;
-						case 22:	if(dummy>9)dummy=9;		bool_UARTChanged = 1;			break;
-						case 23:	if(dummy>999)dummy=999;									break;
+						case DEVICE_ID_DISP:		if(dummy>250)dummy=250;										break;
+						case DP1_ALM_UP_ON_DISP:		if(dummy>DEFAUT_DP1_MIN*10.0)dummy=DEFAUT_DP1_MIN*10.0;		break;
+						case DP1_ALM_UP_OFF_DISP:		if(dummy>DP_Upper_Alm_ON[DP1]) dummy=(DP_Upper_Alm_ON[DP1]-1);		break;
+						case DP1_ALM_LO_OFF_DISP:		if(dummy>DP_Upper_Alm_OFF[DP1])dummy=(DP_Upper_Alm_OFF[DP1]-1);		break;
+						case DP1_ALM_LO_ON_DISP:		if(dummy>DP_Lower_Alm_OFF[DP1])dummy=(DP_Lower_Alm_OFF[DP1]-1);		break;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						case DP2_ALM_UP_ON_DISP:		if(dummy>DEFAUT_DP2_MIN*10.0)dummy=DEFAUT_DP2_MIN*10.0;		break;
+						case DP2_ALM_UP_OFF_DISP:		if(dummy>DP_Upper_Alm_ON[DP2]) dummy=(DP_Upper_Alm_ON[DP2]-1);		break;
+						case DP2_ALM_LO_OFF_DISP:		if(dummy>DP_Upper_Alm_OFF[DP2])dummy=(DP_Upper_Alm_OFF[DP2]-1);		break;
+						case DP2_ALM_LO_ON_DISP:		if(dummy>DP_Lower_Alm_OFF[DP2])dummy=(DP_Lower_Alm_OFF[DP2]-1);		break;
+						case DP3_ALM_UP_ON_DISP:	if(dummy>DEFAUT_DP3_MIN*10.0)dummy=DEFAUT_DP3_MIN*10.0;		break;
+						case DP3_ALM_UP_OFF_DISP:	if(dummy>DP_Upper_Alm_ON[DP3]) dummy=(DP_Upper_Alm_ON[DP3]-1);		break;
+						case DP3_ALM_LO_OFF_DISP:	if(dummy>DP_Upper_Alm_OFF[DP3])dummy=(DP_Upper_Alm_OFF[DP3]-1);		break;
+						case DP3_ALM_LO_ON_DISP:	if(dummy>DP_Lower_Alm_OFF[DP3])dummy=(DP_Lower_Alm_OFF[DP3]-1);		break;
+						#else
+						case TM_ALM_UP_ON_DISP:
+							if(!TM_Unit)
+							{
+								if(dummy>DEFAUT_TEMP_C_MIN*10.0)dummy=DEFAUT_TEMP_C_MIN*10.0;
+							}
+							else
+							{
+								if(dummy>DEFAUT_TEMP_F_MIN*10.0)dummy=DEFAUT_TEMP_F_MIN*10.0;
+							}
+						break;
+						case TM_ALM_UP_OFF_DISP:		if(dummy>TM_Upper_Alm_ON)dummy=(TM_Upper_Alm_ON-1);		break;
+						case TM_ALM_LO_OFF_DISP:	if(dummy>TM_Upper_Alm_OFF)dummy=(TM_Upper_Alm_OFF-1);	break;
+						case TM_ALM_LO_ON_DISP:	if(dummy>TM_Lower_Alm_OFF)dummy=(TM_Lower_Alm_OFF-1);	break;
+						case TM_UNIT_DISP:	dummy=1;												break;
+						case RH_ALM_UP_ON_DISP:	if(dummy>DEFAUT_RH_MIN*10.0)dummy=DEFAUT_RH_MIN*10.0;	break;
+						case RH_ALM_UP_OFF_DISP:	if(dummy>RH_Upper_Alm_ON)dummy=(RH_Upper_Alm_ON-1);		break;
+						case RH_ALM_LO_OFF_DISP:	if(dummy>RH_Upper_Alm_OFF)dummy=(RH_Upper_Alm_OFF-1);	break;
+						case RH_ALM_LO_ON_DISP:	if(dummy>RH_Lower_Alm_OFF)dummy=(RH_Lower_Alm_OFF-1);	break;
+						#endif
+						case RTC_HR_DISP: 	if(dummy>23)dummy=23; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_MN_DISP: 	if(dummy>59)dummy=59; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_DT_DISP: 	if(dummy>31)dummy=31; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_MH_DISP: 	if(dummy>12)dummy=12; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_YR_DISP: 	if(dummy>99)dummy=99;	bool_RTCChangeOccure = 1;			break;
+						case BUZ_ON_DISP:	if(dummy>60)dummy=60;									break;
+						case BUZ_OFF_DISP:	if(dummy>960)dummy=960;									break;
+						case UART_BDT_DISP:	if(dummy>9)dummy=9;		bool_UARTChanged = 1;			break;
+						case CAL_DISP:		if(dummy>999)dummy=999;									break;
+						default: break;
 					}
 				}
 			break;
@@ -2998,10 +3835,9 @@ void CheckUpDnKey(void)
 			
 			case DP_AUTO_CAL_MODE:
 			
-				/*progTimeout=60;
-				
+				/*
+				progTimeout=60;
 				autoCal_para_cnt=1;
-				
 				*/
 				
 			break;
@@ -3019,116 +3855,143 @@ void CheckUpDnKey(void)
 				if(!PARA_SELECT_KEY)
 				{
 					//opstr("\r\nProg Mode + Down Key + Para_Select key pressed\r\n");
-					if(prog_para_cnt)prog_para_cnt--;
+					if(emProgpara)emProgpara--;
 					
-					if(!prog_para_cnt)prog_para_cnt=23;
+					if(emProgpara==PROG_PAGE_DISP)emProgpara=CAL_DISP;
 					
-					if(prog_para_cnt>23)
+					if(emProgpara>CAL_DISP)
 					{
-						prog_para_cnt=23;
+						emProgpara=CAL_DISP;
 						bool_cal_mode=0;
 					}
-							
-					if((prog_para_cnt==21) && !(gu16_parameterWord & ENABLE_LOG))
+					
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+					if((emProgpara==DP3_ALM_LO_ON_DISP) && !(gu16_parameterWord & ENABLE_DP3))
 					{
-						prog_para_cnt=20;
+						emProgpara=DP2_ALM_LO_ON_DISP;
 					}
 					
-					if((prog_para_cnt==18) && (gu16_parameterWord & ENABLE_LOG))
+					if((emProgpara==DP2_ALM_LO_ON_DISP) && !(gu16_parameterWord & ENABLE_DP2))
 					{
-						prog_para_cnt=13;
+						emProgpara=DP1_ALM_LO_ON_DISP;
+					}
+					#else
+					if((emProgpara==RH_ALM_LO_ON_DISP) && !(gu16_parameterWord & ENABLE_RH))
+					{
+						emProgpara=TM_UNIT_DISP;
 					}
 					
-					if((prog_para_cnt==13) && !(gu16_parameterWord & ENABLE_DP3))
+					if((emProgpara==TM_UNIT_DISP) && !(gu16_parameterWord & ENABLE_TEMP))
 					{
-						prog_para_cnt=9;
+						emProgpara=DP1_ALM_LO_ON_DISP;
 					}
+					#endif
 					
-					if((prog_para_cnt==9) && !(gu16_parameterWord & ENABLE_DP2))
+					if((emProgpara==DP1_ALM_LO_ON_DISP) && !(gu16_parameterWord & ENABLE_DP1))
 					{
-						prog_para_cnt=5;
-					}
-					
-					if((prog_para_cnt==5) && !(gu16_parameterWord & ENABLE_DP1))
-					{
-						prog_para_cnt=1;
+						emProgpara=DEVICE_ID_DISP;
 					}
 					
 					dummy=0;
 					
-					Lastpara_cnt=prog_para_cnt;
+					emLastProgpara=emProgpara;
 					//----------------------------------------------------------------------
-					switch(prog_para_cnt)
+					switch(emProgpara)
 					{
-						case 1:		dummy = DeviceID;				break;
-						case 2:		dummy = DP_Upper_Alm_ON[DP1]; 		break;
-						case 3:		dummy = DP_Upper_Alm_OFF[DP1]; 		break;
-						case 4:		dummy = DP_Lower_Alm_OFF[DP1];  	break;
-						case 5:		dummy = DP_Lower_Alm_ON[DP1];  		break;
-						case 6:		dummy = DP_Upper_Alm_ON[DP2]; 		break;
-						case 7:		dummy = DP_Upper_Alm_OFF[DP2]; 		break;
-						case 8:		dummy = DP_Lower_Alm_OFF[DP2];  	break;
-						case 9:		dummy = DP_Lower_Alm_ON[DP2];  		break;
-						case 10:	dummy = DP_Upper_Alm_ON[DP3]; 		break;
-						case 11:	dummy = DP_Upper_Alm_OFF[DP3]; 		break;
-						case 12:	dummy = DP_Lower_Alm_OFF[DP3];  	break;
-						case 13:	dummy = DP_Lower_Alm_ON[DP3];  		break;
-						case 14:
+						case DEVICE_ID_DISP:			dummy = DeviceID;					break;
+						case DP1_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP1]; 		break;
+						case DP1_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP1]; 		break;
+						case DP1_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP1];  	break;
+						case DP1_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP1];  		break;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						case DP2_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP2]; 		break;
+						case DP2_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP2]; 		break;
+						case DP2_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP2];  	break;
+						case DP2_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP2];  		break;
+						case DP3_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP3]; 		break;
+						case DP3_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP3]; 		break;
+						case DP3_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP3];  	break;
+						case DP3_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP3];  		break;
+						#else
+						case TM_ALM_UP_ON_DISP:			dummy = TM_Upper_Alm_ON;  		break;
+						case TM_ALM_UP_OFF_DISP:		dummy = TM_Upper_Alm_OFF; 		break;
+						case TM_ALM_LO_OFF_DISP:		dummy = TM_Lower_Alm_OFF; 		break;
+						case TM_ALM_LO_ON_DISP:			dummy = TM_Lower_Alm_ON;  		break;
+						case TM_UNIT_DISP:				dummy = TM_Unit;				break;
+						case RH_ALM_UP_ON_DISP:			dummy = RH_Upper_Alm_ON;  		break;
+						case RH_ALM_UP_OFF_DISP:		dummy = RH_Upper_Alm_OFF;  		break;
+						case RH_ALM_LO_OFF_DISP:		dummy = RH_Lower_Alm_OFF;  		break;
+						case RH_ALM_LO_ON_DISP:			dummy = RH_Lower_Alm_ON;  		break;
+						#endif
+						
+						case RTC_HR_DISP:
 							Temp_RTC_ARR[0] = rtc.hour;
 							dummy = rtc.hour;
 						break;
-						case 15:
+						case RTC_MN_DISP:
 							Temp_RTC_ARR[1] = rtc.minute;
 							dummy = rtc.minute;
 						break;
-						case 16:
+						case RTC_DT_DISP:
 							Temp_RTC_ARR[2] = rtc.day;
 							dummy = rtc.day;
 						break;
-						case 17:
+						case RTC_MH_DISP:
 							Temp_RTC_ARR[3] = rtc.month;
 							dummy = rtc.month;
 						break;
-						case 18:
-							Temp_RTC_ARR[4] = rtc.year;
+						case RTC_YR_DISP:
+							Temp_RTC_ARR[4] = (uint8_t)rtc.year;
 							dummy = rtc.year;
 						break;
-						case 19:	dummy = Buzzer_ON_Time;	  		break;
-						case 20:	dummy = Buzzer_OFF_Time;	  	break;
-						case 21:	dummy = LogInterval;			break;
-						case 22:	dummy = UART_BaudRate;		  	break;
-						case 23:	dummy = 0;						break;
+						case BUZ_ON_DISP:	dummy = Buzzer_ON_Time;	  		break;
+						case BUZ_OFF_DISP:	dummy = Buzzer_OFF_Time;	  	break;
+						case UART_BDT_DISP:	dummy = UART_BaudRate;		  	break;
+						case CAL_DISP:	dummy = 0;							break;
+						default: break;
 					}
 				}
 				else
 				{
 					progTimeout=60;
 					
-					switch(prog_para_cnt)
+					switch(emProgpara)
 					{
-						case 1:		if(dummy<1)dummy=1;										break;
-						case 2:		if(dummy<DP_Upper_Alm_OFF[DP1])dummy=(DP_Upper_Alm_OFF[DP1]+1);	break;
-						case 3:		if(dummy<DP_Lower_Alm_OFF[DP1])dummy=(DP_Lower_Alm_OFF[DP1]+1);	break;
-						case 4:		if(dummy<DP_Lower_Alm_ON[DP1])dummy=(DP_Lower_Alm_ON[DP1]+1);	break;
-						case 5:		if(dummy<DEFAUT_DP1_MAX*10.0)dummy=DEFAUT_DP1_MAX*10.0;	break;
-						case 6:		if(dummy<DP_Upper_Alm_OFF[DP2])dummy=(DP_Upper_Alm_OFF[DP2]+1);	break;
-						case 7:		if(dummy<DP_Lower_Alm_OFF[DP2])dummy=(DP_Lower_Alm_OFF[DP2]+1);	break;
-						case 8:		if(dummy<DP_Lower_Alm_ON[DP2])dummy=(DP_Lower_Alm_ON[DP2]+1);	break;
-						case 9:		if(dummy<DEFAUT_DP2_MAX*10.0)dummy=DEFAUT_DP2_MAX*10.0;	break;
-						case 10:	if(dummy<DP_Upper_Alm_OFF[DP3])dummy=(DP_Upper_Alm_OFF[DP3]+1);	break;
-						case 11:	if(dummy<DP_Lower_Alm_OFF[DP3])dummy=(DP_Lower_Alm_OFF[DP3]+1);	break;
-						case 12:	if(dummy<DP_Lower_Alm_ON[DP3])dummy=(DP_Lower_Alm_ON[DP3]+1);	break;
-						case 13:	if(dummy<DEFAUT_DP3_MAX*10.0)dummy=DEFAUT_DP3_MAX*10.0;	break;
-						case 14: 	if(dummy<0)dummy=0; 	bool_RTCChangeOccure = 1;			break;
-						case 15: 	if(dummy<0)dummy=0; 	bool_RTCChangeOccure = 1;			break;
-						case 16: 	if(dummy<1)dummy=1; 	bool_RTCChangeOccure = 1;			break;
-						case 17: 	if(dummy<1)dummy=1; 	bool_RTCChangeOccure = 1;			break;
-						case 18: 	if(dummy<0)dummy=0;		bool_RTCChangeOccure = 1;			break;
-						case 19:	if(dummy<0)dummy=0;										break;
-						case 20:	if(dummy<0)dummy=0;										break;
-						case 21:	if(dummy<MIN_LOG_INTERVAL)dummy=MIN_LOG_INTERVAL;		break;
-						case 22:	if(dummy<3)dummy=3;		bool_UARTChanged = 1;			break;
-						case 23:	if(dummy<0)dummy=0;										break;
+						case DEVICE_ID_DISP:		if(dummy<1)dummy=1;										break;
+						case DP1_ALM_UP_ON_DISP:		if(dummy<DP_Upper_Alm_OFF[DP1])dummy=(DP_Upper_Alm_OFF[DP1]+1);	break;
+						case DP1_ALM_UP_OFF_DISP:		if(dummy<DP_Lower_Alm_OFF[DP1])dummy=(DP_Lower_Alm_OFF[DP1]+1);	break;
+						case DP1_ALM_LO_OFF_DISP:		if(dummy<DP_Lower_Alm_ON[DP1])dummy=(DP_Lower_Alm_ON[DP1]+1);	break;
+						case DP1_ALM_LO_ON_DISP:		if(dummy<DEFAUT_DP1_MAX*10.0)dummy=DEFAUT_DP1_MAX*10.0;	break;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						case DP2_ALM_UP_ON_DISP:		if(dummy<DP_Upper_Alm_OFF[DP2])dummy=(DP_Upper_Alm_OFF[DP2]+1);	break;
+						case DP2_ALM_UP_OFF_DISP:		if(dummy<DP_Lower_Alm_OFF[DP2])dummy=(DP_Lower_Alm_OFF[DP2]+1);	break;
+						case DP2_ALM_LO_OFF_DISP:		if(dummy<DP_Lower_Alm_ON[DP2])dummy=(DP_Lower_Alm_ON[DP2]+1);	break;
+						case DP2_ALM_LO_ON_DISP:		if(dummy<DEFAUT_DP2_MAX*10.0)dummy=DEFAUT_DP2_MAX*10.0;	break;
+						case DP3_ALM_UP_ON_DISP:	if(dummy<DP_Upper_Alm_OFF[DP3])dummy=(DP_Upper_Alm_OFF[DP3]+1);	break;
+						case DP3_ALM_UP_OFF_DISP:	if(dummy<DP_Lower_Alm_OFF[DP3])dummy=(DP_Lower_Alm_OFF[DP3]+1);	break;
+						case DP3_ALM_LO_OFF_DISP:	if(dummy<DP_Lower_Alm_ON[DP3])dummy=(DP_Lower_Alm_ON[DP3]+1);	break;
+						case DP3_ALM_LO_ON_DISP:	if(dummy<DEFAUT_DP3_MAX*10.0)dummy=DEFAUT_DP3_MAX*10.0;	break;
+						#else
+						case TM_ALM_UP_ON_DISP:	if(dummy<TM_Upper_Alm_OFF)dummy=TM_Upper_Alm_OFF;		break;
+						case TM_ALM_UP_OFF_DISP:	if(dummy<TM_Lower_Alm_OFF)dummy=TM_Lower_Alm_OFF;		break;
+						case TM_ALM_LO_OFF_DISP:	if(dummy<TM_Lower_Alm_ON)dummy=TM_Lower_Alm_ON;			break;
+						case TM_ALM_LO_ON_DISP:	if(dummy<DEFAUT_TEMP_C_MAX*10.0)dummy=DEFAUT_TEMP_C_MAX*10.0;		break;
+						case TM_UNIT_DISP:	dummy=0;												break;
+						case RH_ALM_UP_ON_DISP:	if(dummy<RH_Upper_Alm_OFF)dummy=RH_Upper_Alm_OFF;		break;	
+						case RH_ALM_UP_OFF_DISP:	if(dummy<RH_Lower_Alm_OFF)dummy=RH_Lower_Alm_OFF;		break;	
+						case RH_ALM_LO_OFF_DISP:	if(dummy<RH_Lower_Alm_ON)dummy=RH_Lower_Alm_ON;			break;
+						case RH_ALM_LO_ON_DISP:	if(dummy<0)dummy=DEFAUT_RH_MAX*10.0;					break;	
+						#endif
+						case RTC_HR_DISP: 	if(dummy<0)dummy=0; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_MN_DISP: 	if(dummy<0)dummy=0; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_DT_DISP: 	if(dummy<1)dummy=1; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_MH_DISP: 	if(dummy<1)dummy=1; 	bool_RTCChangeOccure = 1;			break;
+						case RTC_YR_DISP: 	if(dummy<0)dummy=0;		bool_RTCChangeOccure = 1;			break;
+						case BUZ_ON_DISP:	if(dummy<0)dummy=0;										break;
+						case BUZ_OFF_DISP:	if(dummy<0)dummy=0;										break;
+						case UART_BDT_DISP:	if(dummy<3)dummy=3;		bool_UARTChanged = 1;			break;
+						case CAL_DISP:	if(dummy<0)dummy=0;										break;
+						default: break;
 					}
 				}
 				
@@ -3143,9 +4006,7 @@ void CheckUpDnKey(void)
 			if(DPAutoCalModeTimer > 20)
 			{
 				DPAutoCalModeTimer=0;
-				
 				mode=DP_AUTO_CAL_MODE;
-				
 				progTimeout=60;
 			}
 		}
@@ -3173,11 +4034,11 @@ void keyboard(void)
 			if(mode==NORMAL_MODE)
 			{
 				mode=PROG_MODE;
-				prog_para_cnt=0;
+				emProgpara=PROG_PAGE_DISP;
 				Normal_para_cnt=0;
 				b.RTCChangeOccure=0;
 				b.UARTChanged=0;
-				Lastpara_cnt=0;
+				emLastProgpara=PROG_PAGE_DISP;
 				progTimeout=60;
 				gu8_SetACKPwd=0;
 			}
@@ -3200,7 +4061,11 @@ void keyboard(void)
 					{
 						if(!gu8_SetACKPwd)
 						{
+							#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 							if((DP_Alrm_ON[DP1]) || (DP_Alrm_ON[DP2]) || (DP_Alrm_ON[DP3]))
+							#else
+							if((DP_Alrm_ON[DP1]) || (TM_Alrm_ON) || (RH_Alrm_ON))
+							#endif							
 							{
 								gu8_SetACKPwd=1;
 								dummy1=0;
@@ -3208,7 +4073,11 @@ void keyboard(void)
 						}
 						else if(gu8_SetACKPwd==1)
 						{
+							#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 							if((DP_Alrm_ON[DP1]) || (DP_Alrm_ON[DP2]) || (DP_Alrm_ON[DP3]))
+							#else
+							if((DP_Alrm_ON[DP1]) || (TM_Alrm_ON) || (RH_Alrm_ON))
+							#endif
 							{
 								gu8_SetACKPwd=2;
 								dummy=0;
@@ -3255,9 +4124,9 @@ void keyboard(void)
 				
 					////cli();			//Global Interrupt Disable
 					
-					switch(Lastpara_cnt)
+					switch(emLastProgpara)
 					{
-						case 1:
+						case DEVICE_ID_DISP:
 							if(DeviceID != dummy)
 							{
 								DeviceID = dummy;
@@ -3265,130 +4134,196 @@ void keyboard(void)
 								WriteEEPROMData(DEVICE_ID,&DeviceID,sizeof(DeviceID));
 							}
 						break;
-						case 2:
+						case DP1_ALM_UP_ON_DISP:
 							if(DP_Upper_Alm_ON[DP1] != dummy)
 							{
 								DP_Upper_Alm_ON[DP1] = dummy;
-								WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],2);
+								WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],sizeof(DP_Upper_Alm_ON[DP1]));
 							}
 						break;
-						case 3:
+						case DP1_ALM_UP_OFF_DISP:
 							if(DP_Upper_Alm_OFF[DP1] != dummy)
 							{
 								DP_Upper_Alm_OFF[DP1] = dummy;
-								WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],2);
+								WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],sizeof(DP_Upper_Alm_OFF[DP1]));
 							}
 						break;
-						case 4:
+						case DP1_ALM_LO_OFF_DISP:
 							if(DP_Lower_Alm_OFF[DP1] != dummy)
 							{
 								DP_Lower_Alm_OFF[DP1] = dummy;
-								WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],2);
+								WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],sizeof(DP_Lower_Alm_OFF[DP1]));
 							}
 						break;
-						case 5:
+						case DP1_ALM_LO_ON_DISP:
 							if(DP_Lower_Alm_ON[DP1] != dummy)
 							{
 								DP_Lower_Alm_ON[DP1] = dummy;
-								WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],2);
+								WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],sizeof(DP_Lower_Alm_ON[DP1]));
 							}
 						break;	
-						case 6:
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						case DP2_ALM_UP_ON_DISP:
 							if(DP_Upper_Alm_ON[DP2] != dummy)
 							{
 								DP_Upper_Alm_ON[DP2] = dummy;
-								WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],2);
+								WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],sizeof(DP_Upper_Alm_ON[DP2]));
 							}
 						break;
-						case 7:
+						case DP2_ALM_UP_OFF_DISP:
 							if(DP_Upper_Alm_OFF[DP2] != dummy)
 							{
 								DP_Upper_Alm_OFF[DP2] = dummy;
-								WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],2);
+								WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],sizeof(DP_Upper_Alm_OFF[DP2]));
 							}
 						break;
-						case 8:
+						case DP2_ALM_LO_OFF_DISP:
 							if(DP_Lower_Alm_OFF[DP2] != dummy)
 							{
 								DP_Lower_Alm_OFF[DP2] = dummy;
-								WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],2);
+								WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],sizeof(DP_Lower_Alm_OFF[DP2]));
 							}
 						break;
-						case 9:
+						case DP2_ALM_LO_ON_DISP:
 							if(DP_Lower_Alm_ON[DP2] != dummy)
 							{
 								DP_Lower_Alm_ON[DP2] = dummy;
-								WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],2);
+								WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],sizeof(DP_Lower_Alm_ON[DP2]));
 							}
 						break;								
-						case 10:
+						case DP3_ALM_UP_ON_DISP:
 							if(DP_Upper_Alm_ON[DP3] != dummy)
 							{
 								DP_Upper_Alm_ON[DP3] = dummy;
-								WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],2);
+								WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],sizeof(DP_Upper_Alm_ON[DP3]));
 							}
 						break;
-						case 11:
+						case DP3_ALM_UP_OFF_DISP:
 							if(DP_Upper_Alm_OFF[DP3] != dummy)
 							{
 								DP_Upper_Alm_OFF[DP3] = dummy;
-								WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],2);
+								WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],sizeof(DP_Upper_Alm_OFF[DP3]));
 							}
 						break;
-						case 12:
+						case DP3_ALM_LO_OFF_DISP:
 							if(DP_Lower_Alm_OFF[DP3] != dummy)
 							{
 								DP_Lower_Alm_OFF[DP3] = dummy;
-								WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],2);
+								WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],sizeof(DP_Lower_Alm_OFF[DP3]));
 							}
 						break;
-						case 13:
+						case DP3_ALM_LO_ON_DISP:
 							if(DP_Lower_Alm_ON[DP3] != dummy)
 							{
 								DP_Lower_Alm_ON[DP3] = dummy;
-								WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],2);
+								WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],sizeof(DP_Lower_Alm_ON[DP3]));
 							}
-						break;								
-						case 14:
+						break;
+						#else
+						case TM_ALM_UP_ON_DISP:
+							if(TM_Upper_Alm_ON != dummy)
+							{
+								TM_Upper_Alm_ON = dummy;
+								WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+							}
+						break;
+						case TM_ALM_UP_OFF_DISP:
+							if(TM_Upper_Alm_OFF != dummy)
+							{
+								TM_Upper_Alm_OFF = dummy;
+								WriteEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+							}
+						break;
+						case TM_ALM_LO_OFF_DISP:
+							if(TM_Lower_Alm_OFF != dummy)
+							{
+								TM_Lower_Alm_OFF = dummy;
+								WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+							}
+						break;
+						case TM_ALM_LO_ON_DISP:
+							if(TM_Lower_Alm_ON != dummy)
+							{
+								TM_Lower_Alm_ON = dummy;
+								WriteEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+							}
+						break;
+						case TM_UNIT_DISP:
+							if(TM_Unit != dummy)
+							{
+								TM_Unit = dummy;
+								TMUnitChange();
+							}
+						break;
+						case RH_ALM_UP_ON_DISP:
+							if(RH_Upper_Alm_ON != dummy)
+							{
+								RH_Upper_Alm_ON = dummy;
+								WriteEEPROMData(RH_UP_ALM_ON,(uint8_t*)&RH_Upper_Alm_ON,sizeof(RH_Upper_Alm_ON));
+							}
+						break;
+						case RH_ALM_UP_OFF_DISP:
+							if(RH_Upper_Alm_OFF != dummy)
+							{
+								RH_Upper_Alm_OFF = dummy;
+								WriteEEPROMData(RH_UP_ALM_OFF,(uint8_t*)&RH_Upper_Alm_OFF,sizeof(RH_Upper_Alm_OFF));
+							}
+						break;
+						case RH_ALM_LO_OFF_DISP:
+							if(RH_Lower_Alm_OFF != dummy)
+							{
+								RH_Lower_Alm_OFF = dummy;
+								WriteEEPROMData(RH_LO_ALM_OFF,(uint8_t*)&RH_Lower_Alm_OFF,sizeof(RH_Lower_Alm_OFF));
+							}
+						break;
+						case RH_ALM_LO_ON_DISP:
+							if(RH_Lower_Alm_ON != dummy)
+							{
+								RH_Lower_Alm_ON = dummy;
+								WriteEEPROMData(RH_LO_ALM_ON,(uint8_t*)&RH_Lower_Alm_ON,sizeof(RH_Lower_Alm_ON));
+							}
+						break;
+						#endif
+						case RTC_HR_DISP:
 							if(Temp_RTC_ARR[0] != dummy)
 							{
 								Temp_RTC_ARR[0] = dummy;
 								bool_RTCChangeOccure=1;
 							}
 						break;
-						case 15:
+						case RTC_MN_DISP:
 							if(Temp_RTC_ARR[1] != dummy)
 							{
 								Temp_RTC_ARR[1] = dummy;
 								bool_RTCChangeOccure=1;
 							}
 						break;
-						case 16:
+						case RTC_DT_DISP:
 							if(Temp_RTC_ARR[2] != dummy)
 							{
 								Temp_RTC_ARR[2] = dummy;
 								bool_RTCChangeOccure=1;
 							}
 						break;
-						case 17:
+						case RTC_MH_DISP:
 							if(Temp_RTC_ARR[3] != dummy)
 							{
 								Temp_RTC_ARR[3] = dummy;
 								bool_RTCChangeOccure=1;
 							}
 						break;
-						case 18:
+						case RTC_YR_DISP:
 							if(Temp_RTC_ARR[4] != dummy)
 							{
 								Temp_RTC_ARR[4] = dummy;
 								bool_RTCChangeOccure=1;
 							}
 						break;
-						case 19:
+						case BUZ_ON_DISP:
 							if(Buzzer_ON_Time != dummy)
 							{
 								Buzzer_ON_Time = dummy;
-								WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,2);
+								WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,sizeof(Buzzer_ON_Time));
 							
 								if(!Buzzer_ON_Time)
 								{
@@ -3408,30 +4343,21 @@ void keyboard(void)
 								}
 							}
 						break;
-						case 20:
+						case BUZ_OFF_DISP:
 							if(Buzzer_OFF_Time != dummy)
 							{
 								Buzzer_OFF_Time = dummy;
-								WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,2);
+								WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 							}
 						break;
-						case 21:
-							if(LogInterval != dummy)
-							{
-								LogInterval = dummy;
-								logTimer = LogInterval;
-								//FlashlogTimer=60;
-								//logTimer=(unsigned long)LogInterval*60;
-								WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,2);
-							}
-						break;
-						case 22:
+						case UART_BDT_DISP:
 							if(UART_BaudRate != dummy)
 							{
 								UART_BaudRate = dummy;
 								WriteEEPROMData(UART_BAUDRATE,&UART_BaudRate,sizeof(UART_BaudRate));
 							}
 						break;
+						default: break;
 					}
 					
 					if(bool_RTCChangeOccure==1)
@@ -3471,82 +4397,99 @@ void keyboard(void)
 					
 					//sei();			//Global Interrupt Enable
 					//----------------------------------------------------------------------
-					prog_para_cnt++;
+					emProgpara++;
 					
-					if((prog_para_cnt==2) && !(gu16_parameterWord & ENABLE_DP1))
+					if((emProgpara==DP1_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP1))
 					{
-						prog_para_cnt=6;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						emProgpara=DP2_ALM_UP_ON_DISP;
+						#else
+						emProgpara=TM_ALM_UP_ON_DISP;
+						#endif
 					}
 					
-					if((prog_para_cnt==6) && !(gu16_parameterWord & ENABLE_DP2))
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+					if((emProgpara==DP2_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP2))
 					{
-						prog_para_cnt=10;
+						emProgpara=DP3_ALM_UP_ON_DISP;
 					}
-					
-					if((prog_para_cnt==10) && !(gu16_parameterWord & ENABLE_DP3))
+					if((emProgpara==DP3_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP3))
 					{
-						prog_para_cnt=14;
+						emProgpara=RTC_HR_DISP;
 					}
-					
-					if((prog_para_cnt==14) && (gu16_parameterWord & ENABLE_LOG))
+					#else
+					if((emProgpara==TM_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_TEMP))
 					{
-						prog_para_cnt=19;
+						emProgpara=RH_ALM_UP_ON_DISP;
 					}
-					
-					if((prog_para_cnt==21) && !(gu16_parameterWord & ENABLE_LOG))
+					if((emProgpara==RH_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_RH))
 					{
-						prog_para_cnt=22;
+						emProgpara=RTC_HR_DISP;
 					}
+					#endif
 					
-					if(prog_para_cnt>23)
+					if(emProgpara>CAL_DISP)
 					{
-						prog_para_cnt=1;
+						emProgpara=DEVICE_ID_DISP;
 					}
 					
 					dummy=0;
 					
-					Lastpara_cnt=prog_para_cnt;
+					emLastProgpara=emProgpara;
 					//----------------------------------------------------------------------
-					switch(prog_para_cnt)
+					switch(emProgpara)
 					{
-						case 1:		dummy = DeviceID;				break;
-						case 2:		dummy = DP_Upper_Alm_ON[DP1]; 		break;
-						case 3:		dummy = DP_Upper_Alm_OFF[DP1]; 		break;
-						case 4:		dummy = DP_Lower_Alm_OFF[DP1];  	break;
-						case 5:		dummy = DP_Lower_Alm_ON[DP1];  		break;
-						case 6:		dummy = DP_Upper_Alm_ON[DP2]; 		break;
-						case 7:		dummy = DP_Upper_Alm_OFF[DP2]; 		break;
-						case 8:		dummy = DP_Lower_Alm_OFF[DP2];  	break;
-						case 9:		dummy = DP_Lower_Alm_ON[DP2];  		break;
-						case 10:	dummy = DP_Upper_Alm_ON[DP3]; 		break;
-						case 11:	dummy = DP_Upper_Alm_OFF[DP3]; 		break;
-						case 12:	dummy = DP_Lower_Alm_OFF[DP3];  	break;
-						case 13:	dummy = DP_Lower_Alm_ON[DP3];  		break;
-						case 14:
+						case DEVICE_ID_DISP:			dummy = DeviceID;					break;
+						case DP1_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP1]; 		break;
+						case DP1_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP1]; 		break;
+						case DP1_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP1];  	break;
+						case DP1_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP1];  		break;
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						case DP2_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP2]; 		break;
+						case DP2_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP2]; 		break;
+						case DP2_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP2];  	break;
+						case DP2_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP2];  		break;
+						case DP3_ALM_UP_ON_DISP:		dummy = DP_Upper_Alm_ON[DP3]; 		break;
+						case DP3_ALM_UP_OFF_DISP:		dummy = DP_Upper_Alm_OFF[DP3]; 		break;
+						case DP3_ALM_LO_OFF_DISP:		dummy = DP_Lower_Alm_OFF[DP3];  	break;
+						case DP3_ALM_LO_ON_DISP:		dummy = DP_Lower_Alm_ON[DP3];  		break;
+						#else
+						case TM_ALM_UP_ON_DISP:			dummy = TM_Upper_Alm_ON;  		break;
+						case TM_ALM_UP_OFF_DISP:		dummy = TM_Upper_Alm_OFF; 		break;
+						case TM_ALM_LO_OFF_DISP:		dummy = TM_Lower_Alm_OFF; 		break;
+						case TM_ALM_LO_ON_DISP:			dummy = TM_Lower_Alm_ON;  		break;
+						case TM_UNIT_DISP:				dummy = TM_Unit;				break;
+						case RH_ALM_UP_ON_DISP:			dummy = RH_Upper_Alm_ON;  		break;
+						case RH_ALM_UP_OFF_DISP:		dummy = RH_Upper_Alm_OFF;  		break;
+						case RH_ALM_LO_OFF_DISP:		dummy = RH_Lower_Alm_OFF;  		break;
+						case RH_ALM_LO_ON_DISP:			dummy = RH_Lower_Alm_ON;  		break;
+						#endif
+						
+						case RTC_HR_DISP:
 							Temp_RTC_ARR[0] = rtc.hour;
 							dummy = rtc.hour;
 						break;
-						case 15:
+						case RTC_MN_DISP:
 							Temp_RTC_ARR[1] = rtc.minute;
 							dummy = rtc.minute;
 						break;
-						case 16:
+						case RTC_DT_DISP:
 							Temp_RTC_ARR[2] = rtc.day;
 							dummy = rtc.day;
 						break;
-						case 17:
+						case RTC_MH_DISP:
 							Temp_RTC_ARR[3] = rtc.month;
 							dummy = rtc.month;
 						break;
-						case 18:
-							Temp_RTC_ARR[4] = rtc.year;
+						case RTC_YR_DISP:
+							Temp_RTC_ARR[4] = (uint8_t)rtc.year;
 							dummy = rtc.year;
 						break;
-						case 19:	dummy = Buzzer_ON_Time;	  		break;
-						case 20:	dummy = Buzzer_OFF_Time;	  	break;
-						case 21:	dummy = LogInterval;			break;
-						case 22:	dummy = UART_BaudRate;		  	break;
-						case 23:	dummy = 0;						break;
+						case BUZ_ON_DISP:	dummy = Buzzer_ON_Time;	  		break;
+						case BUZ_OFF_DISP:	dummy = Buzzer_OFF_Time;	  	break;
+						case UART_BDT_DISP:	dummy = UART_BaudRate;		  	break;
+						case CAL_DISP:	dummy = 0;							break;
+						default: break;
 					}
 					
 				break;
@@ -3602,102 +4545,69 @@ void SendToSlave(void)
 	
 	Buffer1[10]=0;
 	if(bool_DP_NC[DP1]) 	Buffer1[10] |= DP1_FAULTY;
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	if(bool_DP_NC[DP2]) 	Buffer1[10] |= DP2_FAULTY;
 	if(bool_DP_NC[DP3])		Buffer1[10] |= DP3_FAULTY;
+	#else
+	if(bool_RH_TEMP_NC)		Buffer1[10] |= RH_TEMP_FAULTY;
+	#endif
 	
 	memcpy(&Buffer1[11],(uint8_t*)&Dpressure[DP1],4);
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	memcpy(&Buffer1[15],(uint8_t*)&Dpressure[DP2],4);
 	memcpy(&Buffer1[19],(uint8_t*)&Dpressure[DP3],4);
+	#else
+	memcpy(&Buffer1[15],(unsigned char*)&temperatureC,4);
+	memcpy(&Buffer1[19],(unsigned char*)&humidityRH,4);
+	#endif
+	
 	memcpy(&Buffer1[23],(uint8_t*)&DP_Min[DP1],4);
 	memcpy(&Buffer1[27],(uint8_t*)&DP_Max[DP1],4);
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	memcpy(&Buffer1[31],(uint8_t*)&DP_Min[DP2],4);
 	memcpy(&Buffer1[35],(uint8_t*)&DP_Max[DP2],4);
 	memcpy(&Buffer1[39],(uint8_t*)&DP_Min[DP3],4);
 	memcpy(&Buffer1[43],(uint8_t*)&DP_Max[DP3],4);
+	#else
+	memcpy(&Buffer1[31],(unsigned char*)&TM_Min,4);
+	memcpy(&Buffer1[35],(unsigned char*)&TM_Max,4);
+	memcpy(&Buffer1[39],(unsigned char*)&RH_Min,4);
+	memcpy(&Buffer1[43],(unsigned char*)&RH_Max,4);
+	#endif
+	
 	
 	if(gu16_parameterWord & ENABLE_DP1)
 	{
 		Buffer1[47] = DP_Alrm_ON[DP1];
 	}
-
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	if(gu16_parameterWord & ENABLE_DP2)
 	{
 		Buffer1[48] = DP_Alrm_ON[DP2];
 	}
-	
 	if(gu16_parameterWord & ENABLE_DP3)
 	{
 		Buffer1[49] = DP_Alrm_ON[DP3];
 	}
+	#else
+	if(gu16_parameterWord & ENABLE_TEMP)
+	{
+		Buffer1[48] = TM_Alrm_ON;
+		
+		if(TM_Unit)
+		{
+			Buffer1[48] |= 0x80;
+		}
+	}
+	if(gu16_parameterWord & ENABLE_RH)
+	{
+		Buffer1[49] = RH_Alrm_ON;
+	}
+	#endif
 	
 	Buffer1[50]=find_Checksum(50,&Buffer1[0]);
 	
 	SendToUART(&Buffer1[0],51);
-	
-	/*Buffer1[0]=0xFD;
-	Buffer1[1]=0x00;
-	Buffer1[2]=0x01;
-	
-	Buffer1[3]=DeviceID;
-	
-	Buffer1[4]=BatteryPercentage;
-	
-	Buffer1[5]=RTCSetFlag;
-	Buffer1[6]=rtc.hour;
-	Buffer1[7]=rtc.minute;
-	Buffer1[8]=rtc.second;
-	Buffer1[9]=rtc.day;
-	Buffer1[10]=rtc.month;
-	Buffer1[11]=rtc.year;
-	
-	Buffer1[12]=0;
-	if(bool_DP_NC[DP1]) 	Buffer1[12] |= DP1_FAULTY;
-	if(bool_DP_NC[DP2]) 	Buffer1[12] |= DP2_FAULTY;
-	if(bool_DP_NC[DP3])Buffer1[12] |= DP3_FAULTY;
-	
-	memcpy(&Buffer1[13],(uint8_t*)&Dpressure[DP1],4);
-	memcpy(&Buffer1[17],(uint8_t*)&Dpressure[DP2],4);
-	memcpy(&Buffer1[21],(uint8_t*)&temperatureC,4);
-	memcpy(&Buffer1[25],(uint8_t*)&humidityRH,4);
-	memcpy(&Buffer1[29],(uint8_t*)&DP_Min[DP1],4);
-	memcpy(&Buffer1[33],(uint8_t*)&DP_Max[DP1],4);
-	memcpy(&Buffer1[37],(uint8_t*)&DP_Min[DP2],4);
-	memcpy(&Buffer1[41],(uint8_t*)&DP_Max[DP2],4);
-	memcpy(&Buffer1[45],(uint8_t*)&TM_Min,4);
-	memcpy(&Buffer1[49],(uint8_t*)&TM_Max,4);
-	memcpy(&Buffer1[53],(uint8_t*)&RH_Min,4);
-	memcpy(&Buffer1[57],(uint8_t*)&RH_Max,4);
-	
-	if(gu16_parameterWord & ENABLE_DP1)
-	{
-		Buffer1[61] = DP_Alrm_ON[DP1];
-	}
-
-	if(gu16_parameterWord & ENABLE_DP2)
-	{
-		Buffer1[62] = DP_Alrm_ON[DP2];
-	}
-
-	if(gu16_parameterWord & ENABLE_TEMP)
-	{
-		Buffer1[63] = TM_Alrm_ON;
-		
-		if(TM_Unit)
-		{
-			Buffer1[63] |= 0x80;
-		}
-	}
-
-	if(gu16_parameterWord & ENABLE_RH)
-	{
-		Buffer1[64] = RH_Alrm_ON;
-	}
-	
-	Buffer1[65]=CalCRC(&Buffer1[1],64);
-	Buffer1[66]=0xFC;
-	
-	SendToUART(&Buffer1[0],67);
-	*/
 }
 
 //------------------------------------------------------------------------------
@@ -3727,32 +4637,39 @@ void EraseWholeFlash(void)
 	
 	//Reset Data Logging Parameter -------------------------------------------
 	CurrentLogIndReadLoc = 0;
-	WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,2);
+	WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
 	
 	FlashOVFByte=0;
 	WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 	
 	CurrentLogInd = 0;
-	WriteEEPROMData(CURR_LOG_IND,(uint8_t*)&CurrentLogInd,4);
+	WriteEEPROMData(CURR_LOG_IND,(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
 	
 	CurrentLog24IndReadLoc = 0;
 	WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
 	
 	CurrentLog24Ind = 0;
-	WriteEEPROMData(CURR_LOG24_IND,(uint8_t*)&CurrentLog24Ind,2);
+	WriteEEPROMData(CURR_LOG24_IND,(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
 	
 	bool_DPLog[DP1]=0;
-	bool_DPLog[DP2]=0;
-	bool_DPLog[DP3]=0;
-	
 	LastDP_Alrm_ON[DP1]=0;
 	WriteEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
 	
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+	bool_DPLog[DP2]=0;
+	bool_DPLog[DP3]=0;
 	LastDP_Alrm_ON[DP2]=0;
 	WriteEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],sizeof(LastDP_Alrm_ON[DP2]));
-	
 	LastDP_Alrm_ON[DP3]=0;
 	WriteEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
+	#else
+	bool_TMLog=0;
+	bool_RHLog=0;
+	LastTM_Alrm_ON=0;
+	WriteEEPROMData(LAST_TM_ALRM_STAT,&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+	LastRH_Alrm_ON=0;
+	WriteEEPROMData(LAST_RH_ALRM_STAT,&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+	#endif
 	
 	#ifdef ENABLE_PRINTF
 	opstr("Flash Erase\r\n");
@@ -3797,7 +4714,11 @@ void EraseWholeFlash(void)
 
 void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 {
-	if((gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag)
+	if((gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag	
+		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+		&& !TMRH_StartUpTimer	
+		#endif
+	)
 	{
 		unsigned short i=0;
 		
@@ -3815,20 +4736,37 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 	
 		RAMBuffer[RAMBufferInd]=0;
 		if(bool_DP_NC[DP1]) 	RAMBuffer[RAMBufferInd] |= DP1_FAULTY;
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(bool_DP_NC[DP2]) 	RAMBuffer[RAMBufferInd] |= DP2_FAULTY;
 		if(bool_DP_NC[DP3])		RAMBuffer[RAMBufferInd] |= DP3_FAULTY;
+		#else
+		if(bool_RH_TEMP_NC)		RAMBuffer[RAMBufferInd] |= RH_TEMP_FAULTY;
+		#endif
 		RAMBufferInd++;
 	
-		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP1],4);			RAMBufferInd += 4;
-		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP2],4);			RAMBufferInd += 4;
-		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP3],4);			RAMBufferInd += 4;
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP1],4);		RAMBufferInd += 4;
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP2],4);		RAMBufferInd += 4;
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP3],4);		RAMBufferInd += 4;
+		#else
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&temperatureC,4);			RAMBufferInd += 4;
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&humidityRH,4);			RAMBufferInd += 4;
+		
+		#endif
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&DP_Min[DP1],4);			RAMBufferInd += 4;
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&DP_Max[DP1],4);			RAMBufferInd += 4;
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&DP_Min[DP2],4);			RAMBufferInd += 4;
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&DP_Max[DP2],4);			RAMBufferInd += 4;
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&DP_Min[DP3],4);			RAMBufferInd += 4;
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&DP_Max[DP3],4);			RAMBufferInd += 4;
-	
+		#else
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&TM_Min,4);				RAMBufferInd += 4;
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&TM_Max,4);				RAMBufferInd += 4;
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&RH_Min,4);				RAMBufferInd += 4;
+		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&RH_Max,4);				RAMBufferInd += 4;
+		#endif
+		
 		if(gu16_parameterWord & ENABLE_DP1)
 		{
 			if(!DP_Alrm_ON[DP1]) 
@@ -3855,7 +4793,7 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 		{
 			RAMBuffer[RAMBufferInd++] = 0;
 		}
-		
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(gu16_parameterWord & ENABLE_DP2)
 		{
 			if(!DP_Alrm_ON[DP2])
@@ -3909,6 +4847,68 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 		{
 			RAMBuffer[RAMBufferInd++] = 0;
 		}
+		#else
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{
+			if(!TM_Alrm_ON) 
+			{
+				if(logtype==TM_ALM_RESTORE_LOG)
+				{
+					if(LastTM_Alrm_ON==UPPER_ALARM)		 RAMBuffer[RAMBufferInd] = 1;
+					else if(LastTM_Alrm_ON==LOWER_ALARM) RAMBuffer[RAMBufferInd] = 2;
+					else								 RAMBuffer[RAMBufferInd] = 0;
+				}
+				else
+				{
+					RAMBuffer[RAMBufferInd] = 0;
+				}
+			}
+			else
+			{
+				if(LastTM_Alrm_ON==UPPER_ALARM)		 RAMBuffer[RAMBufferInd] = 1;
+				else if(LastTM_Alrm_ON==LOWER_ALARM) RAMBuffer[RAMBufferInd] = 2;
+				else								 RAMBuffer[RAMBufferInd] = 0;
+			}
+		
+			if(TM_Unit)
+			{
+				RAMBuffer[RAMBufferInd] |= 0x80;
+			}
+		
+			RAMBufferInd++;
+		}
+		else
+		{
+			RAMBuffer[RAMBufferInd++] = 0;
+		}
+	
+		if(gu16_parameterWord & ENABLE_RH)
+		{
+			if(!RH_Alrm_ON) 
+			{
+				if(logtype==RH_ALM_RESTORE_LOG)
+				{
+					if(LastRH_Alrm_ON==UPPER_ALARM)		 RAMBuffer[RAMBufferInd++] = 1;
+					else if(LastRH_Alrm_ON==LOWER_ALARM) RAMBuffer[RAMBufferInd++] = 2;
+					else								 RAMBuffer[RAMBufferInd++] = 0;
+				}
+				else
+				{
+					RAMBuffer[RAMBufferInd++] = 0;
+				}
+			}
+			else
+			{
+				if(LastRH_Alrm_ON==UPPER_ALARM)		 RAMBuffer[RAMBufferInd++] = 1;
+				else if(LastRH_Alrm_ON==LOWER_ALARM) RAMBuffer[RAMBufferInd++] = 2;
+				else								 RAMBuffer[RAMBufferInd++] = 0;
+			}
+		}
+		else
+		{
+			RAMBuffer[RAMBufferInd++] = 0;
+		}
+		#endif
 	
 		RAMBufferLog++;
 		if(RAMBufferLog > 29) RAMBufferLog=0;
@@ -3931,7 +4931,7 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 				}
 				WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
 			}
-			WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,2);
+			WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
 			//sei();
 		}
 	}
@@ -3939,7 +4939,11 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 
 void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 {
-	if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG) && (gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag)
+	if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG) && (gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag
+		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+		&& !TMRH_StartUpTimer
+		#endif
+	)
 	{
 		memset(&Buffer1[0],0,sizeof(Buffer1));
 		
@@ -3952,19 +4956,35 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 	
 		Buffer1[9]=0;
 		if(bool_DP_NC[DP1]) 	Buffer1[9] |= DP1_FAULTY;
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(bool_DP_NC[DP2]) 	Buffer1[9] |= DP2_FAULTY;
 		if(bool_DP_NC[DP3])		Buffer1[9] |= DP3_FAULTY;
-	
+		#else
+		if(bool_RH_TEMP_NC)		Buffer1[9] |= RH_TEMP_FAULTY;
+		#endif
+		
 		memcpy(&Buffer1[10],(uint8_t*)&Dpressure[DP1],4);
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		memcpy(&Buffer1[14],(uint8_t*)&Dpressure[DP2],4);
 		memcpy(&Buffer1[18],(uint8_t*)&Dpressure[DP3],4);
+		#else
+		memcpy(&Buffer1[14],(unsigned char*)&temperatureC,4);
+		memcpy(&Buffer1[18],(unsigned char*)&humidityRH,4);
+		#endif
 		memcpy(&Buffer1[22],(uint8_t*)&DP_Min[DP1],4);
 		memcpy(&Buffer1[26],(uint8_t*)&DP_Max[DP1],4);
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		memcpy(&Buffer1[30],(uint8_t*)&DP_Min[DP2],4);
 		memcpy(&Buffer1[34],(uint8_t*)&DP_Max[DP2],4);
 		memcpy(&Buffer1[38],(uint8_t*)&DP_Min[DP3],4);
 		memcpy(&Buffer1[42],(uint8_t*)&DP_Max[DP3],4);
-	
+		#else
+		memcpy(&Buffer1[30],(unsigned char*)&TM_Min,4);
+		memcpy(&Buffer1[34],(unsigned char*)&TM_Max,4);
+		memcpy(&Buffer1[38],(unsigned char*)&RH_Min,4);
+		memcpy(&Buffer1[42],(unsigned char*)&RH_Max,4);
+		#endif
+		
 		if(gu16_parameterWord & ENABLE_DP1)
 		{
 			if(!DP_Alrm_ON[DP1])
@@ -3991,7 +5011,7 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 		{
 			Buffer1[46] = 0;
 		}
-		
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(gu16_parameterWord & ENABLE_DP2)
 		{
 			if(!DP_Alrm_ON[DP2])
@@ -4045,7 +5065,66 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 		{
 			Buffer1[48] = 0;
 		}
+		#else
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{
+			if(!TM_Alrm_ON)
+			{
+				if(logtype==TM_ALM_RESTORE_LOG)
+				{
+					if(LastTM_Alrm_ON==UPPER_ALARM)		 Buffer1[47] = 1;
+					else if(LastTM_Alrm_ON==LOWER_ALARM) Buffer1[47] = 2;
+					else								 Buffer1[47] = 0;
+				}
+				else
+				{
+					Buffer1[47] = 0;
+				}
+			}
+			else
+			{
+				if(LastTM_Alrm_ON==UPPER_ALARM)		 Buffer1[47] = 1;
+				else if(LastTM_Alrm_ON==LOWER_ALARM) Buffer1[47] = 2;
+				else								 Buffer1[47] = 0;
+			}
+			
+			if(TM_Unit)
+			{
+				Buffer1[47] |= 0x80;
+			}
+		}
+		else
+		{
+			Buffer1[47] = 0;
+		}
 	
+		if(gu16_parameterWord & ENABLE_RH)
+		{
+			if(!RH_Alrm_ON)
+			{
+				if(logtype==RH_ALM_RESTORE_LOG)
+				{
+					if(LastRH_Alrm_ON==UPPER_ALARM)		 Buffer1[48] = 1;
+					else if(LastRH_Alrm_ON==LOWER_ALARM) Buffer1[48] = 2;
+					else							     Buffer1[48] = 0;
+				}
+				else
+				{
+					Buffer1[48] = 0;
+				}
+			}
+			else
+			{
+				if(LastRH_Alrm_ON==UPPER_ALARM)		 Buffer1[48] = 1;
+				else if(LastRH_Alrm_ON==LOWER_ALARM) Buffer1[48] = 2;
+				else							     Buffer1[48] = 0;
+			}
+		}
+		else
+		{
+			Buffer1[48] = 0;
+		}
+		#endif
 		WriteLog(REGULAR_LOG_ADDR,CurrentLogInd,&Buffer1[0],LOG_SIZE);
 	
 		//cli();
@@ -4063,26 +5142,12 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 			{
 				CurrentLogIndReadLoc=0;
 			}
-			WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,2);
+			WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
 		}
-		WriteEEPROMData((CURR_LOG_IND + (CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,4);
+		WriteEEPROMData((CURR_LOG_IND + (CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
 
 		//sei();
 	}
-	
-	#ifdef ENABLE_BROADCAST
-	
-		if(bool_brodcastEnb && !bool_FlashReadCmd && !bool_Flash24ReadCmd && !bool_MinMaxMeanLogReadCmd && !bool_MeanHrLogReadCmd && !bool_RamReadCmd && !bool_RamAllReadCmd)
-		{
-			Buffer1[0]=0xFD;
-			memcpy(&Buffer1[1],&Buffer1[4],58);
-			Buffer1[59]=CalCRC(&Buffer1[1],58);
-			Buffer1[60]=0xFC;
-		
-			SendToUART(&Buffer1[0],61);
-		}
-	
-	#endif
 }
 
 void AutoSendDataResponse(uint8_t SrcPort)
@@ -4092,12 +5157,16 @@ void AutoSendDataResponse(uint8_t SrcPort)
 	Buffer1[0]=0xFD;
 	Buffer1[1]=DeviceID;
 	Buffer1[2]=PARA_WITH_ALM_READ_CMD;
+	
 	Buffer1[3]=0x00;
-	if(bool_paraIdNotValid) Buffer1[3] |= INVALID_PARA;
+	if(bool_paraIdNotValid) 	Buffer1[3] |= INVALID_PARA;
 	if(bool_DP_NC[DP1]) 		Buffer1[3] |= DP1_FAULTY;
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	if(bool_DP_NC[DP2]) 		Buffer1[3] |= DP2_FAULTY;
 	if(bool_DP_NC[DP3]) 		Buffer1[3] |= DP3_FAULTY;
-	
+	#else
+	if(bool_RH_TEMP_NC) 		Buffer1[3] |= RH_TEMP_FAULTY;
+	#endif
 	j=4;
 	
 	if(bool_DP_NC[DP1]) 			
@@ -4114,7 +5183,7 @@ void AutoSendDataResponse(uint8_t SrcPort)
 	}
 	
 	Buffer1[j++] = 0xEE;	//Field Separator
-	
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	if(bool_DP_NC[DP2])
 	{
 		Buffer1[j++] |= DP2_FAULTY;
@@ -4144,7 +5213,46 @@ void AutoSendDataResponse(uint8_t SrcPort)
 	}
 	
 	Buffer1[j++] = 0xEE;	//Field Separator
-
+	#else
+	if(bool_RH_TEMP_NC) 			
+	{
+		Buffer1[j++] |= RH_TEMP_FAULTY;
+	}
+	else
+	{
+		Buffer1[j++]=0;
+		
+		//Fill Temp value
+		if(!TM_Unit)
+		{
+			tempshort = temperatureC*100;
+		}
+		else
+		{
+			tempshort = temperatureF*100;
+		}
+		
+		j += fillValue(&Buffer1[j],tempshort);
+	}
+	
+	Buffer1[j++] = 0xEE;	//Field Separator
+	
+	if(bool_RH_TEMP_NC) 			
+	{
+		Buffer1[j++] |= RH_TEMP_FAULTY;
+	}
+	else
+	{
+		Buffer1[j++]=0;
+		
+		//Fill Temp value
+		tempshort = humidityRH*100;
+		j += fillValue(&Buffer1[j],tempshort);
+	}
+	
+	Buffer1[j++] = 0xEE;	//Field Separator
+	#endif
+	
 	if(gu16_parameterWord & ENABLE_DP1)
 	{
 		if(!DP_Alrm_ON[DP1])
@@ -4161,7 +5269,7 @@ void AutoSendDataResponse(uint8_t SrcPort)
 	{
 		Buffer1[j++] = 0;
 	}
-	
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	if(gu16_parameterWord & ENABLE_DP2)
 	{
 		if(!DP_Alrm_ON[DP2])
@@ -4195,7 +5303,41 @@ void AutoSendDataResponse(uint8_t SrcPort)
 	{
 		Buffer1[j++] = 0;
 	}
+	#else
+	if(gu16_parameterWord & ENABLE_TEMP)
+	{
+		if(!TM_Alrm_ON)
+		{
+			Buffer1[j++] = 0;
+		}
+		else
+		{
+			if(TM_Alrm_ON==UPPER_ALARM) Buffer1[j++] = 1;
+			else						  Buffer1[j++] = 2;
+		}
+	}
+	else
+	{
+		Buffer1[j++] = 0;
+	}
 	
+	if(gu16_parameterWord & ENABLE_RH)
+	{
+		if(!RH_Alrm_ON)
+		{
+			Buffer1[j++] = 0;
+		}
+		else
+		{
+			if(RH_Alrm_ON==UPPER_ALARM) Buffer1[j++] = 1;
+			else						  Buffer1[j++] = 2;
+		}
+	}
+	else
+	{
+		Buffer1[j++] = 0;
+	}
+	#endif
 	Buffer1[j++] = 0xEE;	//Field Separator
 	
 	#ifdef DISABLE_DOOR_SENSING
@@ -4237,8 +5379,8 @@ void AutoSendDataResponse(uint8_t SrcPort)
 	Buffer1[j++]=0xFC;
 	
 	SendToUART(&Buffer1[0],j);
-	//SetTxmode(Buffer1,j);
 }
+
 void ServePCMsg(void)
 {
 	#ifdef DEBUG_RCV_CMD
@@ -4246,9 +5388,22 @@ void ServePCMsg(void)
 	#endif
 	uint8_t index=0,j=0,lu8_sendResponse=0,lu8_GroupDelay=0,m=0;
 	
-	bool_paraIdNotValid=0;
+	if(gu8_IsCOMDisable)
+	{
+		if((RxBuffer[2]==PARA_WRITE_CMD) && (RxBuffer[3]==COM_CONTROL_ID))
+		{
+				
+		}
+		else
+		{
+			gu8_rxMode=0;
+			RxInd=0;
+			bool_msgRcvOK=0;
+			return;
+		}
+	}
 	
-	if(gu8_Mac2ValidTimer) gu8_Mac2ValidTimer=60;
+	bool_paraIdNotValid=0;
 	
 	if(RxBuffer[2]==PARA_WITH_ALM_READ_CMD)
 	{	
@@ -4291,10 +5446,14 @@ void ServePCMsg(void)
 			RxBuffer[0]=0xFD;
 			
 			RxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 	RxBuffer[3] |= INVALID_PARA;
+			if(bool_paraIdNotValid) 		RxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			RxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			RxBuffer[3] |= DP2_FAULTY;
 			if(bool_DP_NC[DP3]) 			RxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			RxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			
 			j=4;
 			
@@ -4312,7 +5471,7 @@ void ServePCMsg(void)
 			}
 			
 			RxBuffer[j++] = 0xEE;	//Field Separator
-			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2])
 			{
 				RxBuffer[j++] |= DP2_FAULTY;
@@ -4342,6 +5501,46 @@ void ServePCMsg(void)
 			}
 			
 			RxBuffer[j++] = 0xEE;	//Field Separator
+			#else
+			
+			if(bool_RH_TEMP_NC) 			
+			{
+				RxBuffer[j++] |= RH_TEMP_FAULTY;
+			}
+			else
+			{
+				RxBuffer[j++]=0;
+				
+				//Fill Temp value
+				if(!TM_Unit)
+				{
+					tempshort = temperatureC*100;
+				}
+				else
+				{
+					tempshort = temperatureF*100;
+				}
+				
+				j += fillValue(&RxBuffer[j],tempshort);
+			}
+			
+			RxBuffer[j++] = 0xEE;	//Field Separator
+			
+			if(bool_RH_TEMP_NC) 			
+			{
+				RxBuffer[j++] |= RH_TEMP_FAULTY;
+			}
+			else
+			{
+				RxBuffer[j++]=0;
+				
+				//Fill Temp value
+				tempshort = humidityRH*100;
+				j += fillValue(&RxBuffer[j],tempshort);
+			}
+			
+			RxBuffer[j++] = 0xEE;	//Field Separator
+			#endif
 			
 			if(gu16_parameterWord & ENABLE_DP1)
 			{
@@ -4360,6 +5559,7 @@ void ServePCMsg(void)
 				RxBuffer[j++] = 0;
 			}
 			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(gu16_parameterWord & ENABLE_DP2)
 			{
 				if(!DP_Alrm_ON[DP2])
@@ -4393,7 +5593,41 @@ void ServePCMsg(void)
 			{
 				RxBuffer[j++] = 0;
 			}
+			#else
+			if(gu16_parameterWord & ENABLE_TEMP)
+			{
+				if(!TM_Alrm_ON)
+				{
+					RxBuffer[j++] = 0;
+				}
+				else
+				{
+					if(TM_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
+					else						  RxBuffer[j++] = 2;
+				}
+			}
+			else
+			{
+				RxBuffer[j++] = 0;
+			}
 			
+			if(gu16_parameterWord & ENABLE_RH)
+			{
+				if(!RH_Alrm_ON)
+				{
+					RxBuffer[j++] = 0;
+				}
+				else
+				{
+					if(RH_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
+					else						  RxBuffer[j++] = 2;
+				}
+			}
+			else
+			{
+				RxBuffer[j++] = 0;
+			}
+			#endif
 			RxBuffer[j++] = 0xEE;	//Field Separator
 			
 			#ifdef DISABLE_DOOR_SENSING
@@ -4438,6 +5672,247 @@ void ServePCMsg(void)
 			//SetTxmode(RxBuffer,j);
 		}
 	}
+	else if(RxBuffer[2]==READ_DP1_VALUE)
+	{	
+		RxBuffer[0]=0xFD;
+		
+		j=3;
+		
+		RxBuffer[j]=0x00;
+		if(bool_DP_NC[DP1]) 			
+		{
+			RxBuffer[j++] |= DP1_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill DP value
+			templong = Dpressure[DP1]*100;
+			j += fillValue(&RxBuffer[j],templong);	
+		}
+
+		RxBuffer[j++] = 0xEE;	//Field Separator
+
+		if(gu16_parameterWord & ENABLE_DP1)
+		{
+			if(!DP_Alrm_ON[DP1])
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(DP_Alrm_ON[DP1]==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		
+		RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
+		j++;
+		
+		RxBuffer[j++]=0xFC;
+	
+		SendToUART(RxBuffer,j);
+	}
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+	else if(RxBuffer[2]==READ_DP2_VALUE)
+	{	
+		RxBuffer[0]=0xFD;
+		
+		j=3;
+		
+		RxBuffer[j]=0x00;
+		if(bool_DP_NC[DP2]) 			
+		{
+			RxBuffer[j++] |= DP2_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill DP value
+			templong = Dpressure[DP2]*100;
+			j += fillValue(&RxBuffer[j],templong);	
+		}
+
+		RxBuffer[j++] = 0xEE;	//Field Separator
+
+		if(gu16_parameterWord & ENABLE_DP2)
+		{
+			if(!DP_Alrm_ON[DP2])
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(DP_Alrm_ON[DP2]==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		
+		RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
+		j++;
+		
+		RxBuffer[j++]=0xFC;
+	
+		SendToUART(RxBuffer,j);
+	}
+	else if(RxBuffer[2]==READ_DP3_VALUE)
+	{	
+		RxBuffer[0]=0xFD;
+		
+		j=3;
+		
+		RxBuffer[j]=0x00;
+		if(bool_DP_NC[DP3]) 			
+		{
+			RxBuffer[j++] |= DP3_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill DP value
+			templong = Dpressure[DP3]*100;
+			j += fillValue(&RxBuffer[j],templong);	
+		}
+
+		RxBuffer[j++] = 0xEE;	//Field Separator
+
+		if(gu16_parameterWord & ENABLE_DP3)
+		{
+			if(!DP_Alrm_ON[DP3])
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(DP_Alrm_ON[DP3]==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		
+		RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
+		j++;
+		
+		RxBuffer[j++]=0xFC;
+	
+		SendToUART(RxBuffer,j);
+	}
+	#else
+	else if(RxBuffer[2]==READ_TEMP_VALUE)
+	{	
+		RxBuffer[0]=0xFD;
+		
+		j=3;
+		
+		RxBuffer[j]=0x00;
+		if(bool_RH_TEMP_NC) 			
+		{
+			RxBuffer[j++] |= RH_TEMP_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill Temp value
+			if(!TM_Unit)
+			{
+				tempshort = temperatureC*100;
+			}
+			else
+			{
+				tempshort = temperatureF*100;
+			}
+			
+			j += fillValue(&RxBuffer[j],tempshort);
+		}
+
+		RxBuffer[j++] = 0xEE;	//Field Separator
+
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{
+			if(!TM_Alrm_ON)
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(TM_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+
+		RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
+		j++;
+		
+		RxBuffer[j++]=0xFC;
+	
+		SendToUART(RxBuffer,j);
+	}
+	else if(RxBuffer[2]==READ_HUMIDITY_VALUE)
+	{	
+		RxBuffer[0]=0xFD;
+		
+		j=3;
+		
+		RxBuffer[j]=0x00;	
+		if(bool_RH_TEMP_NC) 			
+		{
+			RxBuffer[j++] |= RH_TEMP_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill Temp value
+			tempshort = humidityRH*100;
+			j += fillValue(&RxBuffer[j],tempshort);
+		}
+
+		RxBuffer[j++] = 0xEE;	//Field Separator
+
+		if(gu16_parameterWord & ENABLE_RH)
+		{
+			if(!RH_Alrm_ON)
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(RH_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		
+		RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
+		j++;
+		
+		RxBuffer[j++]=0xFC;
+	
+		SendToUART(RxBuffer,j);
+	}
+	#endif
 	else if(RxBuffer[2]==PARA_WRITE_CMD)
 	{
 		#ifdef DEBUG_RCV_CMD
@@ -4448,7 +5923,6 @@ void ServePCMsg(void)
 		{
 			case ACK_PW_ID:	
 			case ALM_ACK_ID:			tempshort = findValue(&RxBuffer[5],RxInd-7);	break;
-			case XBEE_MAC_ADDR_ID:		break;
 			case SET_DPARA_PWD_ID:		break;
 			case SRNO_ID:		  		break;
 			case BRDSTR_ID:		  		break;
@@ -4457,21 +5931,30 @@ void ServePCMsg(void)
 			case EXT_FLASH_ERASE_ID:	break;
 			case DFLT_RTC_ID:			break;
 			case DFLT_CAL_ID:			break;
-			case CORR_RTC_DATA_ID:		break;
-			case BIG_FONT_LED_SET_ID:	break;
 			case DP1CAL_ID:
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)	
 			case DP2CAL_ID:
 			case DP3CAL_ID:
-			
+			#else	
+			case TMCAL_ID:
+			case RHCAL_ID:
+			#endif	
 				tempshort = findValue(&RxBuffer[4],5);
 				
 			break;
 			
+			case DP_OFFSET_ID:
 			case DP_SW_FACT_ID:
 			
 				tempshort = findValue(&RxBuffer[6],5);
 				if(RxBuffer[5]=='-') tempshort *= (-1);	
 				
+			break;
+			
+			case DP_LIMIT_ID:
+			
+				tempshort = findValue(&RxBuffer[5],5);
+			
 			break;
 			
 			default: 
@@ -4506,7 +5989,7 @@ void ServePCMsg(void)
 					us1 = RxBuffer[12]-'0';								us3 += us1;		us1 = 0;
 					
 					gu16_parameterWord=us3;
-					WriteEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,2);
+					WriteEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,sizeof(gu16_parameterWord));
 
 					gu8_restartTimer = 3;
 				}
@@ -4582,7 +6065,7 @@ void ServePCMsg(void)
 				if((ss1<=1000) && (ss1>= DP_Upper_Alm_OFF[DP1]))
 				{
 					DP_Upper_Alm_ON[DP1]=ss1;
-					WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],2); 
+					WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],sizeof(DP_Upper_Alm_ON[DP1])); 
 				}
 			break;
 			case DP1UAOFF_ID:
@@ -4590,7 +6073,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Upper_Alm_ON[DP1]) && (ss1>= DP_Lower_Alm_OFF[DP1]))
 				{
 					DP_Upper_Alm_OFF[DP1]=ss1;
-					WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],2); 
+					WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],sizeof(DP_Upper_Alm_OFF[DP1])); 
 				}
 			break;
 			case DP1LAON_ID:	
@@ -4598,7 +6081,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Lower_Alm_OFF[DP1]) && (ss1>= -1000))	
 				{
 					DP_Lower_Alm_ON[DP1]=ss1;
-					WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],2); 
+					WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],sizeof(DP_Lower_Alm_ON[DP1])); 
 				}
 			break;
 			case DP1LAOFF_ID:	
@@ -4606,16 +6089,16 @@ void ServePCMsg(void)
 				if((ss1<=DP_Upper_Alm_OFF[DP1]) && (ss1>= DP_Lower_Alm_ON[DP1]))	
 				{
 					DP_Lower_Alm_OFF[DP1]=ss1;
-					WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],2); 
+					WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],sizeof(DP_Lower_Alm_OFF[DP1])); 
 				}
 			break;
-			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2UAON_ID:
 				ss1 = (tempshort/10);
 				if((ss1<=1000) && (ss1>= DP_Upper_Alm_OFF[DP2]))
 				{
 					DP_Upper_Alm_ON[DP2]=ss1;
-					WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],2);
+					WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],sizeof(DP_Upper_Alm_ON[DP2]));
 				}
 			break;
 			case DP2UAOFF_ID:
@@ -4623,7 +6106,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Upper_Alm_ON[DP2]) && (ss1>= DP_Lower_Alm_OFF[DP2]))
 				{
 					DP_Upper_Alm_OFF[DP2]=ss1;
-					WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],2);
+					WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],sizeof(DP_Upper_Alm_OFF[DP2]));
 				}
 			break;
 			case DP2LAON_ID:
@@ -4631,7 +6114,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Lower_Alm_OFF[DP2]) && (ss1>= -1000))
 				{
 					DP_Lower_Alm_ON[DP2]=ss1;
-					WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],2);
+					WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],sizeof(DP_Lower_Alm_ON[DP2]));
 				}
 			break;
 			case DP2LAOFF_ID:
@@ -4639,7 +6122,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Upper_Alm_OFF[DP2]) && (ss1>= DP_Lower_Alm_ON[DP2]))
 				{
 					DP_Lower_Alm_OFF[DP2]=ss1;
-					WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],2);
+					WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],sizeof(DP_Lower_Alm_OFF[DP2]));
 				}
 			break;
 			
@@ -4648,7 +6131,7 @@ void ServePCMsg(void)
 				if((ss1<=1000) && (ss1>= DP_Upper_Alm_OFF[DP3]))
 				{
 					DP_Upper_Alm_ON[DP3]=ss1;
-					WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],2);
+					WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],sizeof(DP_Upper_Alm_ON[DP3]));
 				}
 			break;
 			case DP3UAOFF_ID:
@@ -4656,7 +6139,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Upper_Alm_ON[DP3]) && (ss1>= DP_Lower_Alm_OFF[DP3]))
 				{
 					DP_Upper_Alm_OFF[DP3]=ss1;
-					WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],2);
+					WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],sizeof(DP_Upper_Alm_OFF[DP3]));
 				}
 			break;
 			case DP3LAON_ID:
@@ -4664,7 +6147,7 @@ void ServePCMsg(void)
 				if((ss1<=DP_Lower_Alm_OFF[DP3]) && (ss1>= -1000))
 				{
 					DP_Lower_Alm_ON[DP3]=ss1;
-					WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],2);
+					WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],sizeof(DP_Lower_Alm_ON[DP3]));
 				}
 			break;
 			case DP3LAOFF_ID:
@@ -4672,9 +6155,86 @@ void ServePCMsg(void)
 				if((ss1<=DP_Upper_Alm_OFF[DP3]) && (ss1>= DP_Lower_Alm_ON[DP3]))
 				{
 					DP_Lower_Alm_OFF[DP3]=ss1;
-					WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],2);
+					WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],sizeof(DP_Lower_Alm_OFF[DP3]));
 				}
 			break;
+			#else
+			case TMUAON_ID:	
+				ss1 = (tempshort/10);
+				if(!TM_Unit)
+				{
+					if((ss1<=1250) && (ss1>= TM_Upper_Alm_OFF))
+					{
+						TM_Upper_Alm_ON=ss1;
+						WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+					}
+				}
+				else
+				{
+					if((ss1<=2570) && (ss1>= TM_Upper_Alm_OFF))
+					{
+						TM_Upper_Alm_ON=ss1;
+						WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+					}
+				}
+			break;
+			case TMUAOFF_ID:
+				ss1 = (tempshort/10);
+				if((ss1<=TM_Upper_Alm_ON) && (ss1>= TM_Lower_Alm_OFF))		
+				{
+					TM_Upper_Alm_OFF=ss1;
+					WriteEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+				}
+			break;
+			case TMLAON_ID:		
+				ss1 = (tempshort/10);
+				if((ss1<=TM_Lower_Alm_OFF) && (ss1>= -400))
+				{
+					TM_Lower_Alm_ON=ss1;
+					WriteEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+				}
+			break;
+			case TMLAOFF_ID:	
+				ss1 = (tempshort/10);
+				if((ss1<=TM_Upper_Alm_OFF) && (ss1>= TM_Lower_Alm_ON))	
+				{
+					TM_Lower_Alm_OFF=ss1;
+					WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+				}
+			break;
+			case RHUAON_ID:		
+				ss1 = (tempshort/10);
+				if((ss1<=1000) && (ss1>= RH_Upper_Alm_OFF))
+				{
+					RH_Upper_Alm_ON=ss1;
+					WriteEEPROMData(RH_UP_ALM_ON,(uint8_t*)&RH_Upper_Alm_ON,sizeof(RH_Upper_Alm_ON));
+				}
+			break;
+			case RHUAOFF_ID:	
+				ss1 = (tempshort/10);	
+				if((ss1<=RH_Upper_Alm_ON) && (ss1>= RH_Lower_Alm_OFF))
+				{
+					RH_Upper_Alm_OFF=ss1;
+					WriteEEPROMData(RH_UP_ALM_OFF,(uint8_t*)&RH_Upper_Alm_OFF,sizeof(RH_Upper_Alm_OFF));
+				}
+			break;
+			case RHLAON_ID:		
+				ss1 = (tempshort/10);
+				if((ss1<=RH_Lower_Alm_OFF) && (ss1>= 0))
+				{
+					RH_Lower_Alm_ON=ss1;
+					WriteEEPROMData(RH_LO_ALM_ON,(uint8_t*)&RH_Lower_Alm_ON,sizeof(RH_Lower_Alm_ON));
+				}
+			break;
+			case RHLAOFF_ID:	
+				ss1 = (tempshort/10);
+				if((ss1<=RH_Upper_Alm_OFF) && (ss1>= RH_Lower_Alm_ON))
+				{
+					RH_Lower_Alm_OFF=ss1;
+					WriteEEPROMData(RH_LO_ALM_OFF,(uint8_t*)&RH_Lower_Alm_OFF,sizeof(RH_Lower_Alm_OFF));
+				}
+			break;
+			#endif
 				
 			case LOGINTVAL_ID:		
 				if((tempshort>=MIN_LOG_INTERVAL) && (tempshort<=MAX_LOG_INTERVAL))
@@ -4683,7 +6243,7 @@ void ServePCMsg(void)
 					logTimer = LogInterval;
 					//FlashlogTimer=60;
 					//logTimer=(unsigned long)LogInterval*60;
-					WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,2);	
+					WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));	
 				}
 			break;
 			case DVCID_ID:			
@@ -4701,7 +6261,7 @@ void ServePCMsg(void)
 			break;
 			case BZRON_ID:		
 				Buzzer_ON_Time=tempshort;
-				WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,2);
+				WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,sizeof(Buzzer_ON_Time));
 				if(!Buzzer_ON_Time)
 				{
 					//bool_buzzerStart=NO;
@@ -4722,7 +6282,7 @@ void ServePCMsg(void)
 
 			case BZROFF_ID:		
 				Buzzer_OFF_Time=tempshort;
-				WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,2);
+				WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 			break;
 			
 			case EXT_FLASH_ERASE_ID:
@@ -4763,23 +6323,49 @@ void ServePCMsg(void)
 							//WriteEEPROMData(DP1_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP1]);
 
 							DP_Cal_Value_C[DP1]=0;
-							WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
+							WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
 
 							//DP_Cal_float_Value_F[DP1] = 0.0;
 							DP_Cal_float_Value_C[DP1] = 0.0;
 						
 						break;
-					
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						case '1':
 					
 							//DP_Cal_Value_F[DP2]=0;
 							//WriteEEPROMData(DP2_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP2]);
 						
 							DP_Cal_Value_C[DP2]=0;
-							WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
+							WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
 						
 							//DP_Cal_float_Value_F[DP2] = 0.0;
 							DP_Cal_float_Value_C[DP2] = 0.0;
+					
+						break;
+						
+						case '2':
+					
+							//TM_Cal_Value_F=0;
+							//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
+						
+							TM_Cal_Value_C=0;
+							WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
+						
+							//TM_Cal_float_Value_F = 0.0;
+							TM_Cal_float_Value_C = 0.0;
+					
+						break;
+						#else
+						case '1':
+					
+							//RH_Cal_Value_F=0;
+							//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
+						
+							RH_Cal_Value_C=0;
+							WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,sizeof(RH_Cal_Value_C));
+						
+							//RH_Cal_float_Value_F = 0.0;
+							RH_Cal_float_Value_C = 0.0;
 					
 						break;
 					
@@ -4789,12 +6375,13 @@ void ServePCMsg(void)
 							//WriteEEPROMData(DP3_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP3]);
 						
 							DP_Cal_Value_C[DP3]=0;
-							WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
+							WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
 						
 							//DP_Cal_float_Value_F[DP3] = 0.0;
 							DP_Cal_float_Value_C[DP3] = 0.0;
 					
 						break;
+						#endif
 					}
 				}
 			break;
@@ -4821,14 +6408,14 @@ void ServePCMsg(void)
 				if(tempshort<=999)
 				{
 					CustPassword=tempshort;
-					WriteEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,2);
+					WriteEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,sizeof(CustPassword));
 				}
 			break;
 			case FCPWD_ID:
 				if(tempshort<=9999)
 				{
 					FactCustPassword=tempshort;
-					WriteEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,2);
+					WriteEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,sizeof(FactCustPassword));
 				}
 			break;
 				
@@ -4842,9 +6429,7 @@ void ServePCMsg(void)
 					{
 						su16_dp_offset[index]=tempshort;
 						f32_dp_offset[index]=(float)su16_dp_offset[index]/100.0;
-						WriteEEPROMData((DP_OFFSET_ADDR+(index*2)),(uint8_t*)&su16_dp_offset[index],2);
-						gu8_dp_sw_factor_add_cnt[index]=0;
-						TempDpressure[index]=0;
+						WriteEEPROMData((DP_OFFSET_ADDR+(index*2)),(uint8_t*)&su16_dp_offset[index],sizeof(su16_dp_offset[index]));
 					}
 				}
 				
@@ -4860,7 +6445,9 @@ void ServePCMsg(void)
 					{	
 						su16_dp_sw_factor[index]=tempshort;
 						f32_dp_sw_factor[index]=(float)su16_dp_sw_factor[index]/100.0;
-						WriteEEPROMData((DP_SW_FACT_ADDR+(index*2)),(uint8_t*)&su16_dp_sw_factor[index],2);
+						WriteEEPROMData((DP_SW_FACT_ADDR+(index*2)),(uint8_t*)&su16_dp_sw_factor[index],sizeof(su16_dp_sw_factor[index]));
+						gu8_dp_sw_factor_add_cnt[index]=0;
+						TempDpressure[index]=0;
 					}
 				}	
 				
@@ -4874,7 +6461,7 @@ void ServePCMsg(void)
 				{
 					u16_dp_limit[index]=tempshort;
 					f32_dp_limit[index]=(float)u16_dp_limit[index]/10.0;
-					WriteEEPROMData((DP_LIMIT_ADDR+(index*2)),(uint8_t*)&u16_dp_limit[index],2);
+					WriteEEPROMData((DP_LIMIT_ADDR+(index*2)),(uint8_t*)&u16_dp_limit[index],sizeof(u16_dp_limit[index]));
 				}
 			
 			break;
@@ -4905,12 +6492,8 @@ void ServePCMsg(void)
 				
 				if(bool_FactoryCalibrationOn==1)
 				{
-					//DP_Cal_Count[DP1]=tempshort;
-					//DP_Cal_Count_C[DP1]=0;
-					//WriteEEPROMData(DP1_CAL_CNT,DP_Cal_Count[DP1]);
-					
 					DP_Cal_Value_F[DP1] = RealDpressure[DP1]*10.0;
-					WriteEEPROMData(DP1_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP1],2);
+					WriteEEPROMData(DP1_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP1],sizeof(DP_Cal_Value_F[DP1]));
 					DP_Cal_float_Value_F[DP1] = (float)DP_Cal_Value_F[DP1]/10.0;
 					
 					DP_Cal_Value_C[DP1] = 0;
@@ -4918,16 +6501,14 @@ void ServePCMsg(void)
 					
 					su16_dp_sw_factor[DP1]=0;
 					f32_dp_sw_factor[DP1]=0.0;
-					WriteEEPROMData(DP_SW_FACT_ADDR,(uint8_t*)&su16_dp_sw_factor[DP1],2);
+					WriteEEPROMData(DP_SW_FACT_ADDR,(uint8_t*)&su16_dp_sw_factor[DP1],sizeof(su16_dp_sw_factor[DP1]));
 					
 					su16_dp_offset[DP1]=0;
 					f32_dp_offset[DP1]=0.0;
-					WriteEEPROMData(DP_OFFSET_ADDR,(uint8_t*)&su16_dp_offset[DP1],2);
+					WriteEEPROMData(DP_OFFSET_ADDR,(uint8_t*)&su16_dp_offset[DP1],sizeof(su16_dp_offset[DP1]));
 				}
 				else if(bool_CustmerCalibrationOn==1)
 				{
-					//DP_Cal_Count_C[DP1]=tempshort;
-					
 					DP_Cal_Value_C[DP1] = (RealDpressure[DP1] - DP_Cal_float_Value_F[DP1])*10.0;
 					DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
 				}
@@ -4935,88 +6516,23 @@ void ServePCMsg(void)
 				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
 				{
 					PCCalibrationTimer=60;
-					
-					//WriteEEPROMData(DP1_CAL_CNT_C,DP_Cal_Count_C[DP1]);
-					WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
-					
-					DP_Max[DP1] = DEFAUT_DP1_MAX;
-					DP_Min[DP1] = DEFAUT_DP1_MIN;
-					WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],4);
-					WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],4);
-				}
-				
-				/*if(bool_FactoryCalibrationOn==1)
-				{
-					//DP_Cal_Count[DP1]=tempshort;
-					//DP_Cal_Count_C[DP1]=0;
-					//WriteEEPROMData(DP1_CAL_CNT,DP_Cal_Count[DP1]);
-					
-					DP_Cal_Value_F[DP1] = RealDpressure[DP1]*10.0;
-					WriteEEPROMData(DP1_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP1]);
-					DP_Cal_float_Value_F[DP1] = (float)DP_Cal_Value_F[DP1]/10.0;
-					
-					DP_Cal_Value_C[DP1] = 0;
-					DP_Cal_float_Value_C[DP1] = 0;
-					
-					WriteEEPROMData(DP1_CAL_DATE_ADDR,(uint8_t*)&RxBuffer[9],12);
-					WriteEEPROMData(DP1_CAL_CERT_ADDR,(uint8_t*)&RxBuffer[21],15);
-				}
-				else if(bool_CustmerCalibrationOn==1)
-				{
-					//DP_Cal_Count_C[DP1]=tempshort;
-					
-					DP_Cal_Value_C[DP1] = (RealDpressure[DP1] - DP_Cal_float_Value_F[DP1])*10.0;
-					DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
-						
-					Buffer1[0] = findValue(&RxBuffer[9],2);
-					Buffer1[1] = findValue(&RxBuffer[11],2);
-					Buffer1[2] = findValue(&RxBuffer[13],2);
-								
-					if(!Buffer1[0] && !Buffer1[1] && !Buffer1[2])
-					{	
-						if(!DP_UserCalDateInd[DP1]) a1=NO_OF_USER_CAL_DATE-1;
-						else a1=DP_UserCalDateInd[DP1]-1;
-					
-						us1 = DP1_USER_CAL_DATE_ADDR + (a1 * 6);
-						ReadEEPROMData(us1,(uint8_t*)&Buffer1[0],6);
-						
-						if(memcmp(&Buffer1[0],&RxBuffer[9],6))
-						{
-							us1 = DP1_USER_CAL_DATE_ADDR + (DP_UserCalDateInd[DP1] * 6);
-							WriteEEPROMData(us1,(uint8_t*)&RxBuffer[9],6);
-						
-							DP_UserCalDateInd[DP1]++;
-							if(DP_UserCalDateInd[DP1]>=NO_OF_USER_CAL_DATE) DP_UserCalDateInd[DP1]=0;
-							WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
-						}
-					}
-				}
-				
-				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
-				{
-					PCCalibrationTimer=60;
-					
-					//WriteEEPROMData(DP1_CAL_CNT_C,DP_Cal_Count_C[DP1]);
-					WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1]);
+
+					WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
 					
 					DP_Max[DP1] = DEFAUT_DP1_MAX;
 					DP_Min[DP1] = DEFAUT_DP1_MIN;
-					WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],4);
-					WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],4);
-				}*/
+					WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],sizeof(DP_Max[DP1]));
+					WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],sizeof(DP_Min[DP1]));
+				}
 				
 			break;
-			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2CAL_ID:
 			
 				if(bool_FactoryCalibrationOn==1)
 				{
-					//DP_Cal_Count[DP2]=tempshort;
-					//DP_Cal_Count_C[DP2]=0;
-					//WriteEEPROMData(DP2_CAL_CNT,DP_Cal_Count[DP2]);
-					
 					DP_Cal_Value_F[DP2] = RealDpressure[DP2]*10.0;
-					WriteEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2],2);
+					WriteEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2],sizeof(DP_Cal_Value_F[DP2]));
 					DP_Cal_float_Value_F[DP2] = (float)DP_Cal_Value_F[DP2]/10.0;
 					
 					DP_Cal_Value_C[DP2] = 0;
@@ -5024,109 +6540,30 @@ void ServePCMsg(void)
 					
 					su16_dp_sw_factor[DP2]=0;
 					f32_dp_sw_factor[DP2]=0.0;
-					WriteEEPROMData((DP_SW_FACT_ADDR+2),(uint8_t*)&su16_dp_sw_factor[DP2],2);
+					WriteEEPROMData((DP_SW_FACT_ADDR+2),(uint8_t*)&su16_dp_sw_factor[DP2],sizeof(su16_dp_sw_factor[DP2]));
 					
 					su16_dp_offset[DP2]=0;
 					f32_dp_offset[DP2]=0.0;
-					WriteEEPROMData((DP_OFFSET_ADDR+2),(uint8_t*)&su16_dp_offset[DP2],2);
+					WriteEEPROMData((DP_OFFSET_ADDR+2),(uint8_t*)&su16_dp_offset[DP2],sizeof(su16_dp_offset[DP2]));
 					
 				}
 				else if(bool_CustmerCalibrationOn==1)
 				{
-					//DP_Cal_Count_C[DP2]=tempshort;
-					
 					DP_Cal_Value_C[DP2] = (RealDpressure[DP2] - DP_Cal_float_Value_F[DP2])*10.0;
 					DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
-				}
-				
-				//opstr("\r\nDP2_Cal_F:");
-				//print_float(DP_Cal_float_Value_F[DP2],test,1);
-				//opstr("\r\n");
-				//
-				//opstr("\r\nDP2_Cal_C:");
-				//print_float(DP_Cal_float_Value_C[DP2],test,1);
-				//opstr("\r\n");
-			
-				//opstr("\r\nDP2_Cal_float_Value_F:");
-				//print_float(DP_Cal_float_Value_F[DP2],test,1);
-				//opstr("\r\n");
-				//
-				//opstr("\r\nDP2_Cal_float_Value_C:");
-				//print_float(DP_Cal_float_Value_C[DP2],test,1);
-				//opstr("\r\n");
-			
-				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
-				{
-					PCCalibrationTimer=60;
-					
-					//WriteEEPROMData(DP2_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP2]);
-					WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
-					
-					DP_Max[DP2] = DEFAUT_DP2_MAX;
-					DP_Min[DP2] = DEFAUT_DP2_MIN;
-					WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],4);
-					WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],4);
-				}
-				
-				/*if(bool_FactoryCalibrationOn==1)
-				{
-					//DP_Cal_Count[DP2]=tempshort;
-					//DP_Cal_Count_C[DP2]=0;
-					//WriteEEPROMData(DP2_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP2]);
-					
-					DP_Cal_Value_F[DP2] = RealDpressure[DP2]*10.0;
-					WriteEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2]);
-					DP_Cal_float_Value_F[DP2] = (float)DP_Cal_Value_F[DP2]/10.0;
-					
-					DP_Cal_Value_C[DP2] = 0;
-					DP_Cal_float_Value_C[DP2] = 0;
-									
-					WriteEEPROMData(DP2_CAL_DATE_ADDR,(uint8_t*)&RxBuffer[9],12);
-					WriteEEPROMData(DP2_CAL_CERT_ADDR,(uint8_t*)&RxBuffer[21],15);
-				}
-				else if(bool_CustmerCalibrationOn==1)
-				{
-					//DP_Cal_Count_C[DP2]=tempshort;
-					
-					DP_Cal_Value_C[DP2] = (RealDpressure[DP2] - DP_Cal_float_Value_F[DP2])*10.0;
-					DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
-					
-					Buffer1[0] = findValue(&RxBuffer[9],2);
-					Buffer1[1] = findValue(&RxBuffer[11],2);
-					Buffer1[2] = findValue(&RxBuffer[13],2);
-					
-					if(!Buffer1[0] && !Buffer1[1] && !Buffer1[2])
-					{
-						if(!DP_UserCalDateInd[DP2]) a1=14;
-						else a1=DP_UserCalDateInd[DP2]-1;
-					
-						us1 = DP2_USER_CAL_DATE_ADDR + (a1 * 6);
-						ReadEEPROMData(us1(uint8_t*)&Buffer1[0],,6);
-					
-						if(memcmp(&Buffer1[0],&RxBuffer[9],6))
-						{
-							us1 = DP2_USER_CAL_DATE_ADDR + (DP_UserCalDateInd[DP2] * 6);
-							WriteEEPROMData(us1,(uint8_t*)&RxBuffer[9],6);
-						
-							DP_UserCalDateInd[DP2]++;
-							if(DP_UserCalDateInd[DP2]>14) DP_UserCalDateInd[DP2]=0;
-							WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
-						}
-					}
 				}
 			
 				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
 				{
 					PCCalibrationTimer=60;
-					
-					//WriteEEPROMData(DP2_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP2]);
-					WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2]);
+
+					WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
 					
 					DP_Max[DP2] = DEFAUT_DP2_MAX;
 					DP_Min[DP2] = DEFAUT_DP2_MIN;
-					WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],4);
-					WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],4);
-				}*/
+					WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],sizeof(DP_Max[DP2]));
+					WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],sizeof(DP_Min[DP2]));
+				}
 				
 			break;
 			
@@ -5134,12 +6571,8 @@ void ServePCMsg(void)
 			
 				if(bool_FactoryCalibrationOn==1)
 				{
-					//DP_Cal_Count[DP3]=tempshort;
-					//DP_Cal_Count_C[DP3]=0;
-					//WriteEEPROMData(DP3_CAL_CNT,DP_Cal_Count[DP3]);
-					
 					DP_Cal_Value_F[DP3] = RealDpressure[DP3]*10.0;
-					WriteEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3],2);
+					WriteEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3],sizeof(DP_Cal_Value_F[DP3]));
 					DP_Cal_float_Value_F[DP3] = (float)DP_Cal_Value_F[DP3]/10.0;
 					
 					DP_Cal_Value_C[DP3] = 0;
@@ -5147,72 +6580,150 @@ void ServePCMsg(void)
 					
 					su16_dp_sw_factor[DP3]=0;
 					f32_dp_sw_factor[DP3]=0.0;
-					WriteEEPROMData((DP_SW_FACT_ADDR+3),(uint8_t*)&su16_dp_sw_factor[DP3],2);
+					WriteEEPROMData((DP_SW_FACT_ADDR+4),(uint8_t*)&su16_dp_sw_factor[DP3],sizeof(su16_dp_sw_factor[DP3]));
 					
 					su16_dp_offset[DP3]=0;
 					f32_dp_offset[DP3]=0.0;
-					WriteEEPROMData((DP_OFFSET_ADDR+4),(uint8_t*)&su16_dp_offset[DP3],2);
+					WriteEEPROMData((DP_OFFSET_ADDR+4),(uint8_t*)&su16_dp_offset[DP3],sizeof(su16_dp_offset[DP3]));
 					
 				}
 				else if(bool_CustmerCalibrationOn==1)
 				{
-					//DP_Cal_Count_C[DP3]=tempshort;
-					
 					DP_Cal_Value_C[DP3] = (RealDpressure[DP3] - DP_Cal_float_Value_F[DP3])*10.0;
 					DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
 				}
-				
-				//opstr("\r\nDP3_Cal_F:");
-				//print_float(DP_Cal_float_Value_F[DP3],test,1);
-				//opstr("\r\n");
-				//
-				//opstr("\r\nDP3_Cal_C:");
-				//print_float(DP_Cal_float_Value_C[DP3],test,1);
-				//opstr("\r\n");
-			
-				//opstr("\r\nDP3_Cal_float_Value_F:");
-				//print_float(DP_Cal_float_Value_F[DP3],test,1);
-				//opstr("\r\n");
-				//
-				//opstr("\r\nDP3_Cal_float_Value_C:");
-				//print_float(DP_Cal_float_Value_C[DP3],test,1);
-				//opstr("\r\n");
 			
 				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
 				{
 					PCCalibrationTimer=60;
-					
-					//WriteEEPROMData(DP3_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP3]);
-					WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
+
+					WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
 					
 					DP_Max[DP3] = DEFAUT_DP3_MAX;
 					DP_Min[DP3] = DEFAUT_DP3_MIN;
-					WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],4);
-					WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],4);
+					WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],sizeof(DP_Max[DP3]));
+					WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],sizeof(DP_Min[DP3]));
 				}
+
+			break;
+			#else
+			case TMCAL_ID:
 				
-				/*if(bool_FactoryCalibrationOn==1)
+				if(bool_FactoryCalibrationOn==1)
 				{
-					//DP_Cal_Count[DP3]=tempshort;
-					//DP_Cal_Count_C[DP3]=0;
-					//WriteEEPROMData(DP3_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP3]);
+					//TM_Cal_Count=tempshort;
+					//TM_Cal_Count_C=0;
+					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
 					
-					DP_Cal_Value_F[DP3] = RealDpressure[DP3]*10.0;
-					WriteEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3]);
-					DP_Cal_float_Value_F[DP3] = (float)DP_Cal_Value_F[DP3]/10.0;
-					
-					DP_Cal_Value_C[DP3] = 0;
-					DP_Cal_float_Value_C[DP3] = 0;
-									
-					WriteEEPROMData(DP3_CAL_DATE_ADDR,(uint8_t*)&RxBuffer[9],12);
-					WriteEEPROMData(DP3_CAL_CERT_ADDR,(uint8_t*)&RxBuffer[21],15);
+					if(!TM_Unit)
+					{
+						ss1 = RealtemperatureC*10.0;
+						TM_Cal_Value_F = ss1 - tempshort;
+						WriteEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
+						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+					}
+					else
+					{
+						ss1 = RealtemperatureF*10.0;
+						TM_Cal_Value_F = ss1 - tempshort;
+						TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 32.0;
+						WriteEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
+
+						TM_Cal_Value_F = (TM_Cal_Value_F-320) / 1.8;
+						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+					}
+										
+					TM_Cal_Value_C = 0;
+					TM_Cal_float_Value_C = 0;
+					WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
 				}
 				else if(bool_CustmerCalibrationOn==1)
 				{
-					//DP_Cal_Count_C[DP3]=tempshort;
+					//TM_Cal_Count_C=tempshort;
 					
-					DP_Cal_Value_C[DP3] = (RealDpressure[DP3] - DP_Cal_float_Value_F[DP3])*10.0;
-					DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
+					if(!TM_Unit)
+					{
+						ss1 = (RealtemperatureC - TM_Cal_float_Value_F)*10.0;
+						TM_Cal_Value_C = ss1 - tempshort;
+						WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
+						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+					}
+					else
+					{
+						ss1 = (RealtemperatureF - TM_Cal_float_Value_F)*10.0;
+						TM_Cal_Value_C = ss1 - tempshort;
+						TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 32.0;
+						WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
+						
+						TM_Cal_Value_C = (TM_Cal_Value_C-320) / 1.8;
+						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+					}
+				}
+				
+				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
+				{
+					PCCalibrationTimer=60;
+					
+					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
+
+					TM_Max = DEFAUT_TEMP_C_MAX;
+					TM_Min = DEFAUT_TEMP_C_MIN;
+					WriteEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
+					WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
+				}
+				
+				/*if(b.FactoryCalibrationOn==1)
+				{
+					//TM_Cal_Count=tempshort;
+					//TM_Cal_Count_C=0;
+					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
+					
+					if(!TM_Unit)
+					{
+						ss1 = RealtemperatureC*10.0;
+						TM_Cal_Value_F = ss1 - tempshort;
+						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
+						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+					}
+					else
+					{
+						ss1 = RealtemperatureF*10.0;
+						TM_Cal_Value_F = ss1 - tempshort;
+						TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 32.0;
+						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
+						
+						TM_Cal_Value_F = (TM_Cal_Value_F-320) / 1.8;
+						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+					}
+										
+					TM_Cal_Value_C = 0;
+					TM_Cal_float_Value_C = 0;
+					eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
+					
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)TM_CAL_DATE_ADDR,12);
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[21],(unsigned char*)TM_CAL_CERT_ADDR,15);
+				}
+				else if(b.CustmerCalibrationOn==1)
+				{
+					//TM_Cal_Count_C=tempshort;
+					
+					if(!TM_Unit)
+					{
+						ss1 = (RealtemperatureC - TM_Cal_float_Value_F)*10.0;
+						TM_Cal_Value_C = ss1 - tempshort;
+						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
+						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+					}
+					else
+					{
+						ss1 = (RealtemperatureF - TM_Cal_float_Value_F)*10.0;
+						TM_Cal_Value_C = ss1 - tempshort;
+						TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 32.0;
+						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
+						
+						TM_Cal_Value_C = (TM_Cal_Value_C-320) / 1.8;
+						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+					}
 					
 					Buffer1[0] = findValue(&RxBuffer[9],2);
 					Buffer1[1] = findValue(&RxBuffer[11],2);
@@ -5220,39 +6731,144 @@ void ServePCMsg(void)
 					
 					if(!Buffer1[0] && !Buffer1[1] && !Buffer1[2])
 					{
-						if(!DP_UserCalDateInd[DP3]) a1=14;
-						else a1=DP_UserCalDateInd[DP3]-1;
+						if(!TM_UserCalDateInd) a1=14;
+						else a1=TM_UserCalDateInd-1;
 					
-						us1 = DP3_USER_CAL_DATE_ADDR + (a1 * 6);
-						ReadEEPROMData(us1,(uint8_t*)&Buffer1[0],6);
+						us1 = TM_USER_CAL_DATE_ADDR + (a1 * 6);
+						eeprom_read_block((unsigned char*)&Buffer1[0],(unsigned char*)us1,6);
 					
 						if(memcmp(&Buffer1[0],&RxBuffer[9],6))
 						{
-							us1 = DP3_USER_CAL_DATE_ADDR + (DP_UserCalDateInd[DP3] * 6);
-							WriteEEPROMData(us1,(uint8_t*)&RxBuffer[9],6);
+							us1 = TM_USER_CAL_DATE_ADDR + (TM_UserCalDateInd * 6);
+							eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)us1,6);
 						
-							DP_UserCalDateInd[DP3]++;
-							if(DP_UserCalDateInd[DP3]>14) DP_UserCalDateInd[DP3]=0;
-							WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
+							TM_UserCalDateInd++;
+							if(TM_UserCalDateInd>14) TM_UserCalDateInd=0;
+							eeprom_busy_wait();  eeprom_write_byte ((unsigned char*)TM_USER_CAL_DATE_IND_ADDR,TM_UserCalDateInd);
 						}
 					}
 				}
-			
+				
+				if((b.FactoryCalibrationOn==1) || (b.CustmerCalibrationOn==1))
+				{
+					PCCalibrationTimer=60;
+					
+					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
+
+					TM_Max = DEFAUT_TEMP_C_MAX;
+					TM_Min = DEFAUT_TEMP_C_MIN;
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&TM_Max,(unsigned char*)TEMP_MAXIMUM,4);
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&TM_Min,(unsigned char*)TEMP_MINIMUM,4);
+				}*/
+				
+			break;
+			case RHCAL_ID:
+				
+				if(bool_FactoryCalibrationOn==1)
+				{
+					ss1 = RealhumidityRH*10.0;
+					RH_Cal_Value_F = ss1 - tempshort;
+					WriteEEPROMData(RH_CAL_VAL_F_ADDR,(uint8_t*)&RH_Cal_Value_F,sizeof(RH_Cal_Value_F));
+
+					RH_Cal_float_Value_F = (float)RH_Cal_Value_F/10.0;
+				
+					RH_Cal_Value_C = 0;
+					RH_Cal_float_Value_C = 0;
+				}
+				else if(bool_CustmerCalibrationOn==1)
+				{
+					ss1 = (RealhumidityRH - RH_Cal_float_Value_F)*10.0;
+					RH_Cal_Value_C = ss1 - tempshort;
+					RH_Cal_float_Value_C = (float)RH_Cal_Value_C/10.0;
+				}
+
 				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
 				{
 					PCCalibrationTimer=60;
 					
-					//WriteEEPROMData(DP3_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP3]);
-					WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3]);
+					//WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,2);
 					
-					DP_Max[DP3] = DEFAUT_DP3_MAX;
-					DP_Min[DP3] = DEFAUT_DP3_MIN;
-					WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],4);
-					WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],4);
+					RH_Max = DEFAUT_RH_MAX;
+					RH_Min = DEFAUT_RH_MIN;
+					WriteEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
+					WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
+				}
+			
+				/*if(b.FactoryCalibrationOn==1)
+				{
+					//RH_Cal_Count=tempshort;
+					//RH_Cal_Count_C=0;
+					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT,RH_Cal_Count);
+					
+					ss1 = RealhumidityRH*10.0;
+					RH_Cal_Value_F = ss1 - tempshort;
+					eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
+					RH_Cal_float_Value_F = (float)RH_Cal_Value_F/10.0;
+					
+					RH_Cal_Value_C = 0;
+					RH_Cal_float_Value_C = 0;
+					
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)RH_CAL_DATE_ADDR,12);
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[21],(unsigned char*)RH_CAL_CERT_ADDR,15);
+				}
+				else if(b.CustmerCalibrationOn==1)
+				{
+					//RH_Cal_Count_C=tempshort;
+					
+					ss1 = (RealhumidityRH - RH_Cal_float_Value_F)*10.0;
+					RH_Cal_Value_C = ss1 - tempshort;
+					RH_Cal_float_Value_C = (float)RH_Cal_Value_C/10.0;
+					
+					Buffer1[0] = findValue(&RxBuffer[9],2);
+					Buffer1[1] = findValue(&RxBuffer[11],2);
+					Buffer1[2] = findValue(&RxBuffer[13],2);
+					
+					if(!Buffer1[0] && !Buffer1[1] && !Buffer1[2])
+					{
+						if(!RH_UserCalDateInd) a1=14;
+						else a1=RH_UserCalDateInd-1;
+					
+						us1 = RH_USER_CAL_DATE_ADDR + (a1 * 6);
+						eeprom_read_block((unsigned char*)&Buffer1[0],(unsigned char*)us1,6);
+					
+						if(memcmp(&Buffer1[0],&RxBuffer[9],6))
+						{
+							us1 = RH_USER_CAL_DATE_ADDR + (RH_UserCalDateInd * 6);
+							eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)us1,6);
+
+							RH_UserCalDateInd++;
+							if(RH_UserCalDateInd>14) RH_UserCalDateInd=0;
+							eeprom_busy_wait();  eeprom_write_byte ((unsigned char*)RH_USER_CAL_DATE_IND_ADDR,RH_UserCalDateInd);
+						}
+					}
+				}
+				
+				if((b.FactoryCalibrationOn==1) || (b.CustmerCalibrationOn==1))
+				{
+					PCCalibrationTimer=60;
+					
+					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT_C,RH_Cal_Count_C);
+					eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_C_ADDR,RH_Cal_Value_C);
+					
+					RH_Max = DEFAUT_RH_MAX;
+					RH_Min = DEFAUT_RH_MIN;
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RH_Max,(unsigned char*)RH_MAXIMUM,4);
+					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RH_Min,(unsigned char*)RH_MINIMUM,4);
 				}*/
 				
 			break;
-			
+			case TMUNT_ID:
+				if((tempshort==0) || (tempshort==1))
+				{
+					if(TM_Unit!=tempshort)
+					{
+						TM_Unit=tempshort;
+						TMUnitChange();
+					}
+				}
+			break;
+			#endif
+				
 			case UBRT_ID:
 				if((tempshort>=3) && (tempshort<=9))
 				{
@@ -5354,12 +6970,35 @@ void ServePCMsg(void)
 					WriteEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
 				}
 			break;
+			case LCD_CONTROL_ID:
+				if((tempshort==0) || (tempshort==1))
+				{
+					gu8_IsLCDDisable=tempshort;
+					WriteEEPROMData(LCD_CONTROL_ADDR,&gu8_IsLCDDisable,sizeof(gu8_IsLCDDisable));
+//					
+//					if(!gu8_IsLCDDisable)
+//					{
+//						LCD_CTRLA |= LCD_SEGON_bm;
+//					}
+//					else
+//					{
+//						LCD_CTRLA &= ~LCD_SEGON_bm;
+//					}
+				}
+			break;
+			case COM_CONTROL_ID:
+				if((tempshort==0) || (tempshort==1))
+				{
+					gu8_IsCOMDisable=tempshort;
+					WriteEEPROMData(COM_CONTROL_ADDR,&gu8_IsCOMDisable,sizeof(gu8_IsCOMDisable));
+				}
+			break;
 			case XBEE_RST_INTERVAL_ID:
 				if(tempshort <= 1440)
 				{
 					gu16_XbeeRstInterval=tempshort;
 					gu32_triggerXbeeResetTimer = (unsigned long)gu16_XbeeRstInterval*60;
-					WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,2);
+					WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
 				}
 			break;
 			case DP1_ALM_SENSE_TIME_ID:
@@ -5369,6 +7008,7 @@ void ServePCMsg(void)
 					WriteEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
 				}
 			break;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2_ALM_SENSE_TIME_ID:
 				if(tempshort<=250)
 				{
@@ -5383,35 +7023,21 @@ void ServePCMsg(void)
 					WriteEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
 				}
 			break;
-			case XBEE_MAC_ADDR_ID:
+			#endif
 				
-				tempchar=RxBuffer[4]-'1';
-				
-				if(tempchar<NO_OF_XBEE_MAC)
-				{			
-					memcpy(&gu8arr_XbeeMac[tempchar][0],&RxBuffer[5],XBEE_MAC_SIZE);
-					WriteEEPROMData((XBEE_MAC_ADDR+(tempchar*XBEE_MAC_SIZE)),(uint8_t*)&gu8arr_XbeeMac[tempchar][0],XBEE_MAC_SIZE);
-				}
-				
-				if(tempchar==1)
-				{
-					gu8_Mac2ValidTimer = 60;
-				}
-				
-			break;
 			case ACK_TIMER_ID:
 				AckTimer=tempshort;
-				WriteEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,2);
+				WriteEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,sizeof(AckTimer));
 			break;
 			case ACK_PW_ID:
 				
-				if(RxBuffer[4]<=NO_OF_ACKPWD)
+				if((RxBuffer[4]) && (RxBuffer[4]<=NO_OF_ACKPWD))
 				{
 					AckPwdInd=RxBuffer[4];
 					tempchar=RxBuffer[4]-1;
 					AckPwd[tempchar] = tempshort;
 					
-					WriteEEPROMData((ACK_PASSWORD+(2*tempchar)),(uint8_t*)&AckPwd[tempchar],2);
+					WriteEEPROMData((ACK_PASSWORD+(2*tempchar)),(uint8_t*)&AckPwd[tempchar],sizeof(AckPwd[tempchar]));
 					WriteEEPROMData(ACK_PWD_IND,&AckPwdInd,sizeof(AckPwdInd));
 				}
 										
@@ -5445,7 +7071,7 @@ void ServePCMsg(void)
 			break;
 			case SRNO_ID:
 				memcpy(gu8ar_SrNumber,&RxBuffer[4],16);
-				WriteEEPROMData(DEVICE_SR_NO,(uint8_t*)&gu8ar_SrNumber,16);
+				WriteEEPROMData(DEVICE_SR_NO,(uint8_t*)&gu8ar_SrNumber,sizeof(gu8ar_SrNumber));
 				gu32_SrNumber = ascii2hex(&gu8ar_SrNumber[8],8);
 			break;	
 			case BRDSTP_ID:
@@ -5473,11 +7099,14 @@ void ServePCMsg(void)
 		TxBuffer[1]=RxBuffer[1];
 		TxBuffer[2]=RxBuffer[2];
 		TxBuffer[3]=0x00;
-		if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+		if(bool_paraIdNotValid) 		TxBuffer[3] |= INVALID_PARA;
 		if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 		if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
-		
+		#else
+		if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+		#endif
 		for(j=4;j<RxInd;j++)TxBuffer[j]=RxBuffer[j-1];
 		
 		TxBuffer[RxInd-1]=CalCRC(&TxBuffer[1],RxInd-2);
@@ -5485,16 +7114,10 @@ void ServePCMsg(void)
 		
 		SetTxmode(TxBuffer,RxInd+1);
 		
-		if((RxBuffer[3]==UBRT_ID)||(RxBuffer[3]==UDBT_ID)||(RxBuffer[3]==UPRT_ID)||(RxBuffer[3]==USTB_ID))
+		if(RxBuffer[3]==UBRT_ID)
 		{
 			UART_Configure(UART_BaudRate);
-		}	
-		
-		if(RxBuffer[3]==XBEE_MAC_ADDR_ID)
-		{
-			if(gu8_Mac2ValidTimer) SetMAC2Xbee(&gu8arr_XbeeMac[1][0],0);
-		}
-		
+		}		
 	}
 	else if(RxBuffer[2]==PARA_READ_CMD)
 	{
@@ -5516,6 +7139,7 @@ void ServePCMsg(void)
 			case DP1UAOFF_ID:	tempshort = DP_Upper_Alm_OFF[DP1]*10;		break;
 			case DP1LAON_ID:	tempshort = DP_Lower_Alm_ON[DP1]*10;		break;
 			case DP1LAOFF_ID:	tempshort = DP_Lower_Alm_OFF[DP1]*10;		break;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2UAON_ID:	tempshort = DP_Upper_Alm_ON[DP2]*10;		break;
 			case DP2UAOFF_ID:	tempshort = DP_Upper_Alm_OFF[DP2]*10;		break;
 			case DP2LAON_ID:	tempshort = DP_Lower_Alm_ON[DP2]*10;		break;
@@ -5524,16 +7148,65 @@ void ServePCMsg(void)
 			case DP3UAOFF_ID:	tempshort = DP_Upper_Alm_OFF[DP3]*10;		break;
 			case DP3LAON_ID:	tempshort = DP_Lower_Alm_ON[DP3]*10;		break;
 			case DP3LAOFF_ID:	tempshort = DP_Lower_Alm_OFF[DP3]*10;		break;
+			#else
+			case TMUAON_ID:		tempshort = TM_Upper_Alm_ON*10;			break;
+			case TMUAOFF_ID:	tempshort = TM_Upper_Alm_OFF*10;		break;
+			case TMLAON_ID:		tempshort = TM_Lower_Alm_ON*10;			break;
+			case TMLAOFF_ID:	tempshort = TM_Lower_Alm_OFF*10;		break;
+			case RHUAON_ID:		tempshort = RH_Upper_Alm_ON*10;			break;
+			case RHUAOFF_ID:	tempshort = RH_Upper_Alm_OFF*10;		break;
+			case RHLAON_ID:		tempshort = RH_Lower_Alm_ON*10;			break;
+			case RHLAOFF_ID:	tempshort = RH_Lower_Alm_OFF*10;		break;
+			#endif
+			
 			case LOGINTVAL_ID:	tempshort = LogInterval;				break;
 			case DVCID_ID:		tempshort = DeviceID;					break;
 			case BZRON_ID:		tempshort = Buzzer_ON_Time;				break;
 			case BZROFF_ID:		tempshort = Buzzer_OFF_Time;			break;
 			case DP1MIN_ID:		tempshort = DP_Min[DP1]*100;				break;
 			case DP1MAX_ID:		tempshort = DP_Max[DP1]*100;				break;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2MIN_ID:		tempshort = DP_Min[DP2]*100;				break;
 			case DP2MAX_ID:		tempshort = DP_Max[DP2]*100;				break;
 			case DP3MIN_ID:		tempshort = DP_Min[DP3]*100;				break;
 			case DP3MAX_ID:		tempshort = DP_Max[DP3]*100;				break;
+			#else
+			case TMMIN_ID:
+					if(!TM_Unit)
+					{
+						tempfloat = TM_Min;
+					}
+					else
+					{
+						tempfloat = (TM_Min * 1.8) + 32.0;
+					}		
+					tempshort = tempfloat*100;					
+				break;
+			case TMMAX_ID:		
+					if(!TM_Unit)
+					{
+						tempfloat = TM_Max;
+					}
+					else
+					{
+						tempfloat = (TM_Max * 1.8) + 32.0;
+					}
+					tempshort = tempfloat*100;				
+				break;
+			case RHMIN_ID:		tempshort = RH_Min*100;					break;
+			case RHMAX_ID:		tempshort = RH_Max*100;					break;
+			case TMUNT_ID:		tempshort = TM_Unit;					break;
+			#endif		
+			case DP_OFFSET_ID:
+				
+				index=RxBuffer[4]-'0';
+				if(index<MAX_SUPPORTED_DP)
+				{	
+					tempshort = su16_dp_offset[index];
+				}
+				
+			break;
+				
 			case DP_SW_FACT_ID:
 			
 				index=RxBuffer[4]-'0';
@@ -5568,6 +7241,7 @@ void ServePCMsg(void)
 						tempshort = 0;
 					}		
 					break;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2CAL_ID:
 				if(bool_FactoryCalibrationOn==1)
 				{
@@ -5599,7 +7273,41 @@ void ServePCMsg(void)
 				{
 					tempshort = 0;
 				}
-			break;		
+			break;
+			#else
+			case TMCAL_ID:
+				if(bool_FactoryCalibrationOn==1)
+				{
+					PCCalibrationTimer=60;
+					tempshort = TM_Cal_Value_F;
+				}
+				else if(bool_CustmerCalibrationOn==1)
+				{
+					PCCalibrationTimer=60;
+					tempshort = TM_Cal_Value_C;
+				}
+				else
+				{
+					tempshort = 0;
+				}
+			break;
+			case RHCAL_ID:
+				if(bool_FactoryCalibrationOn==1)
+				{
+					PCCalibrationTimer=60;
+					tempshort = RH_Cal_Value_F;
+				}
+				else if(bool_CustmerCalibrationOn==1)
+				{
+					PCCalibrationTimer=60;
+					tempshort = RH_Cal_Value_C;
+				}
+				else
+				{
+					tempshort = 0;
+				}
+			break;	
+			#endif
 			case SFVER_ID:		tempshort = SOFT_VER;					break;
 			case ACK_TIMER_ID:	tempshort = AckTimer;					break;
 			case CPWD_ID:		tempshort = CustPassword;				break;
@@ -5619,7 +7327,12 @@ void ServePCMsg(void)
 				
 			break;
 			
-			case ACK_PW_ID:		tempshort = AckPwd[RxBuffer[4]-1];		break;
+			case ACK_PW_ID:		
+				if((RxBuffer[4]) && (RxBuffer[4]<=NO_OF_ACKPWD)) 
+				{
+					tempshort = AckPwd[RxBuffer[4]-1];	
+				}					
+			break;
 			case UBRT_ID:		tempshort = UART_BaudRate;				break;
 			case MENB_ID:		tempshort = gu8_masterEnable;			break;
 			case DOOR_SENSE_POLARITY_ID:	tempshort = gu8_doorSensingPolarity;	break;
@@ -5627,13 +7340,15 @@ void ServePCMsg(void)
 			case LCD_BRIGHT_CNT_ID:			tempshort = gu8_LCDBrigthnessCnt;		break;
 			case AUTO_SENT_INTERVAL_ID:			tempshort = gu8_AutoSentInterval;		break;
 			case DEVICES_IN_GROUP_ID:			tempshort = gu8_DeviceInGroup;			break;
+			case LCD_CONTROL_ID:			tempshort = gu8_IsLCDDisable;			break;
+			case COM_CONTROL_ID:			tempshort = gu8_IsCOMDisable;			break;
 			case XBEE_RST_INTERVAL_ID:			tempshort = gu16_XbeeRstInterval;		break;
 			case DP1_ALM_SENSE_TIME_ID:			tempshort = gu8_DpAlarmSensingTime[DP1];	break;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2_ALM_SENSE_TIME_ID:			tempshort = gu8_DpAlarmSensingTime[DP2];	break;
 			case DP3_ALM_SENSE_TIME_ID:			tempshort = gu8_DpAlarmSensingTime[DP3];	break;
+			#endif
 			case SRNO_ID:												break;		
-			case XBEE_SELF_MAC_ADDR_ID:									break;
-			case XBEE_MAC_ADDR_ID:										break;
 			case RAM_ALL_ID:											break;
 			case RAM_IND_ID:											break;
 			case FLASH24_IND_ID:										break;
@@ -5643,7 +7358,6 @@ void ServePCMsg(void)
 			case RDLG_DT_ID:											break;
 			case RDLG_CNT_ID:											break;
 			case DATETIME_ID:											break;
-			case CORR_RTC_DATA_ID:										break;
 			case FLASH24_CUR_IND_ID:	tempshort = CurrentLog24Ind;	break;
 			default:			bool_paraIdNotValid=1;						break;
 		}
@@ -5654,10 +7368,15 @@ void ServePCMsg(void)
 			TxBuffer[1]=RxBuffer[1];
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+			if(bool_paraIdNotValid) 		TxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 			if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
+			
 			TxBuffer[4]=RxBuffer[3];
 			chartostr(rtc.day,&TxBuffer[5],2);
 			chartostr(rtc.month,&TxBuffer[7],2);
@@ -5679,8 +7398,12 @@ void ServePCMsg(void)
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
+			if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			TxBuffer[4]=RxBuffer[3];
 			
 			tempchar = fillValue(&TxBuffer[5],tempshort);
@@ -5698,52 +7421,15 @@ void ServePCMsg(void)
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
+			if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			TxBuffer[4]=RxBuffer[3];
 			
 			memcpy(&TxBuffer[5],gu8ar_SrNumber,16);
-			
-			TxBuffer[21]=CalCRC(&TxBuffer[1],20);	
-			TxBuffer[22]=0xFC;
-			
-			SetTxmode(TxBuffer,23);
-		}
-		else if(RxBuffer[3]==XBEE_MAC_ADDR_ID)
-		{
-			TxBuffer[0]=0xFD;
-			TxBuffer[1]=RxBuffer[1];
-			TxBuffer[2]=RxBuffer[2];
-			TxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
-			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
-			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
-			TxBuffer[4]=RxBuffer[3];
-			TxBuffer[5]=RxBuffer[4];
-			
-			tempchar = RxBuffer[4]-'1';
-			
-			memcpy(&TxBuffer[6],&gu8arr_XbeeMac[tempchar][0],XBEE_MAC_SIZE);
-			
-			TxBuffer[22]=CalCRC(&TxBuffer[1],21);	
-			TxBuffer[23]=0xFC;
-			
-			SetTxmode(TxBuffer,24);
-		}
-		else if(RxBuffer[3]==XBEE_SELF_MAC_ADDR_ID)
-		{
-			TxBuffer[0]=0xFD;
-			TxBuffer[1]=RxBuffer[1];
-			TxBuffer[2]=RxBuffer[2];
-			TxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
-			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
-			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
-			TxBuffer[4]=RxBuffer[3];
-			
-			memcpy(&TxBuffer[5],gu8arr_XbeeSelfMac,XBEE_MAC_SIZE);
 			
 			TxBuffer[21]=CalCRC(&TxBuffer[1],20);	
 			TxBuffer[22]=0xFC;
@@ -5758,8 +7444,12 @@ void ServePCMsg(void)
 			RAMBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	RAMBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			RAMBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			RAMBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 		RAMBuffer[3] |= DP3_FAULTY;
+			if(bool_DP_NC[DP3]) 			RAMBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			RAMBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			RAMBuffer[4]=RxBuffer[3];
 
 			//Send CRC and 0xFC
@@ -5882,82 +7572,140 @@ void ServePCMsg(void)
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
+			if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			TxBuffer[4]=RxBuffer[3];
 			
 			memcpy(&TxBuffer[5],(uint8_t*)&ep.currentEpochTime,4);
 			
 			TxBuffer[9]=0;
 			if(bool_DP_NC[DP1]) 	TxBuffer[9] |= DP1_FAULTY;
-			if(bool_DP_NC[DP2]) 	TxBuffer[9] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3])TxBuffer[9] |= DP3_FAULTY;
+			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+			if(bool_DP_NC[DP2]) 			TxBuffer[9] |= DP2_FAULTY;
+			if(bool_DP_NC[DP3]) 			TxBuffer[9] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[9] |= RH_TEMP_FAULTY;
+			#endif
 			
 			memcpy(&TxBuffer[10],(uint8_t*)&Dpressure[DP1],4);
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			memcpy(&TxBuffer[14],(uint8_t*)&Dpressure[DP2],4);
 			memcpy(&TxBuffer[18],(uint8_t*)&Dpressure[DP3],4);
+			#else
+			memcpy(&TxBuffer[14],(uint8_t*)&temperatureC,4);
+			memcpy(&TxBuffer[18],(uint8_t*)&humidityRH,4);
+			#endif
 			memcpy(&TxBuffer[22],(uint8_t*)&DP_Min[DP1],4);
 			memcpy(&TxBuffer[26],(uint8_t*)&DP_Max[DP1],4);
+			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			memcpy(&TxBuffer[30],(uint8_t*)&DP_Min[DP2],4);
 			memcpy(&TxBuffer[34],(uint8_t*)&DP_Max[DP2],4);
 			memcpy(&TxBuffer[38],(uint8_t*)&DP_Min[DP3],4);
 			memcpy(&TxBuffer[42],(uint8_t*)&DP_Max[DP3],4);
+			#else
+			memcpy(&TxBuffer[30],(uint8_t*)&TM_Min,4);
+			memcpy(&TxBuffer[34],(uint8_t*)&TM_Max,4);
+			memcpy(&TxBuffer[38],(uint8_t*)&RH_Min,4);
+			memcpy(&TxBuffer[42],(uint8_t*)&RH_Max,4);
+			#endif
 			
 			if(gu16_parameterWord & ENABLE_DP1)
 			{
 				if(!DP_Alrm_ON[DP1])
 				{
-					TxBuffer[43] = 0;
+					TxBuffer[46] = 0;
 				}
 				else
 				{
-					if(DP_Alrm_ON[DP1]==UPPER_ALARM) TxBuffer[43] = 1;
-					else						  TxBuffer[43] = 2;
+					if(DP_Alrm_ON[DP1]==UPPER_ALARM) TxBuffer[46] = 1;
+					else						  TxBuffer[46] = 2;
 				}
 			}
 			else
 			{
-				TxBuffer[43] = 0;
+				TxBuffer[46] = 0;
 			}
-			
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(gu16_parameterWord & ENABLE_DP2)
 			{
 				if(!DP_Alrm_ON[DP2])
 				{
-					TxBuffer[44] = 0;
+					TxBuffer[47] = 0;
 				}
 				else
 				{
-					if(DP_Alrm_ON[DP2]==UPPER_ALARM) TxBuffer[44] = 1;
-					else						  TxBuffer[44] = 2;
+					if(DP_Alrm_ON[DP2]==UPPER_ALARM) TxBuffer[47] = 1;
+					else						  TxBuffer[47] = 2;
 				}
 			}
 			else
 			{
-				TxBuffer[44] = 0;
+				TxBuffer[47] = 0;
 			}
 			
 			if(gu16_parameterWord & ENABLE_DP3)
 			{
 				if(!DP_Alrm_ON[DP3])
 				{
-					TxBuffer[45] = 0;
+					TxBuffer[48] = 0;
 				}
 				else
 				{
-					if(DP_Alrm_ON[DP3]==UPPER_ALARM) TxBuffer[45] = 1;
-					else						  TxBuffer[45] = 2;
+					if(DP_Alrm_ON[DP3]==UPPER_ALARM) TxBuffer[48] = 1;
+					else						  TxBuffer[48] = 2;
 				}
 			}
 			else
 			{
-				TxBuffer[45] = 0;
+				TxBuffer[48] = 0;
+			}
+			#else
+			if(gu16_parameterWord & ENABLE_TEMP)
+			{
+				if(!TM_Alrm_ON)
+				{
+					TxBuffer[47] = 0;
+				}
+				else
+				{
+					if(TM_Alrm_ON==UPPER_ALARM) TxBuffer[47] = 1;
+					else						  TxBuffer[47] = 2;
+				}
+			}
+			else
+			{
+				TxBuffer[47] = 0;
 			}
 
-			TxBuffer[46]=CalCRC(&TxBuffer[1],45);
-			TxBuffer[47]=0xFC;
 			
-			SetTxmode(TxBuffer,48);
+			if(gu16_parameterWord & ENABLE_RH)
+			{
+				if(!RH_Alrm_ON)
+				{
+					TxBuffer[48] = 0;
+				}
+				else
+				{
+					if(RH_Alrm_ON==UPPER_ALARM) TxBuffer[48] = 1;
+					else						  TxBuffer[48] = 2;
+				}
+			}
+			else
+			{
+				TxBuffer[48] = 0;
+			}
+			#endif
+			
+			TxBuffer[49]=CalCRC(&TxBuffer[1],48);
+			TxBuffer[50]=0xFC;
+			
+			SetTxmode(TxBuffer,51);
 		}
 		else if(RxBuffer[3]==RDLG_DT_ID)
 		{
@@ -6139,8 +7887,13 @@ void ServePCMsg(void)
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-				if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
+				if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+				#else
+				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+				#endif
+				
 				TxBuffer[4]=0xA9;
 				memcpy(&TxBuffer[5],(uint8_t*)&TotalLog,4);
 				TxBuffer[9]=CalCRC(&TxBuffer[1],8);
@@ -6189,7 +7942,11 @@ void ServePCMsg(void)
 			
 			//sei();
 		}
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		else if((RxBuffer[3]==DP1CAL_ID) || (RxBuffer[3]==DP2CAL_ID) || (RxBuffer[3]==DP3CAL_ID))
+		#else
+		else if((RxBuffer[3]==DP1CAL_ID) || (RxBuffer[3]==TMCAL_ID) || (RxBuffer[3]==RHCAL_ID))
+		#endif
 		{
 			TxBuffer[0]=0xFD;
 			TxBuffer[1]=RxBuffer[1];
@@ -6197,8 +7954,12 @@ void ServePCMsg(void)
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 			if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			TxBuffer[4]=RxBuffer[3];
 			
 			a1=0;
@@ -6215,8 +7976,13 @@ void ServePCMsg(void)
 				switch(RxBuffer[3])
 				{
 					case DP1CAL_ID:			us1=DP1_CAL_DATE_ADDR;	us2=DP1_CAL_CERT_ADDR;			break;
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 					case DP2CAL_ID:			us1=DP2_CAL_DATE_ADDR;	us2=DP2_CAL_CERT_ADDR;			break;
 					case DP3CAL_ID:			us1=DP3_CAL_DATE_ADDR;	us2=DP3_CAL_CERT_ADDR;			break;
+					#else
+					case TMCAL_ID:			us1=TM_CAL_DATE_ADDR;	us2=TM_CAL_CERT_ADDR;			break;
+					case RHCAL_ID:			us1=RH_CAL_DATE_ADDR;	us2=RH_CAL_CERT_ADDR;			break;
+					#endif
 				}
 				
 				ReadEEPROMData(us1,(uint8_t*)&TxBuffer[10],12);
@@ -6232,8 +7998,13 @@ void ServePCMsg(void)
 				switch(RxBuffer[3])
 				{
 					case DP1CAL_ID:			us1=DP1_USER_CAL_DATE_ADDR;				break;
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 					case DP2CAL_ID:			us1=DP2_USER_CAL_DATE_ADDR;				break;
 					case DP3CAL_ID:			us1=DP3_USER_CAL_DATE_ADDR;				break;
+					#else
+					case TMCAL_ID:			us1=TM_USER_CAL_DATE_ADDR;				break;
+					case RHCAL_ID:			us1=RH_USER_CAL_DATE_ADDR;				break;
+					#endif
 				}
 				
 				ReadEEPROMData(us1,(uint8_t*)&TxBuffer[10],60);
@@ -6250,10 +8021,14 @@ void ServePCMsg(void)
 			TxBuffer[1]=RxBuffer[1];
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+			if(bool_paraIdNotValid) 		TxBuffer[3] |= INVALID_PARA;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 			if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
 			TxBuffer[4]=RxBuffer[3];
 			tempchar = fillValue(&TxBuffer[5],tempshort);
 			
@@ -6573,10 +8348,8 @@ uint8_t CalCRC(uint8_t *ptr,uint16_t NoOfByte)
 	return ((uint8_t)Total);
 }
 
-void ReadDiffPressure(uint8_t SensNo, uint32_t pressure)
+void ReadDiffPressure(uint8_t SensNo)
 {
-	RealDpressure[SensNo] = pressure;
-	
 	float f32_temp=0;
 	f32_temp = RealDpressure[SensNo];
 	f32_temp -= DP_Cal_float_Value_F[SensNo];
@@ -6641,13 +8414,13 @@ void ReadDiffPressure(uint8_t SensNo, uint32_t pressure)
 		if(Dpressure[SensNo] > DP_Max[SensNo])
 		{
 			DP_Max[SensNo] = Dpressure[SensNo];
-			WriteEEPROMData(DP1_MAXIMUM+(SensNo*4),(uint8_t*)&DP_Max[SensNo],4);
+			WriteEEPROMData(DP1_MAXIMUM+(SensNo*4),(uint8_t*)&DP_Max[SensNo],sizeof(DP_Max[SensNo]));
 		}
 					
 		if(Dpressure[SensNo] < DP_Min[SensNo])
 		{
 			DP_Min[SensNo] = Dpressure[SensNo];
-			WriteEEPROMData(DP1_MINIMUM+(SensNo*4),(uint8_t*)&DP_Min[SensNo],4);
+			WriteEEPROMData(DP1_MINIMUM+(SensNo*4),(uint8_t*)&DP_Min[SensNo],sizeof(DP_Min[SensNo]));
 		}
 		
 		if(gu16_parameterWord & ENABLE_ALERT)
@@ -6773,97 +8546,41 @@ void SecondTick(void)
 		SendToSlave();
 	}
 	
-	if(gu16_DPAutoCalTimer10Sec[DP1])
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+	for(uint8_t i=0; i<MAX_SUPPORTED_DP; i++)
+	#else
+	for(uint8_t i=0; i<1; i++)
+	#endif
 	{
-		gu16_DPAutoCalTimer10Sec[DP1]--;
-		if(!gu16_DPAutoCalTimer10Sec[DP1])
+		if(gu16_DPAutoCalTimer10Sec[i])
 		{
-			if(gu8_DPAutoCalDoorCnt[DP1] >= 5)
+			gu16_DPAutoCalTimer10Sec[i]--;
+			if(!gu16_DPAutoCalTimer10Sec[i])
 			{
-				if(bool_doorStatus==OPEN)
+				if(gu8_DPAutoCalDoorCnt[i] >= 5)
 				{
-					gu16_DPAutoCalTimer5Min[DP1] = 300;
+					if(bool_doorStatus==OPEN)
+					{
+						gu16_DPAutoCalTimer5Min[i] = 300;
+					}
+				}
+				else
+				{
+					gu8_DPAutoCalDoorCnt[i] = 0;
 				}
 			}
-			else
-			{
-				gu8_DPAutoCalDoorCnt[DP1] = 0;
-			}
 		}
-	}
-	
-	if(gu16_DPAutoCalTimer5Min[DP1])
-	{
-		gu16_DPAutoCalTimer5Min[DP1]--;
-		if(!gu16_DPAutoCalTimer5Min[DP1])
+		
+		if(gu16_DPAutoCalTimer5Min[i])
 		{
-			//Auto cal DP1
-			DP_Cal_Value_C[DP1] = (RealDpressure[DP1] - DP_Cal_float_Value_F[DP1])*10.0;
-			DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
-			WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
-		}
-	}
-	
-	//-----------------------------------------------------------------------------------------------------------
-	if(gu16_DPAutoCalTimer10Sec[DP2])
-	{
-		gu16_DPAutoCalTimer10Sec[DP2]--;
-		if(!gu16_DPAutoCalTimer10Sec[DP2])
-		{
-			if(gu8_DPAutoCalDoorCnt[DP2] >= 5)
+			gu16_DPAutoCalTimer5Min[i]--;
+			if(!gu16_DPAutoCalTimer5Min[i])
 			{
-				if(bool_doorStatus==OPEN)
-				{
-					gu16_DPAutoCalTimer5Min[DP2] = 300;
-				}
+				//Auto cal DP1
+				DP_Cal_Value_C[i] = (RealDpressure[i] - DP_Cal_float_Value_F[i])*10.0;
+				DP_Cal_float_Value_C[i] = (float)DP_Cal_Value_C[i]/10.0;
+				WriteEEPROMData(DP1_CAL_VAL_C_ADDR+(i*2),(uint8_t*)&DP_Cal_Value_C[i],sizeof(DP_Cal_Value_C[i]));
 			}
-			else
-			{
-				gu8_DPAutoCalDoorCnt[DP2] = 0;
-			}
-		}
-	}
-	
-	if(gu16_DPAutoCalTimer5Min[DP2])
-	{
-		gu16_DPAutoCalTimer5Min[DP2]--;
-		if(!gu16_DPAutoCalTimer5Min[DP2])
-		{
-			//Auto cal DP2
-			DP_Cal_Value_C[DP2] = (RealDpressure[DP2] - DP_Cal_float_Value_F[DP2])*10.0;
-			DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
-			WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
-		}
-	}
-	//-----------------------------------------------------------------------------------------------------------
-	if(gu16_DPAutoCalTimer10Sec[DP3])
-	{
-		gu16_DPAutoCalTimer10Sec[DP3]--;
-		if(!gu16_DPAutoCalTimer10Sec[DP3])
-		{
-			if(gu8_DPAutoCalDoorCnt[DP3] >= 5)
-			{
-				if(bool_doorStatus==OPEN)
-				{
-					gu16_DPAutoCalTimer5Min[DP3] = 300;
-				}
-			}
-			else
-			{
-				gu8_DPAutoCalDoorCnt[DP3] = 0;
-			}
-		}
-	}
-	
-	if(gu16_DPAutoCalTimer5Min[DP3])
-	{
-		gu16_DPAutoCalTimer5Min[DP3]--;
-		if(!gu16_DPAutoCalTimer5Min[DP3])
-		{
-			//Auto cal DP3
-			DP_Cal_Value_C[DP3] = (RealDpressure[DP3] - DP_Cal_float_Value_F[DP3])*10.0;
-			DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
-			WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
 		}
 	}
 	//-----------------------------------------------------------------------------------------------------------
@@ -6874,15 +8591,6 @@ void SecondTick(void)
 		if(!gu8_deviceIDChangeTryTimer)
 		{
 			gu8_deviceIDChangeTry=0;
-		}
-	}
-	
-	if(gu8_Mac2ValidTimer)
-	{
-		gu8_Mac2ValidTimer--;
-		if(!gu8_Mac2ValidTimer)
-		{
-			SetMAC2Xbee(&gu8arr_XbeeMac[0][0],0);
 		}
 	}
 	
@@ -6961,6 +8669,7 @@ void SecondTick(void)
 		}
 	}
 	if(DP_StartUpTimer)DP_StartUpTimer--;
+	if(TMRH_StartUpTimer)TMRH_StartUpTimer--;
 	
 	if(gu8_restartTimer)
 	{
@@ -7011,14 +8720,14 @@ void SecondTick(void)
 		}
 	}
 	//--------------------------------------------
-	if(StartBroadcastTimer)
-	{
-		StartBroadcastTimer--;
-		if(!StartBroadcastTimer)
-		{
-			bool_brodcastEnb=0;
-		}
-	}
+//	if(StartBroadcastTimer)
+//	{
+//		StartBroadcastTimer--;
+//		if(!StartBroadcastTimer)
+//		{
+//			bool_brodcastEnb=0;
+//		}
+//	}
 	//--------------------------------------------
 	if(AlarmAckTimer)
 	{
@@ -7026,8 +8735,13 @@ void SecondTick(void)
 		if(!AlarmAckTimer)
 		{
 			bool_DPLog[DP1]=0;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			bool_DPLog[DP2]=0;
 			bool_DPLog[DP3]=0;
+			#else
+			bool_TMLog=0;
+			bool_RHLog=0;
+			#endif
 		}
 	}
 
@@ -7040,44 +8754,26 @@ void SecondTick(void)
 			bool_autoSendResponse = true;
 			//opstr("DoorOpen\n");
 			//StartBuzzer();
-			if(!gu16_DPAutoCalTimer5Min[DP1])
-			{
-				if(!gu16_DPAutoCalTimer10Sec[DP1]) 
-				{
-					gu16_DPAutoCalTimer10Sec[DP1] = 5;
-					gu8_DPAutoCalDoorCnt[DP1] = 1;
-				}
-				else
-				{
-					gu8_DPAutoCalDoorCnt[DP1]++;
-				}
-			}
-				
-			if(!gu16_DPAutoCalTimer5Min[DP2])
-			{
-				if(!gu16_DPAutoCalTimer10Sec[DP2]) 
-				{
-					gu16_DPAutoCalTimer10Sec[DP2] = 5;
-					gu8_DPAutoCalDoorCnt[DP2] = 1;
-				}
-				else
-				{
-					gu8_DPAutoCalDoorCnt[DP2]++;
-				}
-			}
 			
-			if(!gu16_DPAutoCalTimer5Min[DP3])
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+			for(uint8_t i=0; i<MAX_SUPPORTED_DP; i++)
+			#else
+			for(uint8_t i=0; i<1; i++)
+			#endif
 			{
-				if(!gu16_DPAutoCalTimer10Sec[DP3]) 
+				if(!gu16_DPAutoCalTimer5Min[i])
 				{
-					gu16_DPAutoCalTimer10Sec[DP3] = 5;
-					gu8_DPAutoCalDoorCnt[DP3] = 1;
+					if(!gu16_DPAutoCalTimer10Sec[i]) 
+					{
+						gu16_DPAutoCalTimer10Sec[i] = 5;
+						gu8_DPAutoCalDoorCnt[i] = 1;
+					}
+					else
+					{
+						gu8_DPAutoCalDoorCnt[i]++;
+					}
 				}
-				else
-				{
-					gu8_DPAutoCalDoorCnt[DP3]++;
-				}
-			}
+			}	
 		}
 	}
 	else
@@ -7087,8 +8783,10 @@ void SecondTick(void)
 			bool_doorStatus=CLOSE;
 			bool_autoSendResponse = true;
 			gu16_DPAutoCalTimer5Min[DP1] = 0;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			gu16_DPAutoCalTimer5Min[DP2] = 0;
 			gu16_DPAutoCalTimer5Min[DP3] = 0;
+			#endif
 			//opstr("DoorClose\n");
 		}
 	}	
@@ -7101,7 +8799,13 @@ void SecondTick(void)
 	
 	if(gu16_parameterWord & ENABLE_ALERT)
 	{
-		if((DP_Alrm_ON[DP1]!=NO_ALARM)||(DP_Alrm_ON[DP2]!=NO_ALARM)||(DP_Alrm_ON[DP3]!=NO_ALARM)||(bool_doorStatus==OPEN))
+		if((bool_doorStatus==OPEN) || (DP_Alrm_ON[DP1]!=NO_ALARM)
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+			||(DP_Alrm_ON[DP2]!=NO_ALARM)||(DP_Alrm_ON[DP3]!=NO_ALARM)
+			#else
+			||(TM_Alrm_ON!=NO_ALARM)||(RH_Alrm_ON!=NO_ALARM)
+			#endif
+		)
 		{	
 			if(bool_buzzeralert==0)
 			{	
@@ -7234,17 +8938,18 @@ void ResetMinMax(void)
 		DP_Max[DP1] = DEFAUT_DP1_MAX;
 		DP_Min[DP1] = DEFAUT_DP1_MIN;
 		
-		WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],4);
-		WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],4);
+		WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],sizeof(DP_Max[DP1]));
+		WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],sizeof(DP_Min[DP1]));
 	}
 	
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	if(gu16_parameterWord & ENABLE_DP2)
 	{
 		DP_Max[DP2] = DEFAUT_DP2_MAX;
 		DP_Min[DP2] = DEFAUT_DP2_MIN;
 	
-		WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],4);
-		WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],4);
+		WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],sizeof(DP_Max[DP2]));
+		WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],sizeof(DP_Min[DP2]));
 	}
 	
 	if(gu16_parameterWord & ENABLE_DP3)
@@ -7252,10 +8957,64 @@ void ResetMinMax(void)
 		DP_Max[DP3] = DEFAUT_DP3_MAX;
 		DP_Min[DP3] = DEFAUT_DP3_MIN;
 	
-		WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],4);
-		WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],4);
+		WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],sizeof(DP_Max[DP3]));
+		WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],sizeof(DP_Min[DP3]));
 	}
+	#else
+	if(gu16_parameterWord & ENABLE_TEMP)
+	{
+		TM_Max = DEFAUT_TEMP_C_MAX;
+		TM_Min = DEFAUT_TEMP_C_MIN;
+		
+		WriteEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
+		WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
+	}
+	
+	if(gu16_parameterWord & ENABLE_RH)
+	{
+		RH_Max = DEFAUT_RH_MAX;
+		RH_Min = DEFAUT_RH_MIN;
+		
+		WriteEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
+		WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
+	}
+	#endif
 }
+
+#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+void TMUnitChange(void)
+{
+	WriteEEPROMData(TEMP_UNIT,(uint8_t*)&TM_Unit,sizeof(TM_Unit));
+	
+	if(!TM_Unit)
+	{
+		TM_Upper_Alm_ON = (TM_Upper_Alm_ON-320) / 1.8;
+		TM_Upper_Alm_OFF = (TM_Upper_Alm_OFF-320) / 1.8;
+		TM_Lower_Alm_ON = (TM_Lower_Alm_ON-320) / 1.8;
+		TM_Lower_Alm_OFF = (TM_Lower_Alm_OFF-320) / 1.8;
+		
+		TM_Cal_Value_F = (TM_Cal_Value_F-320) / 1.8;
+		TM_Cal_Value_C = (TM_Cal_Value_C-320) / 1.8;
+	}
+	else
+	{
+		TM_Upper_Alm_ON = (TM_Upper_Alm_ON * 1.8) + 320;
+		TM_Upper_Alm_OFF = (TM_Upper_Alm_OFF * 1.8) + 320;
+		TM_Lower_Alm_ON = (TM_Lower_Alm_ON * 1.8) + 320;
+		TM_Lower_Alm_OFF = (TM_Lower_Alm_OFF * 1.8) + 320;
+		
+		TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 320;
+		TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 320;
+	}
+	TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+	TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+	
+	WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+	WriteEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+	WriteEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+	WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+}
+#endif
 
 void opstr(char *str)
 {
@@ -7423,6 +9182,287 @@ void print_short(long val,char *data1,uint8_t no_of_digit)
 	opstr(data1);
 }
 
+#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+void Read_SHT25(void)
+{
+	float tempvar=0;
+	unsigned char error=0;
+	error = 0;                                       // reset error status
+
+	if(gu16_parameterWord & ENABLE_RH)
+	{	
+		// --- measure humidity with "Hold Master Mode (HM)"  ---
+		error |= SHT2x_MeasurePoll(HUMIDITY, &sRH);
+	}
+	else
+	{	
+		sRH.u16=0;
+	}
+	
+	if(gu16_parameterWord & ENABLE_TEMP)
+	{	
+		// --- measure temperature with "Polling Mode" (no hold master) ---
+		error |= SHT2x_MeasurePoll(TEMP, &sT);
+	}
+	else
+	{	
+		sT.u16=0;
+	}
+		
+	if((sT.u16==0xFFFF) || (sRH.u16==0xFFFF))
+	{
+		bool_RH_TEMP_NC = 1;
+		temperatureC = 0;
+		temperatureF = 0;
+		humidityRH   = 0;
+		
+		TM_Alrm_ON=NO_ALARM;
+		RH_Alrm_ON=NO_ALARM;
+	}
+	else
+	{
+		bool_RH_TEMP_NC = 0;
+		
+		//-- calculate humidity and temperature --
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{	
+			sT.u16>>=2;
+			
+			sT.u16<<=2;
+			
+			temperatureC = SHT2x_CalcTemperatureC(sT.u16);
+			RealtemperatureC = temperatureC;
+			temperatureC -= TM_Cal_float_Value_F;
+			temperatureC -= TM_Cal_float_Value_C;
+			
+			temperatureC = Kalman_Update(&Kalman[TEMPERATURE_ID], temperatureC);
+			
+			if(TM_Unit) 
+			{
+				temperatureF = (temperatureC * 1.8) + 32.0;
+				RealtemperatureF = temperatureF;
+			}
+			
+			if(!TMRH_StartUpTimer)
+			{
+				if(!TM_Unit)
+				{
+					tempvar=temperatureC;
+				}
+				else
+				{
+					tempvar=temperatureF;
+				}
+				
+				//Find Temperature Min/Max --------------------------------------------------------
+				if(temperatureC > TM_Max)
+				{
+					TM_Max = temperatureC;
+					WriteEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
+				}
+				
+				if(temperatureC < TM_Min)
+				{
+					TM_Min = temperatureC;
+					WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
+				}
+								
+				//Check Alarm Limit for Temp -----------------------------------------------
+				if(tempvar > (float)TM_Upper_Alm_ON/10.0)
+				{
+					TM_Alrm_ON=UPPER_ALARM;
+					
+					if(!bool_TMLog)
+					{
+						LastTM_Alrm_ON=TM_Alrm_ON;
+						WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+						
+						FillRamBuffer(TM_ALM_OCCURE_LOG,0,0xFFFF);
+						
+						bool_autoSendResponse = true;
+						bool_TMLog=1;
+					}
+					else
+					{
+						if(LastTM_Alrm_ON!=TM_Alrm_ON)
+						{
+							FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
+							
+							LastTM_Alrm_ON=NO_ALARM;
+							WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+							
+							bool_TMLog=0;
+						}
+					}
+				}
+				else if(tempvar < (float)TM_Lower_Alm_ON/10.0)
+				{
+					TM_Alrm_ON=LOWER_ALARM;
+					
+					if(!bool_TMLog)
+					{
+						LastTM_Alrm_ON=TM_Alrm_ON;
+						WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+						
+						FillRamBuffer(TM_ALM_OCCURE_LOG,0,0xFFFF);
+						
+						bool_autoSendResponse = true;
+						bool_TMLog=1;
+					}
+					else
+					{
+						if(LastTM_Alrm_ON!=TM_Alrm_ON)
+						{
+							FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
+							
+							LastTM_Alrm_ON=NO_ALARM;
+							WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+							
+							bool_TMLog=0;
+						}
+					}
+				}
+				else if((tempvar < ((float)TM_Upper_Alm_OFF/10.0)) && (tempvar > ((float)TM_Lower_Alm_OFF/10.0)))
+				{
+					TM_Alrm_ON=NO_ALARM;
+					
+					if(bool_TMLog==1)
+					{
+						FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
+						
+						bool_TMLog=0;
+						
+						LastTM_Alrm_ON=TM_Alrm_ON;
+						WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+					}
+				}
+			}
+		}
+		else
+		{
+			temperatureC=0.0;
+			temperatureF=0.0;
+			
+			TM_Max=0.0;
+			TM_Min=0.0;
+			
+			TM_Alrm_ON=NO_ALARM;
+		}
+		
+		if(gu16_parameterWord & ENABLE_RH)
+		{	
+			sRH.u16>>=2;
+			//sRH.u16 += RH_Cal_Count;
+			//sRH.u16 += RH_Cal_Count_C;
+			
+			sRH.u16<<=2;
+			
+			humidityRH = SHT2x_CalcRH(sRH.u16);
+			RealhumidityRH = humidityRH;
+			humidityRH -= RH_Cal_float_Value_F;
+			humidityRH -= RH_Cal_float_Value_C;
+			
+			humidityRH = Kalman_Update(&Kalman[HUMIDITY_ID], humidityRH);
+			
+			if(!TMRH_StartUpTimer)
+			{
+				//Find RH Min/Max -----------------------------------------------------------------
+				if(humidityRH > RH_Max) 
+				{
+					RH_Max = humidityRH;
+					WriteEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
+				}
+				
+				if(humidityRH < RH_Min) 
+				{
+					RH_Min = humidityRH;
+					WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
+				}
+				
+				//Check Alarm Limit for RH -----------------------------------------------
+				if(humidityRH > (float)RH_Upper_Alm_ON/10.0)
+				{
+					RH_Alrm_ON=UPPER_ALARM;
+					
+					if(!bool_RHLog)
+					{
+						LastRH_Alrm_ON=RH_Alrm_ON;
+						WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+						
+						FillRamBuffer(RH_ALM_OCCURE_LOG,0,0xFFFF);
+						
+						bool_autoSendResponse = true;
+						bool_RHLog=1;
+					}
+					else
+					{
+						if(LastRH_Alrm_ON!=RH_Alrm_ON)
+						{
+							FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
+							
+							LastRH_Alrm_ON=NO_ALARM;
+							WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+							
+							bool_RHLog=0;
+						}
+					}
+				}
+				else if(humidityRH < (float)RH_Lower_Alm_ON/10.0)
+				{
+					RH_Alrm_ON=LOWER_ALARM;
+					
+					if(!bool_RHLog)
+					{
+						LastRH_Alrm_ON=RH_Alrm_ON;
+						WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+						
+						FillRamBuffer(RH_ALM_OCCURE_LOG,0,0xFFFF);
+						
+						bool_autoSendResponse = true;
+						bool_RHLog=1;
+					}
+					else
+					{
+						if(LastRH_Alrm_ON!=RH_Alrm_ON)
+						{
+							FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
+							
+							LastRH_Alrm_ON=NO_ALARM;
+							WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+							
+							bool_RHLog=0;
+						}
+					}
+				}
+				else if((humidityRH < (float)RH_Upper_Alm_OFF/10.0) && (humidityRH > (float)RH_Lower_Alm_OFF/10.0))
+				{
+					RH_Alrm_ON=NO_ALARM;
+					
+					if(bool_RHLog==1)
+					{
+						FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
+						
+						bool_RHLog=0;
+						
+						LastRH_Alrm_ON=RH_Alrm_ON;
+						WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+					}
+				}
+			}
+		}
+		else
+		{
+			humidityRH=0.0;
+			
+			RH_Max=0.0;
+			RH_Min=0.0;
+			
+			RH_Alrm_ON=NO_ALARM;
+		}
+	}
+}
+#endif
+
 void whileTask(void)
 {
 	if(bool_resetDevice) 	
@@ -7491,8 +9531,12 @@ void whileTask(void)
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 				if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+				#else
+				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+				#endif
 				TxBuffer[4]=RxBuffer[3];
 				//TxBuffer[5]=RxBuffer[4];
 				//TxBuffer[6]=RxBuffer[5];
@@ -7532,8 +9576,12 @@ void whileTask(void)
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-				if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
+				if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+				#else
+				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+				#endif
 				TxBuffer[4]=RxBuffer[3];
 				TxBuffer[5]=flash24_StartInd>>8;
 				TxBuffer[6]=flash24_StartInd;
@@ -7584,8 +9632,12 @@ void whileTask(void)
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 				if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+				#else
+				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+				#endif
 				TxBuffer[4]=RxBuffer[3];
 				TxBuffer[5]=MinMaxMeanReadParaType;
 				TxBuffer[6]=flash24_StartInd;
@@ -7593,8 +9645,13 @@ void whileTask(void)
 				switch(MinMaxMeanReadParaType)
 				{
 					case '0':		ul1=LAST_DP1_MIN_MAX_OFFSET;		break;
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 					case '1':		ul1=LAST_DP2_MIN_MAX_OFFSET;		break;
 					case '2':		ul1=LAST_DP3_MIN_MAX_OFFSET;		break;
+					#else
+					case '1':		ul1=LAST_TM_MIN_MAX_OFFSET;			break;
+					case '2':		ul1=LAST_RH_MIN_MAX_OFFSET;			break;
+					#endif
 				}
 				ReadMinMaxLog(ul1,flash24_StartInd,&TxBuffer[7],MIN_MAX_MEAN_LOG_SIZE);
 				if(TxBuffer[10]==0xFF)	//If no log then set Log to Zero
@@ -7639,8 +9696,12 @@ void whileTask(void)
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
 				if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+				#else
+				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+				#endif
 				TxBuffer[4]=RxBuffer[3];
 				TxBuffer[5]=MinMaxMeanReadParaType;
 				TxBuffer[6]=flash24_StartInd;
@@ -7648,8 +9709,13 @@ void whileTask(void)
 				switch(MinMaxMeanReadParaType)
 				{
 					case '0':		ul1=DP1_CURR_24HR_MEAN_OFFSET;		break;
+					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 					case '1':		ul1=DP2_CURR_24HR_MEAN_OFFSET;		break;
 					case '2':		ul1=DP3_CURR_24HR_MEAN_OFFSET;		break;
+					#else
+					case '1':		ul1=TM_CURR_24HR_MEAN_OFFSET;		break;
+					case '2':		ul1=RH_CURR_24HR_MEAN_OFFSET;		break;
+					#endif
 				}
 				ReadMinMaxLog(ul1,flash24_StartInd,&TxBuffer[7],4);
 				
@@ -7682,8 +9748,12 @@ void whileTask(void)
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
-				if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
+				if(bool_DP_NC[DP3]) 			TxBuffer[3] |= DP3_FAULTY;
+				#else
+				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
+				#endif
 				TxBuffer[4]=RxBuffer[3];
 				TxBuffer[5]=RxBuffer[4];
 
@@ -7738,7 +9808,16 @@ void whileTask(void)
 		bool_mec500_blink_flag1=0;
 	}
 	#endif
+	
+	#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+	if(bool_msec250_flag)
+	{
+		Read_SHT25();
 		
+		bool_msec250_flag=0;
+	}
+	#endif
+	
 	if(bool_msec50_flag)
 	{
 		if(RxTimeout)
@@ -7764,7 +9843,7 @@ void whileTask(void)
 			{
 				if(!ReadXGZP6891D(DP1, &RealDpressure[DP1]))
 				{
-					ReadDiffPressure(DP1, RealDpressure[DP1]);
+					ReadDiffPressure(DP1);
 				}
 				else
 				{
@@ -7791,6 +9870,7 @@ void whileTask(void)
 			DP_StartUpTimer=0;
 		}
 		//-------------------------------------------------------------
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(gu16_parameterWord & ENABLE_DP2) 
 		{
 			if(StageDP[DP2]==0)
@@ -7802,7 +9882,7 @@ void whileTask(void)
 			{
 				if(!ReadXGZP6891D(DP2, &RealDpressure[DP2]))
 				{
-					ReadDiffPressure(DP2, RealDpressure[DP2]);
+					ReadDiffPressure(DP2);
 				}
 				else
 				{
@@ -7840,7 +9920,7 @@ void whileTask(void)
 			{
 				if(!ReadXGZP6891D(DP3, &RealDpressure[DP3]))
 				{
-					ReadDiffPressure(DP3, RealDpressure[DP3]);
+					ReadDiffPressure(DP3);
 				}
 				else
 				{
@@ -7866,6 +9946,7 @@ void whileTask(void)
 			
 			DP_StartUpTimer=0;
 		}
+		#endif
 		//-------------------------------------------------------------
 		bool_msec50_flag=0;
 	}
@@ -7902,18 +9983,21 @@ void boot_data(void)
 {
 	uint8_t FirstTimeCheck=0;
 	
-	ReadEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,1);
+	ReadEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck));
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+	if(FirstTimeCheck != 0xAA)
+	{
+		FirstTimeCheck=0xAA;
+	#else
 	if(FirstTimeCheck != 0xBB)
 	{
 		FirstTimeCheck=0xBB;
+	#endif
 		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 		
 		gu16_parameterWord=PARAMETER_WORD;
-		WriteEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,2);
-		
-		//gu8_DPAutoCalFlag=0;
-		//WriteEEPROMData(DP_AUTO_CAL_FLAG,&gu8_DPAutoCalFlag,sizeof(gu8_DPAutoCalFlag));
-		
+		WriteEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,sizeof(gu16_parameterWord));
+
 		gu8_masterEnable=0;
 		WriteEEPROMData(MASTER_ENABLE_ADDR,&gu8_masterEnable,sizeof(gu8_masterEnable));
 		
@@ -7921,31 +10005,51 @@ void boot_data(void)
 		WriteEEPROMData(DEVICE_SR_NO,(uint8_t*)&gu8ar_SrNumber[0],sizeof(gu8ar_SrNumber));
 		gu32_SrNumber = ascii2hex(&gu8ar_SrNumber[8],8);
 
-		MinMaxMeanDayLogInd=0;
-		WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
 		
 		if(gu16_parameterWord & ENABLE_DATAFLASH)
 		{
+			//Reset Data Logging Parameter -------------------------------------------
+			CurrentLogIndReadLoc = 0;
+			WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+			
+			FlashOVFByte=0;
+			WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
+			
+			ResetMinMax();	
+			
+			CurrentLogInd = 0;
+			WriteEEPROMData(CURR_LOG_IND,(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
+			
+			CurrentLog24IndReadLoc = 0;
+			WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+			
+			CurrentLog24Ind = 0;
+			WriteEEPROMData(CURR_LOG24_IND,(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+			
+			MinMaxMeanDayLogInd=0;
+			WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
+			
 			//Clear all Hour mean value
 			memset(&RAMBuffer[0],0,sizeof(RAMBuffer));
 			WriteLog(DP1_CURR_24HR_MEAN_OFFSET,0,&RAMBuffer[0],HOUR_MEAN_VALUE_SPACE);
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			WriteLog(DP2_CURR_24HR_MEAN_OFFSET,0,&RAMBuffer[0],HOUR_MEAN_VALUE_SPACE);
 			WriteLog(DP3_CURR_24HR_MEAN_OFFSET,0,&RAMBuffer[0],HOUR_MEAN_VALUE_SPACE);
-		
+			#else
+			WriteLog(TM_CURR_24HR_MEAN_OFFSET,0,&RAMBuffer[0],HOUR_MEAN_VALUE_SPACE);
+			WriteLog(RH_CURR_24HR_MEAN_OFFSET,0,&RAMBuffer[0],HOUR_MEAN_VALUE_SPACE);
+			#endif
+			
 			//Clear all Min Max Mean Logs
 			WriteLog(LAST_DP1_MIN_MAX_OFFSET,0,&RAMBuffer[0],MIN_MAX_MEAN_LOG_SPACE);
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			WriteLog(LAST_DP2_MIN_MAX_OFFSET,0,&RAMBuffer[0],MIN_MAX_MEAN_LOG_SPACE);
 			WriteLog(LAST_DP3_MIN_MAX_OFFSET,0,&RAMBuffer[0],MIN_MAX_MEAN_LOG_SPACE);
+			#else
+			WriteLog(LAST_TM_MIN_MAX_OFFSET,0,&RAMBuffer[0],MIN_MAX_MEAN_LOG_SPACE);
+			WriteLog(LAST_RH_MIN_MAX_OFFSET,0,&RAMBuffer[0],MIN_MAX_MEAN_LOG_SPACE);
+			#endif
 		}
-		
-		DP_UserCalDateInd[DP1]=0;
-		WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
-		
-		DP_UserCalDateInd[DP2]=0;
-		WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
-		
-		DP_UserCalDateInd[DP3]=0;
-		WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
 		
 		RTCSetFlag=0;
 		WriteEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
@@ -7954,143 +10058,239 @@ void boot_data(void)
 		{
 			//DPressure1 Parameter -----------------------------------------------------
 			DP_Upper_Alm_ON[DP1]=DEFAULT_DP1_UPPER_ALM_ON;
-			WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],2);
+			WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],sizeof(DP_Upper_Alm_ON[DP1]));
 		
 			DP_Upper_Alm_OFF[DP1]=DEFAULT_DP1_UPPER_ALM_OFF;
-			WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],2);
+			WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],sizeof(DP_Upper_Alm_OFF[DP1]));
 		
 			DP_Lower_Alm_ON[DP1]=DEFAULT_DP1_LOWER_ALM_ON;
-			WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],2);
+			WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],sizeof(DP_Lower_Alm_ON[DP1]));
 		
 			DP_Lower_Alm_OFF[DP1]=DEFAULT_DP1_LOWER_ALM_OFF;
-			WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],2);
+			WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],sizeof(DP_Lower_Alm_OFF[DP1]));
 		
 			DP_Cal_Value_F[DP1]=0;
-			WriteEEPROMData(DP1_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP1],2);
+			WriteEEPROMData(DP1_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP1],sizeof(DP_Cal_Value_F[DP1]));
 			
 			DP_Cal_Value_C[DP1]=0;
-			WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
+			WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
 			
 			DP_Cal_float_Value_F[DP1] = 0.0;
 			DP_Cal_float_Value_C[DP1] = 0.0;			
-				
-			//DP_Cal_Count[DP1]=0;
-			//WriteEEPROMData(DP1_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP1]);
-		//
-			//DP_Cal_Count_C[DP1]=0;
-			//WriteEEPROMData(DP1_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP1]);
-			
+
 			LastDP_Alrm_ON[DP1]=0;
 			WriteEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
+			
+			gu8_DpAlarmSensingTime[DP1]=5;
+			WriteEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
+			
+			su16_dp_offset[DP1]=0;
+			f32_dp_offset[DP1]=0.0;
+			WriteEEPROMData((DP_OFFSET_ADDR),(uint8_t*)&su16_dp_offset[DP1],sizeof(su16_dp_offset[DP1]));
+			
+			su16_dp_sw_factor[DP1]=0;
+			f32_dp_sw_factor[DP1]=0.0;
+			WriteEEPROMData((DP_SW_FACT_ADDR),(uint8_t*)&su16_dp_sw_factor[DP1],sizeof(su16_dp_sw_factor[DP1]));
+			
+			u16_dp_limit[DP1]=2500;
+			WriteEEPROMData((DP_LIMIT_ADDR),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
+			f32_dp_limit[DP1]=(float)u16_dp_limit[DP1]/10.0;
+			
+			DP_UserCalDateInd[DP1]=0;
+			WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
 		}
-
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(gu16_parameterWord & ENABLE_DP2)
 		{
 			//DPressure2 Parameter -----------------------------------------------------
 			DP_Upper_Alm_ON[DP2]=DEFAULT_DP2_UPPER_ALM_ON;
-			WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],2);
+			WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],sizeof(DP_Upper_Alm_ON[DP2]));
 		
 			DP_Upper_Alm_OFF[DP2]=DEFAULT_DP2_UPPER_ALM_OFF;
-			WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],2);
+			WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],sizeof(DP_Upper_Alm_OFF[DP2]));
 		
 			DP_Lower_Alm_ON[DP2]=DEFAULT_DP2_LOWER_ALM_ON;
-			WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],2);
+			WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],sizeof(DP_Lower_Alm_ON[DP2]));
 		
 			DP_Lower_Alm_OFF[DP2]=DEFAULT_DP2_LOWER_ALM_OFF;
-			WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],2);
+			WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],sizeof(DP_Lower_Alm_OFF[DP2]));
 		
 			DP_Cal_Value_F[DP2]=0;
-			WriteEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2],2);
+			WriteEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2],sizeof(DP_Cal_Value_F[DP2]));
 			
 			DP_Cal_Value_C[DP2]=0;
-			WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
+			WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
 			
 			DP_Cal_float_Value_F[DP2] = 0.0;
 			DP_Cal_float_Value_C[DP2] = 0.0;
 			
-			//DP_Cal_Count[DP2]=0;
-			//WriteEEPROMData(DP2_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP2],2);
-		//
-			//DP_Cal_Count_C[DP2]=0;
-			//WriteEEPROMData(DP2_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP2],2);
-			
 			LastDP_Alrm_ON[DP2]=0;
 			WriteEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],sizeof(LastDP_Alrm_ON[DP2]));
+			
+			gu8_DpAlarmSensingTime[DP2]=5;
+			WriteEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],sizeof(gu8_DpAlarmSensingTime[DP2]));
+			
+			su16_dp_offset[DP2]=0;
+			f32_dp_offset[DP2]=0.0;
+			WriteEEPROMData((DP_OFFSET_ADDR+2),(uint8_t*)&su16_dp_offset[DP2],sizeof(su16_dp_offset[DP2]));
+				
+			su16_dp_sw_factor[DP2]=0;
+			f32_dp_sw_factor[DP2]=0.0;
+			WriteEEPROMData((DP_SW_FACT_ADDR+2),(uint8_t*)&su16_dp_sw_factor[DP2],sizeof(su16_dp_sw_factor[DP2]));
+			
+			u16_dp_limit[DP2]=2500;
+			WriteEEPROMData((DP_LIMIT_ADDR+2),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
+			f32_dp_limit[DP2]=(float)u16_dp_limit[DP2]/10.0;
+			
+			DP_UserCalDateInd[DP2]=0;
+			WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
 		}
 		
 		if(gu16_parameterWord & ENABLE_DP3)
 		{
 			//DPressure2 Parameter -----------------------------------------------------
 			DP_Upper_Alm_ON[DP3]=DEFAULT_DP3_UPPER_ALM_ON;
-			WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],2);
+			WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],sizeof(DP_Upper_Alm_ON[DP3]));
 		
 			DP_Upper_Alm_OFF[DP3]=DEFAULT_DP3_UPPER_ALM_OFF;
-			WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],2);
+			WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],sizeof(DP_Upper_Alm_OFF[DP3]));
 		
 			DP_Lower_Alm_ON[DP3]=DEFAULT_DP3_LOWER_ALM_ON;
-			WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],2);
+			WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],sizeof(DP_Lower_Alm_ON[DP3]));
 		
 			DP_Lower_Alm_OFF[DP3]=DEFAULT_DP3_LOWER_ALM_OFF;
-			WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],2);
+			WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],sizeof(DP_Lower_Alm_OFF[DP3]));
 		
 			DP_Cal_Value_F[DP3]=0;
-			WriteEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3],2);
+			WriteEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3],sizeof(DP_Cal_Value_F[DP3]));
 			
 			DP_Cal_Value_C[DP3]=0;
-			WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
+			WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
 			
 			DP_Cal_float_Value_F[DP3] = 0.0;
 			DP_Cal_float_Value_C[DP3] = 0.0;
 			
-			//DP_Cal_Count[DP3]=0;
-			//WriteEEPROMData(DP3_CAL_CNT,DP_Cal_Count[DP3]);
-		//
-			//DP_Cal_Count_C[DP3]=0;
-			//WriteEEPROMData(DP3_CAL_CNT_C,DP_Cal_Count_C[DP3]);
-			
 			LastDP_Alrm_ON[DP3]=0;
 			WriteEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
+			
+			gu8_DpAlarmSensingTime[DP3]=5;
+			WriteEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
+			
+			su16_dp_offset[DP3]=0;
+			f32_dp_offset[DP3]=0.0;
+			WriteEEPROMData((DP_OFFSET_ADDR+4),(uint8_t*)&su16_dp_offset[DP3],sizeof(su16_dp_offset[DP3]));
+				
+			su16_dp_sw_factor[DP3]=0;
+			f32_dp_sw_factor[DP3]=0.0;
+			WriteEEPROMData((DP_SW_FACT_ADDR+4),(uint8_t*)&su16_dp_sw_factor[DP3],sizeof(su16_dp_sw_factor[DP3]));
+			
+			u16_dp_limit[DP3]=2500;
+			WriteEEPROMData((DP_LIMIT_ADDR+4),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
+			f32_dp_limit[DP3]=(float)u16_dp_limit[DP3]/10.0;
+			
+			DP_UserCalDateInd[DP3]=0;
+			WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
 		}
+		#else
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{
+			//Temperature Parameter -----------------------------------------------------
+			TM_Upper_Alm_ON=DEFAULT_TM_C_UPPER_ALM_ON;
+			WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
 		
+			TM_Upper_Alm_OFF=DEFAULT_TM_C_UPPER_ALM_OFF;
+			WriteEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+		
+			TM_Lower_Alm_ON=DEFAULT_TM_C_LOWER_ALM_ON;
+			WriteEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+
+			TM_Lower_Alm_OFF=DEFAULT_TM_C_LOWER_ALM_OFF;
+			WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+			
+			TM_Cal_Value_F=0;
+			WriteEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
+			
+			TM_Cal_Value_C=0;
+			WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
+			
+			TM_Cal_float_Value_F = 0.0;
+			TM_Cal_float_Value_C = 0.0;
+			
+			//TM_Cal_Count=0;
+			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
+		//
+			//TM_Cal_Count_C=0;
+			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
+		//
+			TM_Unit=0;
+			WriteEEPROMData(TEMP_UNIT,(uint8_t*)&TM_Unit,sizeof(TM_Unit));
+			
+			LastTM_Alrm_ON=0;
+			WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+			
+			TM_UserCalDateInd=0;
+			WriteEEPROMData(TM_USER_CAL_DATE_IND_ADDR,&TM_UserCalDateInd,sizeof(TM_UserCalDateInd));
+		}
+			
+		if(gu16_parameterWord & ENABLE_RH)
+		{
+			//RHumidity Parameter -----------------------------------------------------
+			RH_Upper_Alm_ON=DEFAULT_RH_UPPER_ALM_ON;
+			WriteEEPROMData(RH_UP_ALM_ON,(uint8_t*)&RH_Upper_Alm_ON,sizeof(RH_Upper_Alm_ON));
+
+			RH_Upper_Alm_OFF=DEFAULT_RH_UPPER_ALM_OFF;
+			WriteEEPROMData(RH_UP_ALM_OFF,(uint8_t*)&RH_Upper_Alm_OFF,sizeof(RH_Upper_Alm_OFF));
+		
+			RH_Lower_Alm_ON=DEFAULT_RH_LOWER_ALM_ON;
+			WriteEEPROMData(RH_LO_ALM_ON,(uint8_t*)&RH_Lower_Alm_ON,sizeof(RH_Lower_Alm_ON));
+		
+			RH_Lower_Alm_OFF=DEFAULT_RH_LOWER_ALM_OFF;
+			WriteEEPROMData(RH_LO_ALM_OFF,(uint8_t*)&RH_Lower_Alm_OFF,sizeof(RH_Lower_Alm_OFF));
+		
+			RH_Cal_Value_F=0;
+			WriteEEPROMData(RH_CAL_VAL_F_ADDR,(uint8_t*)&RH_Cal_Value_F,sizeof(RH_Cal_Value_F));
+			
+			RH_Cal_Value_C=0;
+			WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,sizeof(RH_Cal_Value_C));
+			
+			RH_Cal_float_Value_F = 0.0;
+			RH_Cal_float_Value_C = 0.0;
+			
+			//RH_Cal_Count=0;
+			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT,RH_Cal_Count);
+		
+			//RH_Cal_Count_C=0;
+			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT_C,RH_Cal_Count_C);
+			
+			LastRH_Alrm_ON=0;
+			WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+			
+			RH_UserCalDateInd=0;
+			WriteEEPROMData(RH_USER_CAL_DATE_IND_ADDR,&RH_UserCalDateInd,sizeof(RH_UserCalDateInd));
+		}
+		#endif
 		gu8_broadcast = 0;
 		WriteEEPROMData(BROADCAST_ENB_ADDR,&gu8_broadcast,sizeof(gu8_broadcast));
 		
 		gu8_rly_stat = 0;
 		WriteEEPROMData(RELAY_STAT_ADDR,&gu8_rly_stat,sizeof(gu8_rly_stat));
-		
-		for(uint8_t i=0; i<MAX_SUPPORTED_DP; i++)
-		{
-			su16_dp_sw_factor[i]=0;
-			f32_dp_sw_factor[i]=0.0;
-			WriteEEPROMData((DP_SW_FACT_ADDR+(i*2)),(uint8_t*)&su16_dp_sw_factor[i],2);
-			
-			su16_dp_offset[i]=0;
-			f32_dp_offset[i]=0.0;
-			WriteEEPROMData((DP_OFFSET_ADDR+(i*2)),(uint8_t*)&su16_dp_offset[i],2);
-			
-			u16_dp_limit[i]=2500;
-			f32_dp_limit[i]=250.0;
-			WriteEEPROMData((DP_LIMIT_ADDR+(i*2)),(uint8_t*)&u16_dp_limit[i],2);
-		}
 
-		ResetMinMax();	
-		
 		//RS485 Parameter -------------------------------------------
 		DeviceID=DEFAULT_DEVICE_ID;
 		WriteEEPROMData(DEVICE_ID,&DeviceID,sizeof(DeviceID));
 		
 		//Buzzer Parameter -------------------------------------------
 		Buzzer_ON_Time=DEFAULT_BUZZER_ON_TIME;
-		WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,2);
+		WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,sizeof(Buzzer_ON_Time));
 		
 		Buzzer_OFF_Time=DEFAULT_BUZZER_OFF_TIME;
-		WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,2);
+		WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 		
 		if(gu16_parameterWord & ENABLE_LOG)
 		{
 			//Data Logging Parameter -------------------------------------------
 			LogInterval=DEFAULT_LOG_INTERVAL;
-			WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,2);
+			WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
 		}
 		
 		//UART Parameter -------------------------------------------
@@ -8099,15 +10299,15 @@ void boot_data(void)
 		
 		//Customer Password -------------------------------------------
 		CustPassword=DEFAULT_CUSTOMER_PWD;
-		WriteEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,2);
+		WriteEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,sizeof(CustPassword));
 		
 		//Factory Customer Password -------------------------------------------
 		FactCustPassword=DEFAULT_FACTORY_PWD;
-		WriteEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,2);
+		WriteEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,sizeof(FactCustPassword));
 		
 		//Acknowledge Parameter -------------------------------------------
 		AckTimer=1;
-		WriteEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,2);
+		WriteEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,sizeof(AckTimer));
 		
 		AckPwdInd=0;
 		WriteEEPROMData(ACK_PWD_IND,&AckPwdInd,sizeof(AckPwdInd));
@@ -8115,53 +10315,14 @@ void boot_data(void)
 		for(uint8_t i=0;i<NO_OF_ACKPWD;i++)
 		{
 			AckPwd[i]=0;
-			WriteEEPROMData((ACK_PASSWORD+(i*2)),(uint8_t*)&AckPwd[i],2);
+			WriteEEPROMData((ACK_PASSWORD+(i*2)),(uint8_t*)&AckPwd[i],sizeof(AckPwd[i]));
 		}
-		
-	
-		//Reset Data Logging Parameter -------------------------------------------
-		CurrentLogIndReadLoc = 0;
-		WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,2);
-		
-		FlashOVFByte=0;
-		WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
-		
-		CurrentLogInd = 0;
-		WriteEEPROMData(CURR_LOG_IND,(uint8_t*)&CurrentLogInd,4);
-		
-		CurrentLog24IndReadLoc = 0;
-		WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-		
-		CurrentLog24Ind = 0;
-		WriteEEPROMData(CURR_LOG24_IND,(uint8_t*)&CurrentLog24Ind,2);
-		
-		bool_DPLog[DP1]=0;
-		bool_DPLog[DP2]=0;
-		bool_DPLog[DP3]=0;
-		
-		LastDP_Alrm_ON[DP1]=0;
-		WriteEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
-		
-		LastDP_Alrm_ON[DP2]=0;
-		WriteEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],sizeof(LastDP_Alrm_ON[DP2]));
-		
-		LastDP_Alrm_ON[DP3]=0;
-		WriteEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
 		
 		gu8_doorSensingPolarity=1;
 		WriteEEPROMData(DOOR_SENSE_POLARITY_ADDR,&gu8_doorSensingPolarity,sizeof(gu8_doorSensingPolarity));
 		
 		gu8_doorSensingTime=60;
 		WriteEEPROMData(DOOR_SENSE_TIME_ADDR,&gu8_doorSensingTime,sizeof(gu8_doorSensingTime));
-		
-		gu8_DpAlarmSensingTime[DP1]=5;
-		WriteEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
-		
-		gu8_DpAlarmSensingTime[DP2]=5;
-		WriteEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],sizeof(gu8_DpAlarmSensingTime[DP2]));
-		
-		gu8_DpAlarmSensingTime[DP3]=5;
-		WriteEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
 		
 		gu8_LCDBrigthnessCnt=DEFAULT_LCD_BRIGHTNESS;
 		WriteEEPROMData(LCD_BRIGHT_CNT_ADDR,&gu8_LCDBrigthnessCnt,sizeof(gu8_LCDBrigthnessCnt));
@@ -8173,7 +10334,7 @@ void boot_data(void)
 		WriteEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
 		
 		gu16_XbeeRstInterval=DEFAULT_XBEE_RST_INTERVAL;
-		WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,2);
+		WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
 		
 		memcpy(&gu8arr_XbeeMac[0][0],"000000000000FFFF",XBEE_MAC_SIZE);
 		WriteEEPROMData(XBEE_MAC_ADDR,(uint8_t*)&gu8arr_XbeeMac[0][0],XBEE_MAC_SIZE);
@@ -8182,97 +10343,68 @@ void boot_data(void)
 			memset(&gu8arr_XbeeMac[i][0],'0',XBEE_MAC_SIZE);
 			WriteEEPROMData((XBEE_MAC_ADDR+(i*XBEE_MAC_SIZE)),(uint8_t*)&gu8arr_XbeeMac[i][0],XBEE_MAC_SIZE);
 		}
-		
+
 		//EraseWholeFlash();
 	}
 	else
 	{	
-		ReadEEPROMData(DOOR_SENSE_POLARITY_ADDR,&gu8_doorSensingPolarity,1);
+		ReadEEPROMData(DOOR_SENSE_POLARITY_ADDR,&gu8_doorSensingPolarity,sizeof(gu8_doorSensingPolarity));
 		if(gu8_doorSensingPolarity > 1)
 		{
 			gu8_doorSensingPolarity=0;
 			WriteEEPROMData(DOOR_SENSE_POLARITY_ADDR,&gu8_doorSensingPolarity,sizeof(gu8_doorSensingPolarity));
 		}
 		
-		ReadEEPROMData(LCD_BRIGHT_CNT_ADDR,&gu8_LCDBrigthnessCnt,1);
+		ReadEEPROMData(LCD_BRIGHT_CNT_ADDR,&gu8_LCDBrigthnessCnt,sizeof(gu8_LCDBrigthnessCnt));
 		if(gu8_LCDBrigthnessCnt > 15)
 		{
 			gu8_LCDBrigthnessCnt=DEFAULT_LCD_BRIGHTNESS;
 			WriteEEPROMData(LCD_BRIGHT_CNT_ADDR,&gu8_LCDBrigthnessCnt,sizeof(gu8_LCDBrigthnessCnt));
 		}
 		
-		ReadEEPROMData(AUTO_SENT_INTERVAL_ADDR,&gu8_AutoSentInterval,1);
+		ReadEEPROMData(AUTO_SENT_INTERVAL_ADDR,&gu8_AutoSentInterval,sizeof(gu8_AutoSentInterval));
 		if((!gu8_AutoSentInterval) || (gu8_AutoSentInterval > 240))
 		{
 			gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL;
 			WriteEEPROMData(AUTO_SENT_INTERVAL_ADDR,&gu8_AutoSentInterval,sizeof(gu8_AutoSentInterval));
 		}
 		
-		ReadEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,1);
+		ReadEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
 		if((gu8_DeviceInGroup < 2) || (gu8_DeviceInGroup > 100))
 		{
 			gu8_DeviceInGroup=DEFAULT_DEVICES_IN_GROUP;
 			WriteEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
 		}
 		
-		ReadEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,2);
+		ReadEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
 		if(gu16_XbeeRstInterval > 1440)
 		{
 			gu16_XbeeRstInterval=DEFAULT_XBEE_RST_INTERVAL;
-			WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,2);
+			WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
 		}
 		
 		ReadEEPROMData(DEVICE_SR_NO,&gu8ar_SrNumber[0],sizeof(gu8ar_SrNumber));
 		gu32_SrNumber = ascii2hex(&gu8ar_SrNumber[8],8);
 		
-		ReadEEPROMData(DOOR_SENSE_TIME_ADDR,&gu8_doorSensingTime,1);
+		ReadEEPROMData(DOOR_SENSE_TIME_ADDR,&gu8_doorSensingTime,sizeof(gu8_doorSensingTime));
 		if(gu8_doorSensingTime > 250)
 		{
 			gu8_doorSensingTime=60;
 			WriteEEPROMData(DOOR_SENSE_TIME_ADDR,&gu8_doorSensingTime,sizeof(gu8_doorSensingTime));
 		}
 		
-		ReadEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],1);
-		if(gu8_DpAlarmSensingTime[DP1] > 250)
-		{
-			gu8_DpAlarmSensingTime[DP1]=5;
-			WriteEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
-		}
-		
-		ReadEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],1);
-		if(gu8_DpAlarmSensingTime[DP2] > 250)
-		{
-			gu8_DpAlarmSensingTime[DP2]=5;
-			WriteEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],sizeof(gu8_DpAlarmSensingTime[DP2]));
-		}
-		
-		ReadEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],1);
-		if(gu8_DpAlarmSensingTime[DP3] > 250)
-		{
-			gu8_DpAlarmSensingTime[DP3]=5;
-			WriteEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
-		}
-			
-		ReadEEPROMData(MASTER_ENABLE_ADDR,&gu8_masterEnable,1);
+		ReadEEPROMData(MASTER_ENABLE_ADDR,&gu8_masterEnable,sizeof(gu8_masterEnable));
 		if(gu8_masterEnable > 1)
 		{
 			gu8_masterEnable=0;
 			WriteEEPROMData(MASTER_ENABLE_ADDR,&gu8_masterEnable,sizeof(gu8_masterEnable));
 		}
 		
-		/*ReadEEPROMData(DP_AUTO_CAL_FLAG,&gu8_DPAutoCalFlag,1);
-		if(gu8_DPAutoCalFlag>1)
-		{
-			gu8_DPAutoCalFlag=1;
-			WriteEEPROMData(DP_AUTO_CAL_FLAG,&gu8_DPAutoCalFlag,sizeof(gu8_DPAutoCalFlag));
-		}*/
-		
-		ReadEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,2);
-		//gu16_parameterWord = PARAMETER_WORD;
+		ReadEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,sizeof(gu16_parameterWord));
 		
 		if(gu16_parameterWord & ENABLE_M3LOG)
 		{
-			ReadEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,1);
+			ReadEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
 			if(MinMaxMeanDayLogInd>=TOTAL_MIN_MAX_MEAN_LOG)
 			{
 				MinMaxMeanDayLogInd=0;
@@ -8280,28 +10412,7 @@ void boot_data(void)
 			}
 		}
 
-		ReadEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],1);
-		if(DP_UserCalDateInd[DP1]>15)
-		{
-			DP_UserCalDateInd[DP1]=0;
-			WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
-		}
-		
-		ReadEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],1);
-		if(DP_UserCalDateInd[DP2]>15)
-		{
-			DP_UserCalDateInd[DP2]=0;
-			WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
-		}
-		
-		ReadEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],1);
-		if(DP_UserCalDateInd[DP3]>15)
-		{
-			DP_UserCalDateInd[DP3]=0;
-			WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
-		}
-		
-		ReadEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,1);
+		ReadEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
 		if(RTCSetFlag>1)
 		{
 			RTCSetFlag=0;
@@ -8311,35 +10422,35 @@ void boot_data(void)
 		if(gu16_parameterWord & ENABLE_DP1)
 		{
 			//DPressure1 Parameter -----------------------------------------------------
-			ReadEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],2);
+			ReadEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],sizeof(DP_Upper_Alm_ON[DP1]));
 			if((DP_Upper_Alm_ON[DP1]<(DEFAUT_DP1_MAX*10)) || (DP_Upper_Alm_ON[DP1]>(DEFAUT_DP1_MIN*10)))
 			{
 				DP_Upper_Alm_ON[DP1]=DEFAULT_DP1_UPPER_ALM_ON;
-				WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],2);
+				WriteEEPROMData(DP1_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP1],sizeof(DP_Upper_Alm_ON[DP1]));
 			}
 		
-			ReadEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],2);
+			ReadEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],sizeof(DP_Upper_Alm_OFF[DP1]));
 			if((DP_Upper_Alm_OFF[DP1]<(DEFAUT_DP1_MAX*10)) || (DP_Upper_Alm_OFF[DP1]>(DEFAUT_DP1_MIN*10)))
 			{
 				DP_Upper_Alm_OFF[DP1]=DEFAULT_DP1_UPPER_ALM_OFF;
-				WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],2);
+				WriteEEPROMData(DP1_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP1],sizeof(DP_Upper_Alm_OFF[DP1]));
 			}
 		
-			ReadEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],2);
+			ReadEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],sizeof(DP_Lower_Alm_ON[DP1]));
 			if((DP_Lower_Alm_ON[DP1]<(DEFAUT_DP1_MAX*10)) || (DP_Lower_Alm_ON[DP1]>(DEFAUT_DP1_MIN*10)))
 			{
 				DP_Lower_Alm_ON[DP1]=DEFAULT_DP1_LOWER_ALM_ON;
-				WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],2);
+				WriteEEPROMData(DP1_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP1],sizeof(DP_Lower_Alm_ON[DP1]));
 			}
 		
-			ReadEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],2);
+			ReadEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],sizeof(DP_Lower_Alm_OFF[DP1]));
 			if((DP_Lower_Alm_OFF[DP1]<(DEFAUT_DP1_MAX*10)) || (DP_Lower_Alm_OFF[DP1]>(DEFAUT_DP1_MIN*10)))
 			{
 				DP_Lower_Alm_OFF[DP1]=DEFAULT_DP1_LOWER_ALM_OFF;
-				WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],2);
+				WriteEEPROMData(DP1_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP1],sizeof(DP_Lower_Alm_OFF[DP1]));
 			}
 		
-			ReadEEPROMData(DP1_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP1],2);
+			ReadEEPROMData(DP1_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP1],sizeof(DP_Cal_Value_F[DP1]));
 			//if((DP_Cal_Value_F[DP1]<(DEFAUT_DP1_MAX*10.0)) || (DP_Cal_Value_F[DP1]>(DEFAUT_DP1_MIN*10.0)))
 			//{
 				//DP_Cal_Value_F[DP1]=0;
@@ -8347,82 +10458,106 @@ void boot_data(void)
 			//}
 			DP_Cal_float_Value_F[DP1] = (float)DP_Cal_Value_F[DP1]/10.0;
 			
-			ReadEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],2);
+			ReadEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
 			//if((DP_Cal_Value_C[DP1]<(DEFAUT_DP1_MAX*10.0)) || (DP_Cal_Value_C[DP1]>(DEFAUT_DP1_MIN*10.0)))
 			//{
 				//DP_Cal_Value_C[DP1]=0;
 				//WriteEEPROMData(DP1_CAL_VAL_C_ADDR,DP_Cal_Value_C[DP1]);
 			//}
 			DP_Cal_float_Value_C[DP1] = (float)DP_Cal_Value_C[DP1]/10.0;
-			
-			//ReadEEPROMData(DP1_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP1],2);
-			//if((DP_Cal_Count[DP1]<-500) || (DP_Cal_Count[DP1]>500))
-			//{
-				//DP_Cal_Count[DP1]=0;
-				//WriteEEPROMData(DP1_CAL_CNT,DP_Cal_Count[DP1]);
-			//}
-		//
-			//ReadEEPROMData(DP1_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP1],2);
-			//if((DP_Cal_Count_C[DP1]<-500) || (DP_Cal_Count_C[DP1]>500))
-			//{
-				//DP_Cal_Count_C[DP1]=0;
-				//WriteEEPROMData(DP1_CAL_CNT_C,DP_Cal_Count_C[DP1]);
-			//}
 		
-			ReadEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],4);
+			ReadEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],sizeof(DP_Max[DP1]));
 			if(DP_Max[DP1]<DEFAUT_DP1_MAX)
 			{
 				DP_Max[DP1] = DEFAUT_DP1_MAX;
-				WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],4);
+				WriteEEPROMData(DP1_MAXIMUM,(uint8_t*)&DP_Max[DP1],sizeof(DP_Max[DP1]));
 			}
 		
-			ReadEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],4);
+			ReadEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],sizeof(DP_Min[DP1]));
 			if(DP_Min[DP1]>DEFAUT_DP1_MIN)
 			{
 				DP_Min[DP1] = DEFAUT_DP1_MIN;
-				WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],4);
+				WriteEEPROMData(DP1_MINIMUM,(uint8_t*)&DP_Min[DP1],sizeof(DP_Min[DP1]));
 			}
 			
-			ReadEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],1);
+			ReadEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
 			if(LastDP_Alrm_ON[DP1]>2)
 			{
 				LastDP_Alrm_ON[DP1]=0;
 				WriteEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
 			}
+			
+			ReadEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
+			if(gu8_DpAlarmSensingTime[DP1] > 250)
+			{
+				gu8_DpAlarmSensingTime[DP1]=5;
+				WriteEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
+			}
+			
+			ReadEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
+			if(DP_UserCalDateInd[DP1]>15)
+			{
+				DP_UserCalDateInd[DP1]=0;
+				WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
+			}
+			
+			ReadEEPROMData((DP_SW_FACT_ADDR+(DP1*2)),(uint8_t*)&su16_dp_sw_factor[DP1],sizeof(su16_dp_sw_factor[DP1]));
+			if((su16_dp_sw_factor[DP1]<-10000) || (su16_dp_sw_factor[DP1]>10000))
+			{	
+				su16_dp_sw_factor[DP1]=0;
+				WriteEEPROMData((DP_SW_FACT_ADDR+(DP1*2)),(uint8_t*)&su16_dp_sw_factor[DP1],sizeof(su16_dp_sw_factor[DP1]));
+			}
+			f32_dp_sw_factor[DP1]=(float)su16_dp_sw_factor[DP1]/100.0;
+			
+			ReadEEPROMData((DP_OFFSET_ADDR),(uint8_t*)&su16_dp_offset[DP1],sizeof(su16_dp_offset[DP1]));
+			if((su16_dp_offset[DP1]<-10000) || (su16_dp_offset[DP1]>10000))
+			{
+				su16_dp_offset[DP1]=0;
+				WriteEEPROMData((DP_OFFSET_ADDR),(uint8_t*)&su16_dp_offset[DP1],sizeof(su16_dp_offset[DP1]));
+			}
+			f32_dp_offset[DP1]=(float)su16_dp_offset[DP1]/100.0;
+			
+			ReadEEPROMData((DP_LIMIT_ADDR+(DP1*2)),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
+			if((u16_dp_limit[DP1]<500) || (u16_dp_limit[DP1]>9990))
+			{
+				u16_dp_limit[DP1]=2500;
+				WriteEEPROMData((DP_LIMIT_ADDR+(DP1*2)),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
+			}
+			f32_dp_limit[DP1]=(float)u16_dp_limit[DP1]/10.0;
 		}
-		
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(gu16_parameterWord & ENABLE_DP2)
 		{
 			//DPressure2 Parameter -----------------------------------------------------
-			ReadEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],2);
+			ReadEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],sizeof(DP_Upper_Alm_ON[DP2]));
 			if((DP_Upper_Alm_ON[DP2]<(DEFAUT_DP2_MAX*10)) || (DP_Upper_Alm_ON[DP2]>(DEFAUT_DP2_MIN*10)))
 			{
 				DP_Upper_Alm_ON[DP2]=DEFAULT_DP2_UPPER_ALM_ON;
-				WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],2);
+				WriteEEPROMData(DP2_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP2],sizeof(DP_Upper_Alm_ON[DP2]));
 			}
 		
-			ReadEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],2);
+			ReadEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],sizeof(DP_Upper_Alm_OFF[DP2]));
 			if((DP_Upper_Alm_OFF[DP2]<(DEFAUT_DP2_MAX*10)) || (DP_Upper_Alm_OFF[DP2]>(DEFAUT_DP2_MIN*10)))
 			{
 				DP_Upper_Alm_OFF[DP2]=DEFAULT_DP2_UPPER_ALM_OFF;
-				WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],2);
+				WriteEEPROMData(DP2_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP2],sizeof(DP_Upper_Alm_OFF[DP2]));
 			}
 		
-			ReadEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],2);
+			ReadEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],sizeof(DP_Lower_Alm_ON[DP2]));
 			if((DP_Lower_Alm_ON[DP2]<(DEFAUT_DP2_MAX*10)) || (DP_Lower_Alm_ON[DP2]>(DEFAUT_DP2_MIN*10)))
 			{
 				DP_Lower_Alm_ON[DP2]=DEFAULT_DP2_LOWER_ALM_ON;
-				WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],2);
+				WriteEEPROMData(DP2_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP2],sizeof(DP_Lower_Alm_ON[DP2]));
 			}
 		
-			ReadEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],2);
+			ReadEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],sizeof(DP_Lower_Alm_OFF[DP2]));
 			if((DP_Lower_Alm_OFF[DP2]<(DEFAUT_DP2_MAX*10)) || (DP_Lower_Alm_OFF[DP2]>(DEFAUT_DP2_MIN*10)))
 			{
 				DP_Lower_Alm_OFF[DP2]=DEFAULT_DP2_LOWER_ALM_OFF;
-				WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],2);
+				WriteEEPROMData(DP2_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP2],sizeof(DP_Lower_Alm_OFF[DP2]));
 			}
 			
-			ReadEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2],2);
+			ReadEEPROMData(DP2_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP2],sizeof(DP_Cal_Value_F[DP2]));
 			//if((DP_Cal_Value_F[DP2]<(DEFAUT_DP2_MAX*10.0)) || (DP_Cal_Value_F[DP2]>(DEFAUT_DP2_MIN*10.0)))
 			//{
 				//DP_Cal_Value_F[DP2]=0;
@@ -8430,82 +10565,106 @@ void boot_data(void)
 			//}
 			DP_Cal_float_Value_F[DP2] = (float)DP_Cal_Value_F[DP2]/10.0;
 			
-			ReadEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],2);
+			ReadEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
 			//if((DP_Cal_Value_C[DP2]<(DEFAUT_DP2_MAX*10.0)) || (DP_Cal_Value_C[DP2]>(DEFAUT_DP2_MIN*10.0)))
 			//{
 				//DP_Cal_Value_C[DP2]=0;
 				//WriteEEPROMData(DP2_CAL_VAL_C_ADDR,DP_Cal_Value_C[DP2]);
 			//}
 			DP_Cal_float_Value_C[DP2] = (float)DP_Cal_Value_C[DP2]/10.0;
-			
-			//ReadEEPROMData(DP2_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP2],2);
-			//if((DP_Cal_Count[DP2]<-500) || (DP_Cal_Count[DP2]>500))
-			//{
-				//DP_Cal_Count[DP2]=0;
-				//WriteEEPROMData(DP2_CAL_CNT,DP_Cal_Count[DP2]);
-			//}
-		//
-			//ReadEEPROMData(DP2_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP2],2);
-			//if((DP_Cal_Count_C[DP2]<-500) || (DP_Cal_Count_C[DP2]>500))
-			//{
-				//DP_Cal_Count_C[DP2]=0;
-				//WriteEEPROMData(DP2_CAL_CNT_C,DP_Cal_Count_C[DP2]);
-			//}
 		
-			ReadEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],4);
+			ReadEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],sizeof(DP_Max[DP2]));
 			if(DP_Max[DP2]<DEFAUT_DP2_MAX)
 			{
 				DP_Max[DP2] = DEFAUT_DP2_MAX;
-				WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],4);
+				WriteEEPROMData(DP2_MAXIMUM,(uint8_t*)&DP_Max[DP2],sizeof(DP_Max[DP2]));
 			}
 		
-			ReadEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],4);
+			ReadEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],sizeof(DP_Min[DP2]));
 			if(DP_Min[DP2]>DEFAUT_DP2_MIN)
 			{
 				DP_Min[DP2] = DEFAUT_DP2_MIN;
-				WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],4);
+				WriteEEPROMData(DP2_MINIMUM,(uint8_t*)&DP_Min[DP2],sizeof(DP_Min[DP2]));
 			}
 			
-			ReadEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],1);
+			ReadEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],sizeof(LastDP_Alrm_ON[DP2]));
 			if(LastDP_Alrm_ON[DP2]>2)
 			{
 				LastDP_Alrm_ON[DP2]=0;
 				WriteEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],sizeof(LastDP_Alrm_ON[DP2]));
 			}
+			
+			ReadEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],sizeof(gu8_DpAlarmSensingTime[DP2]));
+			if(gu8_DpAlarmSensingTime[DP2] > 250)
+			{
+				gu8_DpAlarmSensingTime[DP2]=5;
+				WriteEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],sizeof(gu8_DpAlarmSensingTime[DP2]));
+			}
+			
+			ReadEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
+			if(DP_UserCalDateInd[DP2]>15)
+			{
+				DP_UserCalDateInd[DP2]=0;
+				WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
+			}
+			
+			ReadEEPROMData((DP_SW_FACT_ADDR+(DP2*2)),(uint8_t*)&su16_dp_sw_factor[DP2],sizeof(su16_dp_sw_factor[DP2]));
+			if((su16_dp_sw_factor[DP2]<-10000) || (su16_dp_sw_factor[DP2]>10000))
+			{	
+				su16_dp_sw_factor[DP2]=0;
+				WriteEEPROMData((DP_SW_FACT_ADDR+(DP2*2)),(uint8_t*)&su16_dp_sw_factor[DP2],sizeof(su16_dp_sw_factor[DP2]));
+			}
+			f32_dp_sw_factor[DP2]=(float)su16_dp_sw_factor[DP2]/100.0;
+			
+			ReadEEPROMData((DP_OFFSET_ADDR+2),(uint8_t*)&su16_dp_offset[DP2],sizeof(su16_dp_offset[DP2]));
+			if((su16_dp_offset[DP2]<-10000) || (su16_dp_offset[DP2]>10000))
+			{
+				su16_dp_offset[DP2]=0;
+				WriteEEPROMData((DP_OFFSET_ADDR+2),(uint8_t*)&su16_dp_offset[DP2],sizeof(su16_dp_offset[DP2]));
+			}
+			f32_dp_offset[DP2]=(float)su16_dp_offset[DP2]/100.0;
+			
+			ReadEEPROMData((DP_LIMIT_ADDR+(DP2*2)),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
+			if((u16_dp_limit[DP2]<500) || (u16_dp_limit[DP2]>9990))
+			{
+				u16_dp_limit[DP2]=2500;
+				WriteEEPROMData((DP_LIMIT_ADDR+(DP2*2)),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
+			}
+			f32_dp_limit[DP2]=(float)u16_dp_limit[DP2]/10.0;
 		}
 		
 		if(gu16_parameterWord & ENABLE_DP3)
 		{
-			//DPressure2 Parameter -----------------------------------------------------
-			ReadEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],2);
+			//DPressure3 Parameter -----------------------------------------------------
+			ReadEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],sizeof(DP_Upper_Alm_ON[DP3]));
 			if((DP_Upper_Alm_ON[DP3]<(DEFAUT_DP3_MAX*10)) || (DP_Upper_Alm_ON[DP3]>(DEFAUT_DP3_MIN*10)))
 			{
 				DP_Upper_Alm_ON[DP3]=DEFAULT_DP3_UPPER_ALM_ON;
-				WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],2);
+				WriteEEPROMData(DP3_UP_ALM_ON,(uint8_t*)&DP_Upper_Alm_ON[DP3],sizeof(DP_Upper_Alm_ON[DP3]));
 			}
 		
-			ReadEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],2);
+			ReadEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],sizeof(DP_Upper_Alm_OFF[DP3]));
 			if((DP_Upper_Alm_OFF[DP3]<(DEFAUT_DP3_MAX*10)) || (DP_Upper_Alm_OFF[DP3]>(DEFAUT_DP3_MIN*10)))
 			{
 				DP_Upper_Alm_OFF[DP3]=DEFAULT_DP3_UPPER_ALM_OFF;
-				WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],2);
+				WriteEEPROMData(DP3_UP_ALM_OFF,(uint8_t*)&DP_Upper_Alm_OFF[DP3],sizeof(DP_Upper_Alm_OFF[DP3]));
 			}
 		
-			ReadEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],2);
+			ReadEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],sizeof(DP_Lower_Alm_ON[DP3]));
 			if((DP_Lower_Alm_ON[DP3]<(DEFAUT_DP3_MAX*10)) || (DP_Lower_Alm_ON[DP3]>(DEFAUT_DP3_MIN*10)))
 			{
 				DP_Lower_Alm_ON[DP3]=DEFAULT_DP3_LOWER_ALM_ON;
-				WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],2);
+				WriteEEPROMData(DP3_LO_ALM_ON,(uint8_t*)&DP_Lower_Alm_ON[DP3],sizeof(DP_Lower_Alm_ON[DP3]));
 			}
 		
-			ReadEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],2);
+			ReadEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],sizeof(DP_Lower_Alm_OFF[DP3]));
 			if((DP_Lower_Alm_OFF[DP3]<(DEFAUT_DP3_MAX*10)) || (DP_Lower_Alm_OFF[DP3]>(DEFAUT_DP3_MIN*10)))
 			{
 				DP_Lower_Alm_OFF[DP3]=DEFAULT_DP3_LOWER_ALM_OFF;
-				WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],2);
+				WriteEEPROMData(DP3_LO_ALM_OFF,(uint8_t*)&DP_Lower_Alm_OFF[DP3],sizeof(DP_Lower_Alm_OFF[DP3]));
 			}
 			
-			ReadEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3],2);
+			ReadEEPROMData(DP3_CAL_VAL_F_ADDR,(uint8_t*)&DP_Cal_Value_F[DP3],sizeof(DP_Cal_Value_F[DP3]));
 			//if((DP_Cal_Value_F[DP3]<(DEFAUT_DP3_MAX*10.0)) || (DP_Cal_Value_F[DP3]>(DEFAUT_DP3_MIN*10.0)))
 			//{
 				//DP_Cal_Value_F[DP3]=0;
@@ -8513,89 +10672,307 @@ void boot_data(void)
 			//}
 			DP_Cal_float_Value_F[DP3] = (float)DP_Cal_Value_F[DP3]/10.0;
 			
-			ReadEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
+			ReadEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
 			//if((DP_Cal_Value_C[DP3]<(DEFAUT_DP3_MAX*10.0)) || (DP_Cal_Value_C[DP3]>(DEFAUT_DP3_MIN*10.0)))
 			//{
 				//DP_Cal_Value_C[DP3]=0;
 				//WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],2);
 			//}
 			DP_Cal_float_Value_C[DP3] = (float)DP_Cal_Value_C[DP3]/10.0;
-			
-			//ReadEEPROMData(DP3_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP3],2);
-			//if((DP_Cal_Count[DP3]<-500) || (DP_Cal_Count[DP3]>500))
-			//{
-				//DP_Cal_Count[DP3]=0;
-				//WriteEEPROMData(DP3_CAL_CNT,(uint8_t*)&DP_Cal_Count[DP3],2);
-			//}
-		//
-			//ReadEEPROMData(DP3_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP3],2);
-			//if((DP_Cal_Count_C[DP3]<-500) || (DP_Cal_Count_C[DP3]>500))
-			//{
-				//DP_Cal_Count_C[DP3]=0;
-				//WriteEEPROMData(DP3_CAL_CNT_C,(uint8_t*)&DP_Cal_Count_C[DP3],2);
-			//}
 		
-			ReadEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],4);
+			ReadEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],sizeof(DP_Max[DP3]));
 			if(DP_Max[DP3]<DEFAUT_DP3_MAX)
 			{
 				DP_Max[DP3] = DEFAUT_DP3_MAX;
-				WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],4);
+				WriteEEPROMData(DP3_MAXIMUM,(uint8_t*)&DP_Max[DP3],sizeof(DP_Max[DP3]));
 			}
 		
-			ReadEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],4);
+			ReadEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],sizeof(DP_Min[DP3]));
 			if(DP_Min[DP3]>DEFAUT_DP3_MIN)
 			{
 				DP_Min[DP3] = DEFAUT_DP3_MIN;
-				WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],4);
+				WriteEEPROMData(DP3_MINIMUM,(uint8_t*)&DP_Min[DP3],sizeof(DP_Min[DP3]));
 			}
 			
-			ReadEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],1);
+			ReadEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
 			if(LastDP_Alrm_ON[DP3]>2)
 			{
 				LastDP_Alrm_ON[DP3]=0;
 				WriteEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
 			}
+			
+			ReadEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
+			if(gu8_DpAlarmSensingTime[DP3] > 250)
+			{
+				gu8_DpAlarmSensingTime[DP3]=5;
+				WriteEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
+			}
+			
+			ReadEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
+			if(DP_UserCalDateInd[DP3]>15)
+			{
+				DP_UserCalDateInd[DP3]=0;
+				WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
+			}
+			
+			ReadEEPROMData((DP_SW_FACT_ADDR+(DP3*2)),(uint8_t*)&su16_dp_sw_factor[DP3],sizeof(su16_dp_sw_factor[DP3]));
+			if((su16_dp_sw_factor[DP3]<-10000) || (su16_dp_sw_factor[DP3]>10000))
+			{	
+				su16_dp_sw_factor[DP3]=0;
+				WriteEEPROMData((DP_SW_FACT_ADDR+(DP3*2)),(uint8_t*)&su16_dp_sw_factor[DP3],sizeof(su16_dp_sw_factor[DP3]));
+			}
+			f32_dp_sw_factor[DP3]=(float)su16_dp_sw_factor[DP3]/100.0;
+			
+			ReadEEPROMData((DP_OFFSET_ADDR+4),(uint8_t*)&su16_dp_offset[DP3],sizeof(su16_dp_offset[DP3]));
+			if((su16_dp_offset[DP3]<-10000) || (su16_dp_offset[DP3]>10000))
+			{
+				su16_dp_offset[DP3]=0;
+				WriteEEPROMData((DP_OFFSET_ADDR+4),(uint8_t*)&su16_dp_offset[DP3],sizeof(su16_dp_offset[DP3]));
+			}
+			f32_dp_offset[DP3]=(float)su16_dp_offset[DP3]/100.0;
+			
+			ReadEEPROMData((DP_LIMIT_ADDR+(DP3*2)),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
+			if((u16_dp_limit[DP3]<500) || (u16_dp_limit[DP3]>9990))
+			{
+				u16_dp_limit[DP3]=2500;
+				WriteEEPROMData((DP_LIMIT_ADDR+(DP3*2)),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
+			}
+			f32_dp_limit[DP3]=(float)u16_dp_limit[DP3]/10.0;
+		}
+		#else
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{
+			//Temperature Parameter -----------------------------------------------------
+			ReadEEPROMData(TEMP_UNIT,(uint8_t*)&TM_Unit,sizeof(TM_Unit));
+			if(TM_Unit>1)
+			{
+				TM_Unit=0;
+				WriteEEPROMData(TEMP_UNIT,(uint8_t*)&TM_Unit,sizeof(TM_Unit));
+			}
+			
+			ReadEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
+			//if((TM_Cal_Value_F<(DEFAUT_TEMP_C_MAX*10.0)) || (TM_Cal_Value_F>(DEFAUT_TEMP_C_MIN*10.0)))
+			//{
+				//TM_Cal_Value_F=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
+			//}
+			
+			ReadEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
+			//if((TM_Cal_Value_C<(DEFAUT_TEMP_C_MAX*10.0)) || (TM_Cal_Value_C>(DEFAUT_TEMP_C_MIN*10.0)))
+			//{
+				//TM_Cal_Value_C=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
+			//}
+			
+			ReadEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+			ReadEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+			ReadEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+			ReadEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+		
+			if(!TM_Unit)
+			{
+				if((TM_Upper_Alm_ON<(DEFAUT_TEMP_C_MAX*10)) || (TM_Upper_Alm_ON>(DEFAUT_TEMP_C_MIN*10)))
+				{
+					TM_Upper_Alm_ON=DEFAULT_TM_C_UPPER_ALM_ON;
+					WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+				}
+			
+				if((TM_Upper_Alm_OFF<(DEFAUT_TEMP_C_MAX*10)) || (TM_Upper_Alm_OFF>(DEFAUT_TEMP_C_MIN*10)))
+				{
+					TM_Upper_Alm_OFF=DEFAULT_TM_C_UPPER_ALM_OFF;
+					WriteEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+				}
+			
+				if((TM_Lower_Alm_ON<(DEFAUT_TEMP_C_MAX*10)) || (TM_Lower_Alm_ON>(DEFAUT_TEMP_C_MIN*10)))
+				{
+					TM_Lower_Alm_ON=DEFAULT_TM_C_LOWER_ALM_ON;
+					WriteEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+				}
+			
+				if((TM_Lower_Alm_OFF<(DEFAUT_TEMP_C_MAX*10)) || (TM_Lower_Alm_OFF>(DEFAUT_TEMP_C_MIN*10)))
+				{
+					TM_Lower_Alm_OFF=DEFAULT_TM_C_LOWER_ALM_OFF;
+					WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+				}
+			}
+			else
+			{
+				if((TM_Upper_Alm_ON<(DEFAUT_TEMP_F_MAX*10)) || (TM_Upper_Alm_ON>(DEFAUT_TEMP_F_MIN*10)))
+				{
+					TM_Upper_Alm_ON=DEFAULT_TM_F_UPPER_ALM_ON;
+					WriteEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
+				}
+			
+				if((TM_Upper_Alm_OFF<(DEFAUT_TEMP_F_MAX*10)) || (TM_Upper_Alm_OFF>(DEFAUT_TEMP_F_MIN*10)))
+				{
+					TM_Upper_Alm_OFF=DEFAULT_TM_F_UPPER_ALM_OFF;
+					WriteEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
+				}
+			
+				if((TM_Lower_Alm_ON<(DEFAUT_TEMP_F_MAX*10)) || (TM_Lower_Alm_ON>(DEFAUT_TEMP_F_MIN*10)))
+				{
+					TM_Lower_Alm_ON=DEFAULT_TM_F_LOWER_ALM_ON;
+					WriteEEPROMData(TEMP_LO_ALM_ON,(uint8_t*)&TM_Lower_Alm_ON,sizeof(TM_Lower_Alm_ON));
+				}
+			
+				if((TM_Lower_Alm_OFF<(DEFAUT_TEMP_F_MAX*10)) || (TM_Lower_Alm_OFF>(DEFAUT_TEMP_F_MIN*10)))
+				{
+					TM_Lower_Alm_OFF=DEFAULT_TM_F_LOWER_ALM_OFF;
+					WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
+				}
+				
+				TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 32.0;
+				TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 32.0;
+			}
+		
+			TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+			TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+				
+			//TM_Cal_Count  = eeprom_read_word ((unsigned int*)TEMP_CAL_CNT);
+			//if((TM_Cal_Count<-1000) || (TM_Cal_Count>1000))
+			//{
+				//TM_Cal_Count=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
+			//}
+		//
+			//TM_Cal_Count_C  = eeprom_read_word ((unsigned int*)TEMP_CAL_CNT_C);
+			//if((TM_Cal_Count_C<-1000) || (TM_Cal_Count_C>1000))
+			//{
+				//TM_Cal_Count_C=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
+			//}
+			
+			ReadEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
+			if(TM_Max<DEFAUT_TEMP_C_MAX)
+			{
+				TM_Max = DEFAUT_TEMP_C_MAX;
+				WriteEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
+			}
+		
+			ReadEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
+			if(TM_Min>DEFAUT_TEMP_C_MIN)
+			{
+				TM_Min = DEFAUT_TEMP_C_MIN;
+				WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
+			}
+			
+			ReadEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+			if(LastTM_Alrm_ON>2)
+			{
+				LastTM_Alrm_ON=0;
+				WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+			}
+			
+			ReadEEPROMData(TM_USER_CAL_DATE_IND_ADDR,&TM_UserCalDateInd,sizeof(TM_UserCalDateInd));
+			if(TM_UserCalDateInd>15)
+			{
+				TM_UserCalDateInd=0;
+				WriteEEPROMData(TM_USER_CAL_DATE_IND_ADDR,&TM_UserCalDateInd,sizeof(TM_UserCalDateInd));
+			}
 		}
 		
-		ReadEEPROMData(RELAY_STAT_ADDR,&gu8_rly_stat,1);
+		if(gu16_parameterWord & ENABLE_RH)
+		{
+			//RHumidity Parameter -----------------------------------------------------
+			ReadEEPROMData(RH_UP_ALM_ON,(uint8_t*)&RH_Upper_Alm_ON,sizeof(RH_Upper_Alm_ON));
+			if(RH_Upper_Alm_ON>(DEFAUT_RH_MIN*10))
+			{
+				RH_Upper_Alm_ON=DEFAULT_RH_UPPER_ALM_ON;
+				WriteEEPROMData(RH_UP_ALM_ON,(uint8_t*)&RH_Upper_Alm_ON,sizeof(RH_Upper_Alm_ON));
+			}
 		
-		ReadEEPROMData(BROADCAST_ENB_ADDR,&gu8_broadcast,1);
+			ReadEEPROMData(RH_UP_ALM_OFF,(uint8_t*)&RH_Upper_Alm_OFF,sizeof(RH_Upper_Alm_OFF));
+			if(RH_Upper_Alm_OFF>(DEFAUT_RH_MIN*10))
+			{
+				RH_Upper_Alm_OFF=DEFAULT_RH_UPPER_ALM_OFF;
+				WriteEEPROMData(RH_UP_ALM_OFF,(uint8_t*)&RH_Upper_Alm_OFF,sizeof(RH_Upper_Alm_OFF));
+			}
+		
+			ReadEEPROMData(RH_LO_ALM_ON,(uint8_t*)&RH_Lower_Alm_ON,sizeof(RH_Lower_Alm_ON));
+			if(RH_Lower_Alm_ON>(DEFAUT_RH_MIN*10))
+			{
+				RH_Lower_Alm_ON=DEFAULT_RH_LOWER_ALM_ON;
+				WriteEEPROMData(RH_LO_ALM_ON,(uint8_t*)&RH_Lower_Alm_ON,sizeof(RH_Lower_Alm_ON));
+			}
+		
+			ReadEEPROMData(RH_LO_ALM_OFF,(uint8_t*)&RH_Lower_Alm_OFF,sizeof(RH_Lower_Alm_OFF));
+			if(RH_Lower_Alm_OFF>(DEFAUT_RH_MIN*10))
+			{
+				RH_Lower_Alm_OFF=DEFAULT_RH_LOWER_ALM_OFF;
+				WriteEEPROMData(RH_LO_ALM_OFF,(uint8_t*)&RH_Lower_Alm_OFF,sizeof(RH_Lower_Alm_OFF));
+			}
+		
+			ReadEEPROMData(RH_CAL_VAL_F_ADDR,(uint8_t*)&RH_Cal_Value_F,sizeof(RH_Cal_Value_F));
+			//if((RH_Cal_Value_F<(-DEFAUT_RH_MIN*10.0)) || (RH_Cal_Value_F>(DEFAUT_RH_MIN*10.0)))
+			//{
+				//RH_Cal_Value_F=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
+			//}
+			RH_Cal_float_Value_F = (float)RH_Cal_Value_F/10.0;
+			
+			ReadEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,sizeof(RH_Cal_Value_C));
+			//if((RH_Cal_Value_C<(DEFAUT_RH_MAX*10.0)) || (RH_Cal_Value_C>(DEFAUT_RH_MIN*10.0)))
+			//{
+				//RH_Cal_Value_C=0;
+				//WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,2);
+			//}
+			RH_Cal_float_Value_C = (float)RH_Cal_Value_C/10.0;
+			
+			//RH_Cal_Count  = eeprom_read_word ((unsigned int*)RH_CAL_CNT);
+			//if((RH_Cal_Count<-1500) || (RH_Cal_Count>1500))
+			//{
+				//RH_Cal_Count=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT,RH_Cal_Count);
+			//}
+		//
+			//RH_Cal_Count_C  = eeprom_read_word ((unsigned int*)RH_CAL_CNT_C);
+			//if((RH_Cal_Count_C<-1500) || (RH_Cal_Count_C>1500))
+			//{
+				//RH_Cal_Count_C=0;
+				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT_C,RH_Cal_Count_C);
+			//}
+		
+			ReadEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
+			if(RH_Max<DEFAUT_RH_MAX)
+			{
+				RH_Max = DEFAUT_RH_MAX;
+				WriteEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
+			}
+		
+			ReadEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
+			if(RH_Min>DEFAUT_RH_MIN)
+			{
+				RH_Min = DEFAUT_RH_MIN;
+				WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
+			}
+			
+			ReadEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+			if(LastRH_Alrm_ON>2)
+			{
+				LastRH_Alrm_ON=0;
+				WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+			}
+			
+			ReadEEPROMData(RH_USER_CAL_DATE_IND_ADDR,&RH_UserCalDateInd,sizeof(RH_UserCalDateInd));
+			if(RH_UserCalDateInd>15)
+			{
+				RH_UserCalDateInd=0;
+				WriteEEPROMData(RH_USER_CAL_DATE_IND_ADDR,&RH_UserCalDateInd,sizeof(RH_UserCalDateInd));
+			}
+		}
+		#endif
+		
+		ReadEEPROMData(RELAY_STAT_ADDR,&gu8_rly_stat,sizeof(gu8_rly_stat));
+		
+		ReadEEPROMData(BROADCAST_ENB_ADDR,&gu8_broadcast,sizeof(gu8_broadcast));
 		if(gu8_broadcast>1)
 		{	
 			gu8_broadcast=0;
 			WriteEEPROMData(BROADCAST_ENB_ADDR,&gu8_broadcast,sizeof(gu8_broadcast));
 		}
 		
-		
-		for(uint8_t i=0; i<MAX_SUPPORTED_DP; i++)
-		{
-			ReadEEPROMData((DP_SW_FACT_ADDR+(i*2)),(uint8_t*)&su16_dp_sw_factor[i],2);
-			if((su16_dp_sw_factor[i]<-10000) && (su16_dp_sw_factor[i]>10000))
-			{	
-				su16_dp_sw_factor[i]=0;
-				WriteEEPROMData((DP_SW_FACT_ADDR+(i*2)),(uint8_t*)&su16_dp_sw_factor[i],2);
-			}
-			f32_dp_sw_factor[i]=(float)su16_dp_sw_factor[i]/100.0;
-			
-			ReadEEPROMData((DP_OFFSET_ADDR+(i*2)),(uint8_t*)&su16_dp_offset[i],2);
-			if((su16_dp_offset[i]<-10000) || (su16_dp_offset[i]>10000))
-			{
-				su16_dp_offset[i]=0;
-				WriteEEPROMData((DP_OFFSET_ADDR+(i*2)),(uint8_t*)&su16_dp_offset[i],2);
-			}
-			f32_dp_offset[i]=(float)su16_dp_offset[i]/100.0;
-			
-			ReadEEPROMData((DP_LIMIT_ADDR+(i*2)),(uint8_t*)&u16_dp_limit[i],2);
-			if((u16_dp_limit[i]<500) || (u16_dp_limit[i]>9990))
-			{
-				u16_dp_limit[i]=2500;
-				WriteEEPROMData((DP_LIMIT_ADDR+(i*2)),(uint8_t*)&u16_dp_limit[i],2);
-			}
-			f32_dp_limit[i]=(float)u16_dp_limit[i]/10.0;
-		}
-		
 		//RS485 Parameter -------------------------------------------
-		ReadEEPROMData(DEVICE_ID,&DeviceID,1);
+		ReadEEPROMData(DEVICE_ID,&DeviceID,sizeof(DeviceID));
 		if(DeviceID>250)
 		{
 			DeviceID=DEFAULT_DEVICE_ID;
@@ -8603,33 +10980,22 @@ void boot_data(void)
 		}
 		
 		//Buzzer Parameter -------------------------------------------
-		ReadEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,2);
+		ReadEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,sizeof(Buzzer_ON_Time));
 		if(Buzzer_ON_Time>60)
 		{
 			Buzzer_ON_Time=0;
-			WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,2);
+			WriteEEPROMData(BUZZER_ON_TIME,(uint8_t*)&Buzzer_ON_Time,sizeof(Buzzer_ON_Time));
 		}
 		
-		ReadEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,2);
+		ReadEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 		if(Buzzer_OFF_Time>960)
 		{
 			Buzzer_OFF_Time=0;
-			WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,2);
+			WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 		}
-		
-		if(gu16_parameterWord & ENABLE_LOG)
-		{
-			//Data Logging Parameter -------------------------------------------
-			ReadEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,2);
-			if((LogInterval<MIN_LOG_INTERVAL) || (LogInterval>MAX_LOG_INTERVAL))
-			{
-				LogInterval=DEFAULT_LOG_INTERVAL;
-				WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,2);
-			}
-		}
-		
+
 		//UART Parameter -------------------------------------------
-		ReadEEPROMData(UART_BAUDRATE,&UART_BaudRate,1);
+		ReadEEPROMData(UART_BAUDRATE,&UART_BaudRate,sizeof(UART_BaudRate));
 		if((UART_BaudRate<3) || (UART_BaudRate>9))
 		{
 			UART_BaudRate=DEFAULT_UART_BAUDRATE;
@@ -8637,30 +11003,30 @@ void boot_data(void)
 		}
 		
 		//Customer Password -------------------------------------------
-		ReadEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,2);
+		ReadEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,sizeof(CustPassword));
 		if(CustPassword>999)
 		{
 			CustPassword=DEFAULT_CUSTOMER_PWD;
-			WriteEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,2);
+			WriteEEPROMData(CUSTOMER_PASSWORD,(uint8_t*)&CustPassword,sizeof(CustPassword));
 		}
 		
 		//Factory Customer Password -------------------------------------------
-		ReadEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,2);
+		ReadEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,sizeof(FactCustPassword));
 		if(FactCustPassword>9999)
 		{
 			FactCustPassword=DEFAULT_FACTORY_PWD;
-			WriteEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,2);
+			WriteEEPROMData(FAC_CUSTOMER_PASSWORD,(uint8_t*)&FactCustPassword,sizeof(FactCustPassword));
 		}
 		
 		//Acknowledge Parameter -------------------------------------------
-		ReadEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,2);
+		ReadEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,sizeof(AckTimer));
 		if(AckTimer>1440)
 		{
 			AckTimer=0;
-			WriteEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,2);
+			WriteEEPROMData(ACK_TIMER,(uint8_t*)&AckTimer,sizeof(AckTimer));
 		}
 		
-		ReadEEPROMData(ACK_PWD_IND,&AckPwdInd,1);
+		ReadEEPROMData(ACK_PWD_IND,&AckPwdInd,sizeof(AckPwdInd));
 		if(AckPwdInd>NO_OF_ACKPWD)
 		{
 			AckPwdInd=0;
@@ -8669,11 +11035,11 @@ void boot_data(void)
 		
 		for(uint8_t i=0;i<NO_OF_ACKPWD;i++)
 		{
-			ReadEEPROMData((ACK_PASSWORD+(i*2)),(uint8_t*)&AckPwd[i],2);
+			ReadEEPROMData((ACK_PASSWORD+(i*2)),(uint8_t*)&AckPwd[i],sizeof(AckPwd[i]));
 			if(AckPwd[i]>999)
 			{
 				AckPwd[i]=0;
-				WriteEEPROMData((ACK_PASSWORD+(i*2)),(uint8_t*)&AckPwd[i],2);
+				WriteEEPROMData((ACK_PASSWORD+(i*2)),(uint8_t*)&AckPwd[i],sizeof(AckPwd[i]));
 			}
 		}
 		
@@ -8690,39 +11056,50 @@ void boot_data(void)
 		
 		//Data Logging Parameter -------------------------------------------	
 		
-		ReadEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,2);
-		if(CurrentLogIndReadLoc>=100)
+		if(gu16_parameterWord & ENABLE_LOG)
 		{
-			CurrentLogIndReadLoc=0;
-			WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,2);
-		}
+			//Data Logging Parameter -------------------------------------------
+			ReadEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
+			if((LogInterval<MIN_LOG_INTERVAL) || (LogInterval>MAX_LOG_INTERVAL))
+			{
+				LogInterval=DEFAULT_LOG_INTERVAL;
+				WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
+			}
 		
-		ReadEEPROMData(FLSH_OVF_IND,&FlashOVFByte,1);
-		if(FlashOVFByte>1)
-		{
-			FlashOVFByte=0;
-			WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
-		}
-		
-		ReadEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,4);
-		if(CurrentLogInd>=LAST_LOG_ADDR)
-		{
-			CurrentLogInd = 0;
-			WriteEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,4);
-		}
-		
-		ReadEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,1);
-		if(CurrentLog24IndReadLoc>=100)
-		{
-			CurrentLog24IndReadLoc = 0;
-			WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-		}
-		
-		ReadEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,2);
-		if(CurrentLog24Ind>=LAST_LOG24_ADDR)
-		{
-			CurrentLog24Ind = 0;
-			WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,2);
+			ReadEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+			if(CurrentLogIndReadLoc>=100)
+			{
+				CurrentLogIndReadLoc=0;
+				WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+			}
+			
+			ReadEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
+			if(FlashOVFByte>1)
+			{
+				FlashOVFByte=0;
+				WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
+			}
+			
+			ReadEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
+			if(CurrentLogInd>=LAST_LOG_ADDR)
+			{
+				CurrentLogInd = 0;
+				WriteEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
+			}
+			
+			ReadEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+			if(CurrentLog24IndReadLoc>=100)
+			{
+				CurrentLog24IndReadLoc = 0;
+				WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+			}
+			
+			ReadEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+			if(CurrentLog24Ind>=LAST_LOG24_ADDR)
+			{
+				CurrentLog24Ind = 0;
+				WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+			}
 		}
 	}
 	
@@ -8759,9 +11136,14 @@ void Init_variables(void)
 	DP_StartUpTimer=5;
 	bool_resetDevice=0;
 	
-	RS485_RX_ENB;
-	BUZZER_OFF;
-	XBEE_RST_HIGH;
+	bool_DPLog[DP1]=0;
+	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+	bool_DPLog[DP2]=0;
+	bool_DPLog[DP3]=0;
+	#else
+	bool_TMLog=0;
+	bool_RHLog=0;
+	#endif
 	
 	#ifndef DISABLE_DOOR_SENSING
 	if((!DOOR_SENSE && gu8_doorSensingPolarity) || (DOOR_SENSE && !gu8_doorSensingPolarity))
@@ -8773,12 +11155,11 @@ void Init_variables(void)
 		bool_doorStatus=CLOSE;
 	}	
 	#endif
-	
-//	SetMAC2Xbee(&gu8arr_XbeeMac[0][0],1);
 
-	Kalman_Init(&Kalman[0], 0.01, 0.1, 0.0);  // Initialize with default values
-	Kalman_Init(&Kalman[1], 0.01, 0.1, 0.0);  // Initialize with default values
-	Kalman_Init(&Kalman[2], 0.01, 0.1, 0.0);  // Initialize with default values
+	for(i=0;i<5;i++)
+	{
+		Kalman_Init(&Kalman[i], 0.01, 0.1, 0.0);  // Initialize with default values
+	}
 	
 	//-------------------------------------------------------
 	//POWER ON LOG
@@ -8871,7 +11252,7 @@ void Init_variables(void)
 							memcpy(&MinMaxMeanDayLogArr[12],(unsigned char*)&DP_Mean[DP1],4);
 							WriteLog(LAST_DP1_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
 						}
-				
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						//Find DP2 Mean Value from last 24 Hour and Store it ---------------------------------------------
 						if(gu16_parameterWord & ENABLE_DP2)
 						{
@@ -8911,7 +11292,47 @@ void Init_variables(void)
 							memcpy(&MinMaxMeanDayLogArr[12],(unsigned char*)&DP_Mean[DP3],4);
 							WriteLog(LAST_DP3_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
 						}
-				
+						#else
+						//Find TM Mean Value from last 24 Hour and Store it ---------------------------------------------
+						if(gu16_parameterWord & ENABLE_TEMP)
+						{
+							ReadMinMaxLog(TM_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+							TM_Mean=0;
+							a2=0;
+							for(a1=0;a1<TOTAL_MEAN_HOUR;a1++)
+							{
+								memcpy((unsigned char*)&tempfloat1,&Buffer1[a2],4);
+								a2 += 4;
+								TM_Mean += tempfloat1;
+							}
+							TM_Mean /= TOTAL_MEAN_HOUR;
+						
+							memcpy(&MinMaxMeanDayLogArr[4],(unsigned char*)&TM_Min,4);
+							memcpy(&MinMaxMeanDayLogArr[8],(unsigned char*)&TM_Max,4);
+							memcpy(&MinMaxMeanDayLogArr[12],(unsigned char*)&TM_Mean,4);
+							WriteLog(LAST_TM_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
+						}
+						
+						//Find RH Mean Value from last 24 Hour and Store it ---------------------------------------------
+						if(gu16_parameterWord & ENABLE_RH)
+						{
+							ReadMinMaxLog(RH_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+							RH_Mean=0;
+							a2=0;
+							for(a1=0;a1<TOTAL_MEAN_HOUR;a1++)
+							{
+								memcpy((unsigned char*)&tempfloat1,&Buffer1[a2],4);
+								a2 += 4;
+								RH_Mean += tempfloat1;
+							}
+							RH_Mean /= TOTAL_MEAN_HOUR;
+					
+							memcpy(&MinMaxMeanDayLogArr[4],(unsigned char*)&RH_Min,4);
+							memcpy(&MinMaxMeanDayLogArr[8],(unsigned char*)&RH_Max,4);
+							memcpy(&MinMaxMeanDayLogArr[12],(unsigned char*)&RH_Mean,4);
+							WriteLog(LAST_RH_MIN_MAX_OFFSET,MinMaxMeanDayLogInd,&MinMaxMeanDayLogArr[0],MIN_MAX_MEAN_LOG_SIZE);
+						}
+						#endif
 						//Clear all Hour mean value for next day
 						memset(Buffer1,0,100);
 						if(gu16_parameterWord & ENABLE_DP1)
@@ -8920,6 +11341,7 @@ void Init_variables(void)
 							HourDP_Mean[DP1]=0;
 							HrDPSampleInd[DP1]=0;
 						}
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						if(gu16_parameterWord & ENABLE_DP2)
 						{
 							WriteLog(DP2_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
@@ -8932,6 +11354,20 @@ void Init_variables(void)
 							HourDP_Mean[DP3]=0;
 							HrDPSampleInd[DP3]=0;
 						}
+						#else
+						if(gu16_parameterWord & ENABLE_TEMP)
+						{
+							WriteLog(TM_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+							HourTM_Mean=0;
+							HrTMSampleInd=0;
+						}
+						if(gu16_parameterWord & ENABLE_RH)
+						{
+							WriteLog(RH_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+							HourRH_Mean=0;
+							HrRHSampleInd=0;
+						}
+						#endif
 				
 						MinMaxMeanDayLogInd++;
 						if(MinMaxMeanDayLogInd>=TOTAL_MIN_MAX_MEAN_LOG) MinMaxMeanDayLogInd=0;
@@ -8955,7 +11391,7 @@ void Init_variables(void)
 						WriteEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
 					}
 				}
-		
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(gu16_parameterWord & ENABLE_DP2)
 				{
 					//Serve Watchdog Timer
@@ -8985,6 +11421,37 @@ void Init_variables(void)
 						WriteEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
 					}
 				}
+				#else
+				if(gu16_parameterWord & ENABLE_TEMP)
+				{
+					//Serve Watchdog Timer
+					IWDG_ReloadCounter();
+			
+					if(LastTM_Alrm_ON)
+					{
+						LogReading(TM_ALM_RESTORE_LOG,0,0xFFFF);
+						FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
+				
+						LastTM_Alrm_ON=NO_ALARM;
+						WriteEEPROMData(LAST_TM_ALRM_STAT,&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
+					}
+				}
+				
+				if(gu16_parameterWord & ENABLE_RH)
+				{
+					//Serve Watchdog Timer
+					IWDG_ReloadCounter();
+			
+					if(LastRH_Alrm_ON)
+					{
+						LogReading(RH_ALM_RESTORE_LOG,0,0xFFFF);
+						FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
+				
+						LastRH_Alrm_ON=NO_ALARM;
+						WriteEEPROMData(LAST_RH_ALRM_STAT,&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
+					}
+				}
+				#endif
 			}
 	
 			if(bool_resetMinMax)
@@ -8997,17 +11464,6 @@ void Init_variables(void)
 			}
 		}
 	}
-	
-	logTimer = LogInterval;
-	bool_brodcastEnb=0;	
-	logtransfer=0;
-	bool_logtransferStart=0;
-	DP_StartUpTimer=5;
-	bool_resetDevice=0;
-	
-	RS485_RX_ENB;
-	BUZZER_OFF;
-	XBEE_RST_HIGH;
 }
 
 /***********************************************************************************************************************

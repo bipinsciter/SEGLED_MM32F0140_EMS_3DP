@@ -1,14 +1,10 @@
 #ifndef _SHT25_H
 #define _SHT25_H
 
-#include <avr/io.h>
-#include <util/delay.h>
+#include "hal_conf.h"
 
 //  CRC
 #define POLYNOMIAL  0x131  //P(x)=x^8+x^5+x^4+1 = 100110001
-
-#define ACK							1
-#define NO_ACK						0
 
 // Error codes
 #define ACK_ERROR					0x01
@@ -44,7 +40,6 @@
 #define HUMIDITY		0x00
 #define TEMP			0x01
 
-
 #define SHT25_I2C_WRITE		128		// sensor I2C address + write bit
 #define SHT25_I2C_READ		129		// sensor I2C address + read bit
 
@@ -58,32 +53,6 @@ typedef union
 		unsigned char u8H;              // element specifier for accessing high u8
 	} s16;                  // element spec. for acc. struct with low or high u8
 } nt16;
-
-typedef union
-{
-	unsigned long u32;               // element specifier for accessing whole u32
-	signed long i32;               // element specifier for accessing whole i32
-	struct
-	{
-		unsigned short u16L;            // element specifier for accessing low u16
-		unsigned short u16H;            // element specifier for accessing high u16
-	} s32;                  // element spec. for acc. struct with low or high u16
-} nt32;
-
-
-
-
-unsigned char userRegister;           //variable for user register
-unsigned char endOfBattery;           //variable for end of battery
-nt16 sRH;                    //variable for raw humidity ticks
-nt16 sT;                     //variable for raw temperature ticks
-float humidityRH;            //variable for relative humidity[%RH] as float
-float temperatureC,temperatureF;          //variable for temperature[°C] as float
-unsigned char  SerialNumber_SHT2x[8];  //64bit serial number
-
-extern unsigned char clkmode;
-
-void Read_SHT25(void);
 
 //==============================================================================
 unsigned char SHT2x_CheckCrc(unsigned char data[], unsigned char nbrOfBytes, unsigned char checksum);

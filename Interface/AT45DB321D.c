@@ -235,7 +235,7 @@ void ReadLog(uint32_t LogInd,uint8_t *buffer,uint16_t bytes)
 {
 	uint32_t Address=0;
 	
-	Address = LogInd * LOG_SIZE;
+	Address = REGULAR_LOG_ADDR + (LogInd * LOG_SIZE);
 	
 	//AT45D_ResumeFromPowerDown();
 	

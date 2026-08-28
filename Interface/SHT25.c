@@ -93,7 +93,7 @@ unsigned char SHT2x_MeasureHM(unsigned char eSHT2xMeasureType, nt16 *pMeasurand)
 	SCL3_DIR_IN;                     // set SCL I/O port as input
 	for(i=0; i<1000; i++)         // wait until master hold is released or
 	{ 
-		PLATFORM_DelayMS(1000);    // a timeout (~1s) is reached
+		PLATFORM_DelayMS(1);    // a timeout (~1s) is reached
 		
 		if (SCL3_SENSE==1) break;
 	}
