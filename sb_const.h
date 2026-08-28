@@ -4,14 +4,14 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	0
+#define FW_PATCH	1
 
 #define ENABLE_KEY_LOGIC
 
 #define DP1_DP2_DP3_MODE	0
 #define DP1_TEMP_RH_MODE	1
 
-#define DEVICE_MODE			DP1_TEMP_RH_MODE
+#define DEVICE_MODE			DP1_DP2_DP3_MODE
 
 #define ENABLE_DP1			0x0001
 #define ENABLE_DP2			0x0002
@@ -57,6 +57,7 @@
 #define RH_TEMP_FAULTY		0x08
 #define DP2_FAULTY			0x10
 #define DP3_FAULTY			0x20
+#define RTC_INVALID			0x40	//RTC integrity lost - timestamps not trustworthy
 //-------------------------------------------------
 #define DP1UAOFF_ID			0x01
 #define DP1UAON_ID			0x02
@@ -437,12 +438,15 @@
 //DATA LOG ADDRESS IN DATA FLASH -----------------------------------------------------
 #define CONFIG_PARA_ADDR 		0
 #define REGULAR_LOG_ADDR 		(CONFIG_PARA_ADDR+2048)
-#define LAST_LOG_ADDR 			(REGULAR_LOG_ADDR+65000)
+// Regular log ring.  TOTAL_REGULAR_LOG is a RECORD COUNT (use it for log-index
+// wrap-around); LAST_LOG_ADDR is the BYTE address one past the end of the ring,
+// which is also the byte base of the 24-hour ring below.
+#define TOTAL_REGULAR_LOG		60000
+#define LAST_LOG24_ADDR_OFFSET	(REGULAR_LOG_ADDR+(TOTAL_REGULAR_LOG*LOG_SIZE))
 
 
 
 //MIN_MAX LOG ADDRESS IN DATA FLASH --------------------------------------------------
-#define LAST_LOG24_ADDR_OFFSET 		LAST_LOG_ADDR
 #define LAST_LOG24_ADDR 			1440
 
 #define TOTAL_MIN_MAX_MEAN_LOG		15

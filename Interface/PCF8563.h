@@ -10,6 +10,10 @@
 
 #define RTC_TIMEREG_START		2
 #define RTC_TIMESEC_REG		    2
+
+//Clock-integrity bits
+#define PCF8563_VL_BIT			0x80	//Seconds reg bit7: clock integrity NOT guaranteed
+#define PCF8563_STOP_BIT		0x20	//CNTRL1 reg bit5: oscillator halted
 #define RTC_TIMEMIN_REG		    3
 #define RTC_TIMEHOUR_REG		4
 

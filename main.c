@@ -157,6 +157,24 @@ void get_date_time(RTCData* t1,unsigned long epoch)
 	//t1->year += 2000;
 }
 
+//RTC integrity -------------------------------------------------------------------
+//Called whenever the clock is found untrustworthy.  Clears RTCSetFlag so that NO
+//logging path resumes until the time is explicitly set again, and latches the fault
+//in the reserved CORRUPT_RTC_IND_ADDR byte so it survives a reboot.
+static void InvalidateRTC(void)
+{
+	bool_rtcValid = 0;
+
+	if(RTCSetFlag)
+	{
+		uint8_t corruptInd = 1;
+
+		RTCSetFlag = 0;
+		WriteEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
+		WriteEEPROMData(CORRUPT_RTC_IND_ADDR,&corruptInd,sizeof(corruptInd));
+	}
+}
+
 void Check_RTC(void)
 {
 //	//---------------------------------------------------------------		
@@ -176,8 +194,19 @@ void Check_RTC(void)
 
 //	//---------------------------------------------------------------	
 	
+	uint8_t rtcHwFault = 0;
+	
 	RTC_data[0]=Read_byte_PCF8563(RTC_TIMESEC_REG);
 	current_sec=RTC_data[0];
+	
+	//Clock integrity, re-tested every second.  VL = backup supply was lost,
+	//STOP = oscillator halted.  Either way the timestamp is meaningless.
+	//Tested on the RAW seconds byte - the VL bit is masked off further down.
+	if((RTC_data[0] & PCF8563_VL_BIT) || (Read_byte_PCF8563(RTC_CNTRL1_ADDR) & PCF8563_STOP_BIT))
+	{
+		rtcHwFault = 1;
+		InvalidateRTC();
+	}
 	
 	if(last_sec != current_sec)
 	{
@@ -199,6 +228,19 @@ void Check_RTC(void)
 		rtc.day = BCD2HEX(RTC_data[3]);			//Date
 		rtc.month = BCD2HEX(RTC_data[5]);		//Month
 		rtc.year = BCD2HEX(RTC_data[6]);		//Year
+		
+		//The register masks above still allow impossible values (hour up to 45,
+		//month up to 19), so validate the decoded fields before trusting them.
+		if((rtc.second>59) || (rtc.minute>59) || (rtc.hour>23) ||
+		   (rtc.day<1) || (rtc.day>31) || (rtc.month<1) || (rtc.month>12))
+		{
+			InvalidateRTC();
+		}
+		else if(!rtcHwFault)
+		{
+			//Integrity bits clear AND fields sane: the timestamp is usable
+			bool_rtcValid = 1;
+		}
 		
 		if(rtc.hour>=12) 
 		{
@@ -281,7 +323,10 @@ void Check_RTC(void)
 	//---------------------------------------------------------------
 	if(last_hr != current_hr)
 	{
-		if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG))
+		//last_hr indexes TOTAL_MEAN_HOUR slots - a corrupt RTC hour must not address past them.
+		//RTCSetFlag/bool_rtcValid: never log against an unset or untrustworthy clock.
+		if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG)
+			&& RTCSetFlag && bool_rtcValid && (last_hr < TOTAL_MEAN_HOUR))
 		{
 			if(gu16_parameterWord & ENABLE_DP1)
 			{
@@ -337,7 +382,9 @@ void Check_RTC(void)
 	{
 		if(!bool_resetMinMax)
 		{
-			if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG))
+			//RTCSetFlag/bool_rtcValid: never log against an unset or untrustworthy clock
+			if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG)
+				&& RTCSetFlag && bool_rtcValid)
 			{
 				//Store Last Day Epoch with less than 2 minutes
 				ep1.currentEpochTime = ep.currentEpochTime - 120;
@@ -1322,7 +1369,7 @@ void conv_value(void)
 		
 			if(gu16_parameterWord & ENABLE_RTC)
 			{
-				if(!RTCSetFlag)
+				if(!RTCSetFlag || !bool_rtcValid)	//unset OR untrustworthy clock blinks the time
 				{
 					if(bool_mec500_blink_flag) 
 					{
@@ -4369,6 +4416,7 @@ void keyboard(void)
 						RTC_data[4] = HEX2BCD(Temp_RTC_ARR[3]);	// month = december
 						RTC_data[5] = HEX2BCD(Temp_RTC_ARR[4]);	// year = 11 or 2011
 						
+						Write_byte_PCF8563(RTC_CNTRL1_ADDR,0);	//clear STOP: oscillator must run
 						Write_byte_PCF8563(RTC_TIMESEC_REG,RTC_data[0]);
 						Write_byte_PCF8563(RTC_TIMEMIN_REG,RTC_data[1]);
 						Write_byte_PCF8563(RTC_TIMEHOUR_REG,RTC_data[2]);
@@ -4714,7 +4762,7 @@ void EraseWholeFlash(void)
 
 void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 {
-	if((gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag	
+	if((gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag && bool_rtcValid	
 		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 		&& !TMRH_StartUpTimer	
 		#endif
@@ -4916,7 +4964,7 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 		//Log Data to 24 Hour memory Location ------------------------------------------
 		if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG))
 		{
-			WriteLog(REGULAR_LOG_ADDR,LAST_LOG24_ADDR_OFFSET + CurrentLog24Ind,&RAMBuffer[i],LOG_SIZE);
+			WriteLog(LAST_LOG24_ADDR_OFFSET,CurrentLog24Ind,&RAMBuffer[i],LOG_SIZE);
 			
 			//cli();
 			CurrentLog24Ind++;
@@ -4939,7 +4987,7 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 
 void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 {
-	if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG) && (gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag
+	if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG) && (gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag && bool_rtcValid
 		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 		&& !TMRH_StartUpTimer
 		#endif
@@ -5130,7 +5178,7 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 		//cli();
 	
 		CurrentLogInd++;
-		if(CurrentLogInd>=LAST_LOG_ADDR)
+		if(CurrentLogInd>=TOTAL_REGULAR_LOG)
 		{
 			CurrentLogInd=0;
 			FlashOVFByte=1;
@@ -6048,6 +6096,7 @@ void ServePCMsg(void)
 				//If SetDate is greater than current date then set it otherwise discard it
 				if(ep1.currentEpochTime >= ep.currentEpochTime)
 				{
+					Write_byte_PCF8563(RTC_CNTRL1_ADDR,0);	//clear STOP: oscillator must run
 					Write_byte_PCF8563(RTC_TIMESEC_REG,rtc2.second); 
 					Write_byte_PCF8563(RTC_TIMEMIN_REG,rtc2.minute); 
 					Write_byte_PCF8563(RTC_TIMEHOUR_REG,rtc2.hour); 
@@ -6299,6 +6348,7 @@ void ServePCMsg(void)
 				
 				//Set Default RTC
 			
+				Write_byte_PCF8563(RTC_CNTRL1_ADDR,0);	//clear STOP: oscillator must run
 				Write_byte_PCF8563(RTC_TIMESEC_REG,0); 
 				Write_byte_PCF8563(RTC_TIMEMIN_REG,0); 
 				Write_byte_PCF8563(RTC_TIMEHOUR_REG,0); 
@@ -6345,6 +6395,20 @@ void ServePCMsg(void)
 						
 						case '2':
 					
+							//DP_Cal_Value_F[DP3]=0;
+							//WriteEEPROMData(DP3_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP3]);
+						
+							DP_Cal_Value_C[DP3]=0;
+							WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
+						
+							//DP_Cal_float_Value_F[DP3] = 0.0;
+							DP_Cal_float_Value_C[DP3] = 0.0;
+					
+						break;
+						
+						#else
+						case '1':
+					
 							//TM_Cal_Value_F=0;
 							//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
 						
@@ -6355,8 +6419,8 @@ void ServePCMsg(void)
 							TM_Cal_float_Value_C = 0.0;
 					
 						break;
-						#else
-						case '1':
+						
+						case '2':
 					
 							//RH_Cal_Value_F=0;
 							//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
@@ -6368,19 +6432,7 @@ void ServePCMsg(void)
 							RH_Cal_float_Value_C = 0.0;
 					
 						break;
-					
-						case '2':
-					
-							//DP_Cal_Value_F[DP3]=0;
-							//WriteEEPROMData(DP3_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP3]);
 						
-							DP_Cal_Value_C[DP3]=0;
-							WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
-						
-							//DP_Cal_float_Value_F[DP3] = 0.0;
-							DP_Cal_float_Value_C[DP3] = 0.0;
-					
-						break;
 						#endif
 					}
 				}
@@ -7100,6 +7152,7 @@ void ServePCMsg(void)
 		TxBuffer[2]=RxBuffer[2];
 		TxBuffer[3]=0x00;
 		if(bool_paraIdNotValid) 		TxBuffer[3] |= INVALID_PARA;
+		if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 		if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -7369,6 +7422,7 @@ void ServePCMsg(void)
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 		TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -7397,6 +7451,7 @@ void ServePCMsg(void)
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -7420,6 +7475,7 @@ void ServePCMsg(void)
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -7537,7 +7593,15 @@ void ServePCMsg(void)
 			us1 = RxBuffer[5]-'0';		us1 *= 10;				flash24_EndInd += us1;		us1 = 0;
 			us1 = RxBuffer[6]-'0';								flash24_EndInd += us1;		us1 = 0;
 			
-			bool_MinMaxMeanLogReadCmd=1;
+			//Reject an out-of-range channel rather than reading from a stale ul1
+			if((MinMaxMeanReadParaType>='0') && (MinMaxMeanReadParaType<='2'))
+			{
+				bool_MinMaxMeanLogReadCmd=1;
+			}
+			else
+			{
+				bool_paraIdNotValid=1;
+			}
 			bool_logtransferStart=0;
 			
 			if(MinMaxMeanDayLogInd)
@@ -7557,7 +7621,15 @@ void ServePCMsg(void)
 			
 			MinMaxMeanReadParaType=RxBuffer[4];
 
-			bool_MeanHrLogReadCmd=1;
+			//Reject an out-of-range channel rather than reading from a stale ul1
+			if((MinMaxMeanReadParaType>='0') && (MinMaxMeanReadParaType<='2'))
+			{
+				bool_MeanHrLogReadCmd=1;
+			}
+			else
+			{
+				bool_paraIdNotValid=1;
+			}
 			bool_logtransferStart=0;
 			
 			flash24_StartInd=0;
@@ -7571,6 +7643,7 @@ void ServePCMsg(void)
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -7771,7 +7844,7 @@ void ServePCMsg(void)
 
 					if(!CurrentLogInd)
 					{
-						LastLogInd = LAST_LOG_ADDR-1;
+						LastLogInd = TOTAL_REGULAR_LOG-1;
 					}
 					else
 					{
@@ -7876,7 +7949,7 @@ void ServePCMsg(void)
 						}
 						else
 						{
-							TotalLog = (LAST_LOG_ADDR - StartLogInd) + EndLogInd;
+							TotalLog = (TOTAL_REGULAR_LOG - StartLogInd) + EndLogInd;
 						}
 					}
 				}
@@ -7886,6 +7959,7 @@ void ServePCMsg(void)
 				TxBuffer[2]=RxBuffer[2];
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -7933,7 +8007,7 @@ void ServePCMsg(void)
 				ReadLog(templong,&TxBuffer[0],LOG_SIZE);
 				SendToUART(&TxBuffer[0],LOG_SIZE);	opstr("\r\n");
 				templong++;
-				if(templong>=LAST_LOG_ADDR)
+				if(templong>=TOTAL_REGULAR_LOG)
 				{
 					templong=0;
 				}
@@ -7953,6 +8027,7 @@ void ServePCMsg(void)
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -8022,6 +8097,7 @@ void ServePCMsg(void)
 			TxBuffer[2]=RxBuffer[2];
 			TxBuffer[3]=0x00;
 			if(bool_paraIdNotValid) 		TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 			if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -8068,7 +8144,7 @@ uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd
 
 	if(FlashOVFByte)
 	{
-		LastLogInd = LAST_LOG_ADDR-1;
+		LastLogInd = TOTAL_REGULAR_LOG-1;
 	}
 	
 	while(LastLogInd > InitLogInd)
@@ -8085,6 +8161,7 @@ uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd
 		
 		if(EpochTime < MidEpoch)
 		{
+			if(!MidLogInd)	return InitLogInd;	//no earlier record: oldest is the match
 			ReadLog(MidLogInd-1,(uint8_t*)&MidEpoch1,4);
 			
 			#ifdef DEBUG_RCV_CMD
@@ -8154,6 +8231,7 @@ uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd
 
 			if(EpochTime < MidEpoch)
 			{
+				if(!MidLogInd)	return InitLogInd;	//no earlier record: oldest is the match
 				ReadLog(MidLogInd-1,(uint8_t*)&MidEpoch1,4);
 				
 				#ifdef DEBUG_RCV_CMD
@@ -8218,6 +8296,7 @@ uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd
 		{
 			opstr("EpochTime < MidEpoch\r\n");
 			
+			if(!MidLogInd)	return InitLogInd;	//no earlier record: oldest is the match
 			ReadLog(MidLogInd-1,(uint8_t*)&MidEpoch1,4);
 			
 			opstr("Mid1 Epoch:");
@@ -8669,7 +8748,9 @@ void SecondTick(void)
 		}
 	}
 	if(DP_StartUpTimer)DP_StartUpTimer--;
+	#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 	if(TMRH_StartUpTimer)TMRH_StartUpTimer--;
+	#endif
 	
 	if(gu8_restartTimer)
 	{
@@ -9530,6 +9611,7 @@ void whileTask(void)
 				TxBuffer[2]=RxBuffer[2];
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -9547,7 +9629,7 @@ void whileTask(void)
 				TxBuffer[69]=0xFC;
 				
 				templong++;
-				if(templong>=LAST_LOG_ADDR)
+				if(templong>=TOTAL_REGULAR_LOG)
 				{
 					templong=0;
 				}
@@ -9575,6 +9657,7 @@ void whileTask(void)
 				TxBuffer[2]=RxBuffer[2];
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -9586,7 +9669,7 @@ void whileTask(void)
 				TxBuffer[5]=flash24_StartInd>>8;
 				TxBuffer[6]=flash24_StartInd;
 				
-				ReadLog(LAST_LOG24_ADDR_OFFSET + flash24_StartInd,&TxBuffer[7],LOG_SIZE);
+				ReadEEPROMData(LAST_LOG24_ADDR_OFFSET + ((uint32_t)flash24_StartInd*LOG_SIZE),&TxBuffer[7],LOG_SIZE);
 				
 				TxBuffer[70]=CalCRC(&TxBuffer[1],69);
 				TxBuffer[71]=0xFC;
@@ -9631,6 +9714,7 @@ void whileTask(void)
 				TxBuffer[2]=RxBuffer[2];
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -9652,6 +9736,7 @@ void whileTask(void)
 					case '1':		ul1=LAST_TM_MIN_MAX_OFFSET;			break;
 					case '2':		ul1=LAST_RH_MIN_MAX_OFFSET;			break;
 					#endif
+					default:		ul1=LAST_DP1_MIN_MAX_OFFSET;		break;
 				}
 				ReadMinMaxLog(ul1,flash24_StartInd,&TxBuffer[7],MIN_MAX_MEAN_LOG_SIZE);
 				if(TxBuffer[10]==0xFF)	//If no log then set Log to Zero
@@ -9695,6 +9780,7 @@ void whileTask(void)
 				TxBuffer[2]=RxBuffer[2];
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -9716,6 +9802,7 @@ void whileTask(void)
 					case '1':		ul1=TM_CURR_24HR_MEAN_OFFSET;		break;
 					case '2':		ul1=RH_CURR_24HR_MEAN_OFFSET;		break;
 					#endif
+					default:		ul1=DP1_CURR_24HR_MEAN_OFFSET;	break;
 				}
 				ReadMinMaxLog(ul1,flash24_StartInd,&TxBuffer[7],4);
 				
@@ -9747,6 +9834,7 @@ void whileTask(void)
 				TxBuffer[2]=RxBuffer[2];
 				TxBuffer[3]=0x00;
 				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
 				if(bool_DP_NC[DP1]) 			TxBuffer[3] |= DP1_FAULTY;
 				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 				if(bool_DP_NC[DP2]) 			TxBuffer[3] |= DP2_FAULTY;
@@ -11081,7 +11169,7 @@ void boot_data(void)
 			}
 			
 			ReadEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
-			if(CurrentLogInd>=LAST_LOG_ADDR)
+			if(CurrentLogInd>=TOTAL_REGULAR_LOG)
 			{
 				CurrentLogInd = 0;
 				WriteEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
@@ -11195,7 +11283,7 @@ void Init_variables(void)
 				us1=LAST_LOG24_ADDR-1;
 			}
 	
-			ReadLog(LAST_LOG24_ADDR_OFFSET + us1,(unsigned char*)&ep1.currentEpochTime,4);
+			ReadEEPROMData(LAST_LOG24_ADDR_OFFSET + ((uint32_t)us1*LOG_SIZE),(unsigned char*)&ep1.currentEpochTime,4);
 	
 			#ifdef ENABLE_PRINTF
 	

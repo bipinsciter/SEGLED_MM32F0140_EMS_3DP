@@ -82,6 +82,8 @@ uint8_t TxBuffer[TX_IND_MAX]={0};
 uint8_t XbeeRxBuffer[XBEE_RX_IND_MAX]={0};
 
 
+#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+//---- Temperature / RH channel variables (DP1_TEMP_RH_MODE only) ----
 bool bool_RH_TEMP_NC=0;
 bool bool_TMLog=0;
 bool bool_RHLog=0;
@@ -106,6 +108,7 @@ int16_t TM_Cal_Value_F=0,RH_Cal_Value_F=0;
 int16_t TM_Cal_Value_C=0,RH_Cal_Value_C=0;
 uint8_t HrTMSampleInd=0,HrRHSampleInd=0;
 float HourTM_Mean=0.0,HourRH_Mean=0.0;
+#endif	// (DEVICE_MODE==DP1_TEMP_RH_MODE)
 
 bool bool_DP_NC[MAX_SUPPORTED_DP]={0};
 bool bool_DPLog[MAX_SUPPORTED_DP]={0};
@@ -165,7 +168,7 @@ bool bool_resetMinMax=0;
 bool bool_Sec_blink_flag=0;
 bool bool_AM_PM_Flag=0;
 bool bool_doorStatus=CLOSE;
-//bool bool_rtcValid=0;
+bool bool_rtcValid=0;
 
 bool bool_FactoryCalibrationOn=0;
 bool bool_CustmerCalibrationOn=0;

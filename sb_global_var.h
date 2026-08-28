@@ -80,6 +80,8 @@ extern uint8_t RxBuffer[RX_IND_MAX];
 extern uint8_t TxBuffer[TX_IND_MAX];
 extern uint8_t XbeeRxBuffer[XBEE_RX_IND_MAX];
 
+#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+//---- Temperature / RH channel variables (DP1_TEMP_RH_MODE only) ----
 extern bool bool_RH_TEMP_NC;
 extern bool bool_TMLog;
 extern bool bool_RHLog;
@@ -104,6 +106,7 @@ extern int16_t TM_Cal_Value_F,RH_Cal_Value_F;
 extern int16_t TM_Cal_Value_C,RH_Cal_Value_C;
 extern uint8_t HrTMSampleInd,HrRHSampleInd;
 extern float HourTM_Mean,HourRH_Mean;
+#endif	// (DEVICE_MODE==DP1_TEMP_RH_MODE)
 
 extern bool bool_DP_NC[MAX_SUPPORTED_DP];
 extern bool bool_DPLog[MAX_SUPPORTED_DP];
@@ -159,7 +162,7 @@ extern bool bool_resetMinMax;
 extern bool bool_Sec_blink_flag;
 extern bool bool_AM_PM_Flag;
 extern bool bool_doorStatus;
-//extern bool bool_rtcValid;
+extern bool bool_rtcValid;
 extern bool bool_FactoryCalibrationOn;
 extern bool bool_CustmerCalibrationOn;
 extern bool bool_EraseFlash;
