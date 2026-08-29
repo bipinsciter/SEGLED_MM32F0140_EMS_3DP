@@ -167,11 +167,8 @@ static void InvalidateRTC(void)
 
 	if(RTCSetFlag)
 	{
-		uint8_t corruptInd = 1;
-
 		RTCSetFlag = 0;
 		WriteEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
-		WriteEEPROMData(CORRUPT_RTC_IND_ADDR,&corruptInd,sizeof(corruptInd));
 	}
 }
 
@@ -6368,67 +6365,47 @@ void ServePCMsg(void)
 					switch(RxBuffer[4])
 					{
 						case '0':
-					
-							//DP_Cal_Value_F[DP1]=0;
-							//WriteEEPROMData(DP1_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP1]);
-
+							
 							DP_Cal_Value_C[DP1]=0;
 							WriteEEPROMData(DP1_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP1],sizeof(DP_Cal_Value_C[DP1]));
 
-							//DP_Cal_float_Value_F[DP1] = 0.0;
 							DP_Cal_float_Value_C[DP1] = 0.0;
 						
 						break;
 						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						case '1':
-					
-							//DP_Cal_Value_F[DP2]=0;
-							//WriteEEPROMData(DP2_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP2]);
-						
+
 							DP_Cal_Value_C[DP2]=0;
 							WriteEEPROMData(DP2_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP2],sizeof(DP_Cal_Value_C[DP2]));
-						
-							//DP_Cal_float_Value_F[DP2] = 0.0;
+
 							DP_Cal_float_Value_C[DP2] = 0.0;
 					
 						break;
 						
 						case '2':
-					
-							//DP_Cal_Value_F[DP3]=0;
-							//WriteEEPROMData(DP3_CAL_VAL_F_ADDR,DP_Cal_Value_F[DP3]);
-						
+
 							DP_Cal_Value_C[DP3]=0;
 							WriteEEPROMData(DP3_CAL_VAL_C_ADDR,(uint8_t*)&DP_Cal_Value_C[DP3],sizeof(DP_Cal_Value_C[DP3]));
-						
-							//DP_Cal_float_Value_F[DP3] = 0.0;
+
 							DP_Cal_float_Value_C[DP3] = 0.0;
 					
 						break;
 						
 						#else
 						case '1':
-					
-							//TM_Cal_Value_F=0;
-							//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
-						
+
 							TM_Cal_Value_C=0;
 							WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
-						
-							//TM_Cal_float_Value_F = 0.0;
+
 							TM_Cal_float_Value_C = 0.0;
 					
 						break;
 						
 						case '2':
-					
-							//RH_Cal_Value_F=0;
-							//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
-						
+
 							RH_Cal_Value_C=0;
 							WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,sizeof(RH_Cal_Value_C));
-						
-							//RH_Cal_float_Value_F = 0.0;
+
 							RH_Cal_float_Value_C = 0.0;
 					
 						break;
@@ -6663,10 +6640,6 @@ void ServePCMsg(void)
 				
 				if(bool_FactoryCalibrationOn==1)
 				{
-					//TM_Cal_Count=tempshort;
-					//TM_Cal_Count_C=0;
-					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
-					
 					if(!TM_Unit)
 					{
 						ss1 = RealtemperatureC*10.0;
@@ -6715,104 +6688,13 @@ void ServePCMsg(void)
 				if((bool_FactoryCalibrationOn==1) || (bool_CustmerCalibrationOn==1))
 				{
 					PCCalibrationTimer=60;
-					
-					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
-
+	
 					TM_Max = DEFAUT_TEMP_C_MAX;
 					TM_Min = DEFAUT_TEMP_C_MIN;
 					WriteEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
 					WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
 				}
-				
-				/*if(b.FactoryCalibrationOn==1)
-				{
-					//TM_Cal_Count=tempshort;
-					//TM_Cal_Count_C=0;
-					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
-					
-					if(!TM_Unit)
-					{
-						ss1 = RealtemperatureC*10.0;
-						TM_Cal_Value_F = ss1 - tempshort;
-						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
-						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
-					}
-					else
-					{
-						ss1 = RealtemperatureF*10.0;
-						TM_Cal_Value_F = ss1 - tempshort;
-						TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 32.0;
-						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
-						
-						TM_Cal_Value_F = (TM_Cal_Value_F-320) / 1.8;
-						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
-					}
-										
-					TM_Cal_Value_C = 0;
-					TM_Cal_float_Value_C = 0;
-					eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
-					
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)TM_CAL_DATE_ADDR,12);
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[21],(unsigned char*)TM_CAL_CERT_ADDR,15);
-				}
-				else if(b.CustmerCalibrationOn==1)
-				{
-					//TM_Cal_Count_C=tempshort;
-					
-					if(!TM_Unit)
-					{
-						ss1 = (RealtemperatureC - TM_Cal_float_Value_F)*10.0;
-						TM_Cal_Value_C = ss1 - tempshort;
-						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
-						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
-					}
-					else
-					{
-						ss1 = (RealtemperatureF - TM_Cal_float_Value_F)*10.0;
-						TM_Cal_Value_C = ss1 - tempshort;
-						TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 32.0;
-						eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
-						
-						TM_Cal_Value_C = (TM_Cal_Value_C-320) / 1.8;
-						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
-					}
-					
-					Buffer1[0] = findValue(&RxBuffer[9],2);
-					Buffer1[1] = findValue(&RxBuffer[11],2);
-					Buffer1[2] = findValue(&RxBuffer[13],2);
-					
-					if(!Buffer1[0] && !Buffer1[1] && !Buffer1[2])
-					{
-						if(!TM_UserCalDateInd) a1=14;
-						else a1=TM_UserCalDateInd-1;
-					
-						us1 = TM_USER_CAL_DATE_ADDR + (a1 * 6);
-						eeprom_read_block((unsigned char*)&Buffer1[0],(unsigned char*)us1,6);
-					
-						if(memcmp(&Buffer1[0],&RxBuffer[9],6))
-						{
-							us1 = TM_USER_CAL_DATE_ADDR + (TM_UserCalDateInd * 6);
-							eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)us1,6);
-						
-							TM_UserCalDateInd++;
-							if(TM_UserCalDateInd>14) TM_UserCalDateInd=0;
-							eeprom_busy_wait();  eeprom_write_byte ((unsigned char*)TM_USER_CAL_DATE_IND_ADDR,TM_UserCalDateInd);
-						}
-					}
-				}
-				
-				if((b.FactoryCalibrationOn==1) || (b.CustmerCalibrationOn==1))
-				{
-					PCCalibrationTimer=60;
-					
-					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
 
-					TM_Max = DEFAUT_TEMP_C_MAX;
-					TM_Min = DEFAUT_TEMP_C_MIN;
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&TM_Max,(unsigned char*)TEMP_MAXIMUM,4);
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&TM_Min,(unsigned char*)TEMP_MINIMUM,4);
-				}*/
-				
 			break;
 			case RHCAL_ID:
 				
@@ -6845,68 +6727,6 @@ void ServePCMsg(void)
 					WriteEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
 					WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
 				}
-			
-				/*if(b.FactoryCalibrationOn==1)
-				{
-					//RH_Cal_Count=tempshort;
-					//RH_Cal_Count_C=0;
-					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT,RH_Cal_Count);
-					
-					ss1 = RealhumidityRH*10.0;
-					RH_Cal_Value_F = ss1 - tempshort;
-					eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
-					RH_Cal_float_Value_F = (float)RH_Cal_Value_F/10.0;
-					
-					RH_Cal_Value_C = 0;
-					RH_Cal_float_Value_C = 0;
-					
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)RH_CAL_DATE_ADDR,12);
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[21],(unsigned char*)RH_CAL_CERT_ADDR,15);
-				}
-				else if(b.CustmerCalibrationOn==1)
-				{
-					//RH_Cal_Count_C=tempshort;
-					
-					ss1 = (RealhumidityRH - RH_Cal_float_Value_F)*10.0;
-					RH_Cal_Value_C = ss1 - tempshort;
-					RH_Cal_float_Value_C = (float)RH_Cal_Value_C/10.0;
-					
-					Buffer1[0] = findValue(&RxBuffer[9],2);
-					Buffer1[1] = findValue(&RxBuffer[11],2);
-					Buffer1[2] = findValue(&RxBuffer[13],2);
-					
-					if(!Buffer1[0] && !Buffer1[1] && !Buffer1[2])
-					{
-						if(!RH_UserCalDateInd) a1=14;
-						else a1=RH_UserCalDateInd-1;
-					
-						us1 = RH_USER_CAL_DATE_ADDR + (a1 * 6);
-						eeprom_read_block((unsigned char*)&Buffer1[0],(unsigned char*)us1,6);
-					
-						if(memcmp(&Buffer1[0],&RxBuffer[9],6))
-						{
-							us1 = RH_USER_CAL_DATE_ADDR + (RH_UserCalDateInd * 6);
-							eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RxBuffer[9],(unsigned char*)us1,6);
-
-							RH_UserCalDateInd++;
-							if(RH_UserCalDateInd>14) RH_UserCalDateInd=0;
-							eeprom_busy_wait();  eeprom_write_byte ((unsigned char*)RH_USER_CAL_DATE_IND_ADDR,RH_UserCalDateInd);
-						}
-					}
-				}
-				
-				if((b.FactoryCalibrationOn==1) || (b.CustmerCalibrationOn==1))
-				{
-					PCCalibrationTimer=60;
-					
-					//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT_C,RH_Cal_Count_C);
-					eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_C_ADDR,RH_Cal_Value_C);
-					
-					RH_Max = DEFAUT_RH_MAX;
-					RH_Min = DEFAUT_RH_MIN;
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RH_Max,(unsigned char*)RH_MAXIMUM,4);
-					eeprom_busy_wait();  eeprom_write_block((unsigned char*)&RH_Min,(unsigned char*)RH_MINIMUM,4);
-				}*/
 				
 			break;
 			case TMUNT_ID:
@@ -10303,13 +10123,7 @@ void boot_data(void)
 			
 			TM_Cal_float_Value_F = 0.0;
 			TM_Cal_float_Value_C = 0.0;
-			
-			//TM_Cal_Count=0;
-			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
-		//
-			//TM_Cal_Count_C=0;
-			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
-		//
+
 			TM_Unit=0;
 			WriteEEPROMData(TEMP_UNIT,(uint8_t*)&TM_Unit,sizeof(TM_Unit));
 			
@@ -10343,13 +10157,7 @@ void boot_data(void)
 			
 			RH_Cal_float_Value_F = 0.0;
 			RH_Cal_float_Value_C = 0.0;
-			
-			//RH_Cal_Count=0;
-			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT,RH_Cal_Count);
-		
-			//RH_Cal_Count_C=0;
-			//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT_C,RH_Cal_Count_C);
-			
+
 			LastRH_Alrm_ON=0;
 			WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
 			
@@ -10838,19 +10646,8 @@ void boot_data(void)
 				WriteEEPROMData(TEMP_UNIT,(uint8_t*)&TM_Unit,sizeof(TM_Unit));
 			}
 			
-			ReadEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
-			//if((TM_Cal_Value_F<(DEFAUT_TEMP_C_MAX*10.0)) || (TM_Cal_Value_F>(DEFAUT_TEMP_C_MIN*10.0)))
-			//{
-				//TM_Cal_Value_F=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_F_ADDR,TM_Cal_Value_F);
-			//}
-			
+			ReadEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));			
 			ReadEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
-			//if((TM_Cal_Value_C<(DEFAUT_TEMP_C_MAX*10.0)) || (TM_Cal_Value_C>(DEFAUT_TEMP_C_MIN*10.0)))
-			//{
-				//TM_Cal_Value_C=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TM_CAL_VAL_C_ADDR,TM_Cal_Value_C);
-			//}
 			
 			ReadEEPROMData(TEMP_UP_ALM_ON,(uint8_t*)&TM_Upper_Alm_ON,sizeof(TM_Upper_Alm_ON));
 			ReadEEPROMData(TEMP_UP_ALM_OFF,(uint8_t*)&TM_Upper_Alm_OFF,sizeof(TM_Upper_Alm_OFF));
@@ -10915,20 +10712,6 @@ void boot_data(void)
 		
 			TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
 			TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
-				
-			//TM_Cal_Count  = eeprom_read_word ((unsigned int*)TEMP_CAL_CNT);
-			//if((TM_Cal_Count<-1000) || (TM_Cal_Count>1000))
-			//{
-				//TM_Cal_Count=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT,TM_Cal_Count);
-			//}
-		//
-			//TM_Cal_Count_C  = eeprom_read_word ((unsigned int*)TEMP_CAL_CNT_C);
-			//if((TM_Cal_Count_C<-1000) || (TM_Cal_Count_C>1000))
-			//{
-				//TM_Cal_Count_C=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)TEMP_CAL_CNT_C,TM_Cal_Count_C);
-			//}
 			
 			ReadEEPROMData(TEMP_MAXIMUM,(uint8_t*)&TM_Max,sizeof(TM_Max));
 			if(TM_Max<DEFAUT_TEMP_C_MAX)
@@ -10994,7 +10777,7 @@ void boot_data(void)
 			//if((RH_Cal_Value_F<(-DEFAUT_RH_MIN*10.0)) || (RH_Cal_Value_F>(DEFAUT_RH_MIN*10.0)))
 			//{
 				//RH_Cal_Value_F=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_VAL_F_ADDR,RH_Cal_Value_F);
+				WriteEEPROMData(RH_CAL_VAL_F_ADDR,(uint8_t*)&RH_Cal_Value_F,2);
 			//}
 			RH_Cal_float_Value_F = (float)RH_Cal_Value_F/10.0;
 			
@@ -11005,20 +10788,6 @@ void boot_data(void)
 				//WriteEEPROMData(RH_CAL_VAL_C_ADDR,(uint8_t*)&RH_Cal_Value_C,2);
 			//}
 			RH_Cal_float_Value_C = (float)RH_Cal_Value_C/10.0;
-			
-			//RH_Cal_Count  = eeprom_read_word ((unsigned int*)RH_CAL_CNT);
-			//if((RH_Cal_Count<-1500) || (RH_Cal_Count>1500))
-			//{
-				//RH_Cal_Count=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT,RH_Cal_Count);
-			//}
-		//
-			//RH_Cal_Count_C  = eeprom_read_word ((unsigned int*)RH_CAL_CNT_C);
-			//if((RH_Cal_Count_C<-1500) || (RH_Cal_Count_C>1500))
-			//{
-				//RH_Cal_Count_C=0;
-				//eeprom_busy_wait();  eeprom_write_word ((unsigned int*)RH_CAL_CNT_C,RH_Cal_Count_C);
-			//}
 		
 			ReadEEPROMData(RH_MAXIMUM,(uint8_t*)&RH_Max,sizeof(RH_Max));
 			if(RH_Max<DEFAUT_RH_MAX)
