@@ -179,7 +179,7 @@ extern bool bool_buzzeralert;
 extern bool bool_resetDevice;
 extern bool bool_triggerXbeeReset;
 extern bool bool_RamAllReadCmd;
-extern bool bool_sec_flag,bool_msec_flag,bool_msec50_flag,bool_msec250_flag,bool_mec500_blink_flag,bool_mec500_blink_flag1;
+extern bool bool_sec_flag,bool_msec_flag,bool_msec50_flag,bool_msec250_flag,bool_mec500_blink_flag,bool_keyScan_flag;
 
 #endif	// SB_GLOBAL_VAR_H_
 

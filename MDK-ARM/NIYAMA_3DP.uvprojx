@@ -484,9 +484,19 @@
               <FilePath>..\Interface\XGZP6891D.c</FilePath>
             </File>
             <File>
+              <FileName>WF200DP.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Interface\WF200DP.c</FilePath>
+            </File>
+            <File>
               <FileName>SHT25.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Interface\SHT25.c</FilePath>
+            </File>
+            <File>
+              <FileName>XM25QH128A.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Interface\XM25QH128A.c</FilePath>
             </File>
           </Files>
         </Group>

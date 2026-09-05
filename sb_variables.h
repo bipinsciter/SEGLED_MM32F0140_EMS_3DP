@@ -186,7 +186,7 @@ bool bool_buzzeralert=0;
 bool bool_resetDevice=0;
 bool bool_triggerXbeeReset=0;
 bool bool_RamAllReadCmd=0;
-bool bool_sec_flag=0,bool_msec_flag=0,bool_msec50_flag=0,bool_msec250_flag=0,bool_mec500_blink_flag=0,bool_mec500_blink_flag1=0;
+bool bool_sec_flag=0,bool_msec_flag=0,bool_msec50_flag=0,bool_msec250_flag=0,bool_mec500_blink_flag=0,bool_keyScan_flag=0;
 
 struct lcdbits
 {

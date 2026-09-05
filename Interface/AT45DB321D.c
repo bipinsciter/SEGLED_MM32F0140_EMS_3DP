@@ -8,6 +8,8 @@
 #include "hal_conf.h"
 #include "..\gpio.h"
 
+#if (DATAFLASH_PART == DATAFLASH_AT45DB321D)
+
 union
 {
 	uint32_t dummyAddress;
@@ -470,3 +472,5 @@ uint8_t AT45D_set_page_size_to_pwr_of_two(void)
 }
 
 
+
+#endif	// (DATAFLASH_PART == DATAFLASH_AT45DB321D)

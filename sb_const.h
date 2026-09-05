@@ -4,7 +4,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	2
+#define FW_PATCH	3
 
 #define ENABLE_KEY_LOGIC
 
@@ -12,6 +12,28 @@
 #define DP1_TEMP_RH_MODE	1
 
 #define DEVICE_MODE			DP1_TEMP_RH_MODE
+
+//************************************************************************/
+// DATA FLASH PART SELECTION - must match the part fitted on the board
+//   AT45DB321D  32 Mbit DataFlash, byte-rewritable, no explicit erase
+//   XM25QH128A  128 Mbit NOR, 4 KB sector erase required before rewrite
+// See Interface/dataflash.h for the data-map constraints a NOR part imposes.
+//************************************************************************/
+#define DATAFLASH_AT45DB321D	0
+#define DATAFLASH_XM25QH128A	1
+
+#define DATAFLASH_PART			DATAFLASH_XM25QH128A
+
+//************************************************************************/
+// PRESSURE SENSOR PART SELECTION - must match the part fitted on the board
+//   XGZP6891D   +/-625 Pa as fitted, I2C address 0xFE
+//   WF200DP     WF200DPZ0.005B, +/-500 Pa, I2C address 0xDA (SDO/ADDR selects LSB)
+// Both use the same register map; see Interface/pressure_sensor.h
+//************************************************************************/
+#define PRESSURE_SENSOR_XGZP6891D	0
+#define PRESSURE_SENSOR_WF200DP		1
+
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
 
 #define ENABLE_DP1			0x0001
 #define ENABLE_DP2			0x0002
@@ -36,6 +58,25 @@
 
 
 #define DP_SW_FACT_DIVISION			 15
+
+//---------------------------------------------------------------------------------
+// DP display stability
+//
+// Dpressure[] feeds BOTH the display and the alarm comparison, so filtering it harder
+// would slow alarm response.  Instead the displayed number is held until the reading
+// moves by more than this much, which stops the last digit dancing on sensor noise
+// while leaving the alarm path exactly as responsive as before.
+// The display resolution is 0.1 Pa, so anything below 0.1 has no effect.
+//---------------------------------------------------------------------------------
+#define DP_DISP_HYSTERESIS			0.2f	//Pa
+
+//Kalman filter tuning (see Kalman_Init).  Lower Q = smoother but slower: with R = 0.1,
+// Q = 0.0100 -> gain 0.270, settles in ~1.9 s   (current)
+// Q = 0.0020 -> gain 0.132, settles in ~3.8 s
+// Q = 0.0010 -> gain 0.095, settles in ~5.3 s
+//Raising the filtering here DOES slow alarm detection - change it deliberately.
+#define KALMAN_Q					0.01f
+#define KALMAN_R					0.1f
 
 //************************************************************************/
 // RS485 PARAMETER
@@ -407,13 +448,49 @@
 #define TX_IND_MAX				100
 
 //DATA LOG ADDRESS IN DATA FLASH -----------------------------------------------------
-#define CONFIG_PARA_ADDR 		0
-#define REGULAR_LOG_ADDR 		(CONFIG_PARA_ADDR+2048)
-// Regular log ring.  TOTAL_REGULAR_LOG is a RECORD COUNT (use it for log-index
-// wrap-around); LAST_LOG_ADDR is the BYTE address one past the end of the ring,
-// which is also the byte base of the 24-hour ring below.
-#define TOTAL_REGULAR_LOG		60000
-#define LAST_LOG24_ADDR_OFFSET	(REGULAR_LOG_ADDR+(TOTAL_REGULAR_LOG*LOG_SIZE))
+#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+
+	// A NOR part erases in 4 KB sectors, so every region must start on a sector
+	// boundary - otherwise erasing one region's first sector destroys the tail of
+	// the region before it.  (On the AT45 map below, REGULAR_LOG_ADDR = 2048 shares
+	// sector 0 with the whole config block.)
+	#define DF_SECTOR_SIZE			4096UL
+	#define DF_ALIGN_UP(x)			((((x)+DF_SECTOR_SIZE-1UL)/DF_SECTOR_SIZE)*DF_SECTOR_SIZE)
+
+	#define CONFIG_PARA_ADDR		0							/* sector 0 */
+
+	// Wear-levelled log-pointer store.  Each pointer gets TWO sectors used as a
+	// ping-pong pair: saves append to the active bank (always erased space, one page
+	// program), and when it fills, the pointer is carried into the already-erased
+	// spare BEFORE the old bank is erased - so a valid pointer always exists, even if
+	// power is lost mid-swap.  Each bank starts with a 4-byte header (magic +
+	// generation) that identifies which bank is newer.  See XM25_PtrSave().
+	#define PTR_HDR_SIZE			4UL
+	#define PTR_SLOT_SIZE			4UL			/* 24-bit value + 8-bit validity tag */
+	#define CURR_LOG_IND_SECTOR_A	(CONFIG_PARA_ADDR + DF_SECTOR_SIZE)
+	#define CURR_LOG_IND_SECTOR_B	(CURR_LOG_IND_SECTOR_A + DF_SECTOR_SIZE)
+	#define CURR_LOG24_IND_SECTOR_A	(CURR_LOG_IND_SECTOR_B + DF_SECTOR_SIZE)
+	#define CURR_LOG24_IND_SECTOR_B	(CURR_LOG24_IND_SECTOR_A + DF_SECTOR_SIZE)
+	#define PTR_SLOTS_PER_BANK		((DF_SECTOR_SIZE-PTR_HDR_SIZE)/PTR_SLOT_SIZE)	/* 1023 */
+
+	// TOTAL_REGULAR_LOG is a RECORD COUNT (log-index wrap-around);
+	// LAST_LOG24_ADDR_OFFSET is the BYTE base of the 24-hour ring, padded up to a
+	// sector boundary so the two rings never share a sector.
+	#define REGULAR_LOG_ADDR		(CURR_LOG24_IND_SECTOR_B + DF_SECTOR_SIZE)
+	#define TOTAL_REGULAR_LOG		60000
+	#define LAST_LOG24_ADDR_OFFSET	(REGULAR_LOG_ADDR + DF_ALIGN_UP(TOTAL_REGULAR_LOG*LOG_SIZE))
+
+#else
+
+	#define CONFIG_PARA_ADDR 		0
+	#define REGULAR_LOG_ADDR 		(CONFIG_PARA_ADDR+2048)
+	// Regular log ring.  TOTAL_REGULAR_LOG is a RECORD COUNT (use it for log-index
+	// wrap-around); LAST_LOG24_ADDR_OFFSET is the BYTE address one past the end of
+	// the ring, which is also the byte base of the 24-hour ring below.
+	#define TOTAL_REGULAR_LOG		60000
+	#define LAST_LOG24_ADDR_OFFSET	(REGULAR_LOG_ADDR+(TOTAL_REGULAR_LOG*LOG_SIZE))
+
+#endif
 
 
 
@@ -427,7 +504,11 @@
 #define TOTAL_MEAN_HOUR				24
 #define HOUR_MEAN_VALUE_SPACE		(TOTAL_MEAN_HOUR*4)
 
-#define MIN_MAX_LOG_ADDR_OFFSET		(LAST_LOG24_ADDR_OFFSET+(LAST_LOG24_ADDR*LOG_SIZE))
+#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	#define MIN_MAX_LOG_ADDR_OFFSET	(LAST_LOG24_ADDR_OFFSET + DF_ALIGN_UP(LAST_LOG24_ADDR*LOG_SIZE))
+#else
+	#define MIN_MAX_LOG_ADDR_OFFSET	(LAST_LOG24_ADDR_OFFSET+(LAST_LOG24_ADDR*LOG_SIZE))
+#endif
 
 #define LAST_DP1_MIN_MAX_OFFSET		(MIN_MAX_LOG_ADDR_OFFSET)
 #define LAST_DP2_MIN_MAX_OFFSET		(LAST_DP1_MIN_MAX_OFFSET+MIN_MAX_MEAN_LOG_SPACE)
@@ -448,7 +529,32 @@
 //----------------------------------------------------------------------------------------------------------
 
 #define PROG_CNT			5
-#define DEBOUNCE			3
+//check_key() runs on the 50 ms tick, so DEBOUNCE is in 50 ms units.  1 = act on the
+//first sample that sees the new state; the 50 ms sampling period is what rejects
+//contact bounce (a few ms), and the state machine cannot re-fire until a released
+//sample is seen.  Raise to 2 if any switch proves bouncy enough to double-trigger,
+//at the cost of needing a 100 ms press to register.
+#define DEBOUNCE			1
+
+//---------------------------------------------------------------------------------
+// UP / DOWN key auto-repeat.  CheckUpDnKey() runs on the 50 ms tick, so these are
+// in 50 ms units.  The ladder gives one step on the initial press, a hold-off so a
+// tap cannot double-step, then fine repeat, faster repeat, and finally coarse steps.
+//---------------------------------------------------------------------------------
+#define KEY_REPEAT_DELAY	10		//0.5 s  hold-off before auto-repeat starts
+#define KEY_REPEAT_MEDIUM	40		//2.0 s  until one step per tick (20 steps/s)
+#define KEY_REPEAT_FAST		80		//4.0 s  until coarse steps of 10
+#define KEY_COUNT_MAX		200		//counter ceiling (fits uint8_t)
+
+//Page / parameter navigation is NOT value editing: it must step once per press and then
+//repeat slowly.  Before the key scan moved to the 50 ms tick these actions were limited
+//only by the old 500 ms poll, so at 20 Hz one press advanced them several times.
+#define KEY_NAV_DELAY		20		//1.0 s hold-off before navigation auto-repeats
+#define KEY_NAV_REPEAT		10		//then one step every 500 ms, the original cadence
+
+//Long-press hold times for the key combinations, also in 50 ms ticks
+#define KEY_HOLD_5SEC		100
+#define KEY_HOLD_10SEC		200
 
 #define NO_ALARM				0
 #define UPPER_ALARM				1

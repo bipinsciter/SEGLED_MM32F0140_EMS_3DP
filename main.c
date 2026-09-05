@@ -15,11 +15,11 @@
 #include "platform.h"
 #include "gpio.h"
 #include "TM1680.h"
-#include "XGZP6891D.h"
+#include "pressure_sensor.h"	//selects XGZP6891D or WF200DP via PRESSURE_SENSOR_PART
 #include "SHT25.h"
 //#include "DS1307.h"
 #include "PCF8563.h"
-#include "AT45DB321D.h"
+#include "dataflash.h"		//selects AT45DB321D or XM25QH128A via DATAFLASH_PART
 //#include "SPI.h"
 #include "spi_master_polling.h"
 #include "iwdg_systemmonitor.h"
@@ -651,6 +651,48 @@ void InitLEDController(void)
 	PLATFORM_DelayMS(1000);
 }
 
+//The digits show HI / LO the instant a reading is clamped to the sensor's range limit
+//(f32_dp_limit), but the alarm state itself is deliberately filtered by
+//gu8_DpAlarmSensingTime - so the panel used to show HI or LO in the normal colour for
+//the whole length of that filter, contradicting itself.
+//
+//An off-scale reading is not the kind of transient the filter exists to reject (the
+//sensor is pegged), so it drives the alarm colour straight away.  The real alarm state
+//- logging, relay, buzzer and the protocol - still respects the sensing time and is
+//untouched by this.
+//Hold the displayed DP value until the reading moves by more than DP_DISP_HYSTERESIS.
+//Sensor noise of a tenth of a Pa no longer makes the last digit flicker, while the
+//alarm comparison keeps using the raw Dpressure[] and so responds just as quickly.
+static float DpDisplayValue(uint8_t SensNo)
+{
+	static float shown[MAX_SUPPORTED_DP]={0};
+	static uint8_t primed[MAX_SUPPORTED_DP]={0};
+	float value;
+
+	if(SensNo >= MAX_SUPPORTED_DP)	return 0.0;
+
+	value = Dpressure[SensNo];
+
+	if(!primed[SensNo] ||
+	   (value >= (shown[SensNo] + DP_DISP_HYSTERESIS)) ||
+	   (value <= (shown[SensNo] - DP_DISP_HYSTERESIS)))
+	{
+		shown[SensNo]  = value;
+		primed[SensNo] = 1;
+	}
+
+	return shown[SensNo];
+}
+
+static uint8_t DpDisplayAlarm(uint8_t SensNo)
+{
+	if(DP_Alrm_ON[SensNo] != NO_ALARM)	return DP_Alrm_ON[SensNo];
+	if(DP_limit[SensNo] == 1)			return UPPER_ALARM;	//clamped at +full scale
+	if(DP_limit[SensNo] == 2)			return LOWER_ALARM;	//clamped at -full scale
+
+	return NO_ALARM;
+}
+
 void disp_value(void)
 {
 	for(uint8_t i=1;i<NO_DIGIT;i++) disp_buffer[i]=seg_code[data[i]];
@@ -687,7 +729,7 @@ void disp_value(void)
 	
 	if(lcd.Sym_DP_UNIT) DP_UNIT_on;
 	
-	if(DP_Alrm_ON[DP1]==NO_ALARM)
+	if(DpDisplayAlarm(DP1)==NO_ALARM)
 	{
 		if(lcd.Sym_DP_MIN) DP_MIN_on;
 		if(lcd.Sym_DP_LOGO) DP_LOGO_on;
@@ -717,7 +759,7 @@ void disp_value(void)
 		if(disp_buffer[6] & 0x20) final_buffer[21] |= BIT2;//DP_F3_on;
 		if(disp_buffer[6] & 0x40) final_buffer[22] |= BIT2;//DP_G3_on;
 	}
-	else if(DP_Alrm_ON[DP1]==LOWER_ALARM)
+	else if(DpDisplayAlarm(DP1)==LOWER_ALARM)
 	{
 		if(lcd.Sym_DP_MIN_ALM) DP_MIN_ALM_on;
 		if(lcd.Sym_DP_LOGO_ALM) DP_LOGO_ALM_on;
@@ -810,7 +852,7 @@ void disp_value(void)
 	
 	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	
-	if(DP_Alrm_ON[DP2]==NO_ALARM)
+	if(DpDisplayAlarm(DP2)==NO_ALARM)
 	{
 		if(lcd.Sym_TM_MIN) TM_MIN_on;
 		//if(lcd.Sym_TM_LOGO) TM_LOGO_on;
@@ -840,7 +882,7 @@ void disp_value(void)
 		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT4;//TM_F3_on;
 		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT4;//TM_G3_on;
 	}
-	else if(DP_Alrm_ON[DP2]==LOWER_ALARM)
+	else if(DpDisplayAlarm(DP2)==LOWER_ALARM)
 	{
 		if(lcd.Sym_TM_MIN_ALM) TM_MIN_ALM_on;
 		
@@ -928,7 +970,7 @@ void disp_value(void)
 		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT5;//TM_G3_on;
 	}
 	
-	if(DP_Alrm_ON[DP3]==NO_ALARM)
+	if(DpDisplayAlarm(DP3)==NO_ALARM)
 	{
 		if(lcd.Sym_RH_MIN) RH_MIN_on;
 		
@@ -957,7 +999,7 @@ void disp_value(void)
 		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
 		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
 	}
-	else if(DP_Alrm_ON[DP3]==LOWER_ALARM)
+	else if(DpDisplayAlarm(DP3)==LOWER_ALARM)
 	{
 		if(lcd.Sym_RH_MIN_ALM) RH_MIN_ALM_on;
 		
@@ -1432,7 +1474,7 @@ void conv_value(void)
 						else
 						{
 							//----------------------------------------------------
-							tempfloat = Dpressure[DP1];
+							tempfloat = DpDisplayValue(DP1);
 						
 							if(!DP_limit[DP1])
 							{
@@ -1440,7 +1482,7 @@ void conv_value(void)
 								{
 									tempfloat *= (-1.0);
 									
-									if(DP_Alrm_ON[DP1]) 
+									if(DpDisplayAlarm(DP1)) 
 									{
 										lcd.Sym_DP_MIN_ALM = 1;
 									}
@@ -1477,7 +1519,7 @@ void conv_value(void)
 							//----------------------------------------------------
 						}
 						lcd.Sym_DP_UNIT = 1;
-						if(DP_Alrm_ON[DP1]) 
+						if(DpDisplayAlarm(DP1)) 
 						{
 							lcd.Sym_DP_LOGO_ALM = 1;
 						}
@@ -1500,7 +1542,7 @@ void conv_value(void)
 						else
 						{
 							//----------------------------------------------------
-							tempfloat = Dpressure[DP2];
+							tempfloat = DpDisplayValue(DP2);
 						
 							if(!DP_limit[DP2])
 							{
@@ -1508,7 +1550,7 @@ void conv_value(void)
 								{
 									tempfloat *= (-1.0);
 									
-									if(DP_Alrm_ON[DP2]) 
+									if(DpDisplayAlarm(DP2)) 
 									{
 										lcd.Sym_TM_MIN_ALM = 1;
 									}
@@ -1546,7 +1588,7 @@ void conv_value(void)
 						}
 						lcd.Sym_DP_UNIT = 1;
 						
-						if(DP_Alrm_ON[DP2]) 
+						if(DpDisplayAlarm(DP2)) 
 						{
 							lcd.Sym_TM_LOGO_ALM = 1;
 						}
@@ -1567,7 +1609,7 @@ void conv_value(void)
 						else
 						{
 							//----------------------------------------------------
-							tempfloat = Dpressure[DP3];
+							tempfloat = DpDisplayValue(DP3);
 						
 							if(!DP_limit[DP3])
 							{
@@ -1575,7 +1617,7 @@ void conv_value(void)
 								{
 									tempfloat *= (-1.0);
 									
-									if(DP_Alrm_ON[DP3]) 
+									if(DpDisplayAlarm(DP3)) 
 									{
 										lcd.Sym_RH_MIN_ALM = 1;
 									}
@@ -1613,7 +1655,7 @@ void conv_value(void)
 						}
 						lcd.Sym_DP_UNIT = 1;
 						
-						if(DP_Alrm_ON[DP3]) 
+						if(DpDisplayAlarm(DP3)) 
 						{
 							lcd.Sym_RH_LOGO_ALM = 1;
 						}
@@ -3251,6 +3293,42 @@ void check_key(void)
 	if(DN_KEY) key_dn_count=0;
 }
 
+//Auto-repeat ladder for the UP / DOWN keys.  cnt is the number of consecutive
+//50 ms ticks the key has been held; the return value is how much to step this tick
+//(0 = no step).  Previously CheckUpDnKey() only ran every 500 ms, which capped the
+//repeat rate at 2 steps/second and made the +1 / +10 / +100 ladder feel jumpy.
+//TRUE when UP/DOWN is navigating pages or parameters rather than editing a value.
+//In PROG_MODE the PARA_SELECT chord selects the parameter; without it UP/DOWN edits
+//the value.  In NORMAL_MODE the keys cycle display pages unless an ACK password is
+//being entered.
+static uint8_t KeyInNavMode(void)
+{
+	if((mode==MIN_MAX_MEAN_MODE) || (mode==MEAN_HOUR_MODE))		return 1;
+	if((mode==NORMAL_MODE) && !gu8_SetACKPwd)					return 1;
+	if((mode==PROG_MODE) && !PARA_SELECT_KEY)					return 1;
+
+	return 0;
+}
+
+//Navigation repeat: one step on the initial press, then the original slow cadence.
+static uint8_t KeyNavStep(uint8_t cnt)
+{
+	if(cnt == 1)				return 1;		//one step on the initial press
+	if(cnt <= KEY_NAV_DELAY)	return 0;		//hold-off
+
+	return ((cnt % KEY_NAV_REPEAT) == 0) ? 1 : 0;
+}
+
+static int16_t KeyRepeatStep(uint8_t cnt)
+{
+	if(cnt == 1)					return 1;					//first press - step immediately
+	if(cnt <= KEY_REPEAT_DELAY)		return 0;					//hold-off: a tap gives one step
+	if(cnt <= KEY_REPEAT_MEDIUM)	return (cnt & 1) ? 1 : 0;	//10 steps/s - fine adjust
+	if(cnt <= KEY_REPEAT_FAST)		return 1;					//20 steps/s
+
+	return 10;													//coarse - long hold
+}
+
 void CheckUpDnKey(void)
 {
 	uint8_t i=0;
@@ -3260,7 +3338,7 @@ void CheckUpDnKey(void)
 		if(mode==NORMAL_MODE)
 		{
 			MinMaxMeanModeTimer++;
-			if(MinMaxMeanModeTimer > 20)
+			if(MinMaxMeanModeTimer > KEY_HOLD_10SEC)
 			{
 				MinMaxMeanModeTimer=0;
 				
@@ -3279,7 +3357,7 @@ void CheckUpDnKey(void)
 		if(mode==NORMAL_MODE)
 		{
 			MeanHrModeTimer++;
-			if(MeanHrModeTimer > 20)
+			if(MeanHrModeTimer > KEY_HOLD_10SEC)
 			{
 				MeanHrModeTimer=0;
 				
@@ -3295,7 +3373,7 @@ void CheckUpDnKey(void)
 		if(mode==NORMAL_MODE)
 		{
 			gu8_MinMaxClearTimer++;
-			if(gu8_MinMaxClearTimer > 20)
+			if(gu8_MinMaxClearTimer > KEY_HOLD_10SEC)
 			{
 				gu8_MinMaxClearTimer=0;
 				
@@ -3320,7 +3398,7 @@ void CheckUpDnKey(void)
 			progTimeout=60;
 			
 			DPAutoCalTimer++;
-			if(DPAutoCalTimer > 10)
+			if(DPAutoCalTimer > KEY_HOLD_5SEC)
 			{
 				DPAutoCalTimer=0;
 						
@@ -3387,7 +3465,7 @@ void CheckUpDnKey(void)
 		else
 		{
 			restoreFactoryCalibrationTimer++;
-			if(restoreFactoryCalibrationTimer > 20)
+			if(restoreFactoryCalibrationTimer > KEY_HOLD_10SEC)
 			{
 				restoreFactoryCalibrationTimer=0;
 			
@@ -3467,11 +3545,14 @@ void CheckUpDnKey(void)
 	}
 	else if(!UP_KEY)
 	{
-		if(key_up_count<20)key_up_count++;
-	
-		if(key_up_count<10)			dummy++;
-		else if(key_up_count<20)	dummy+=10;
-		else						dummy+=100;
+		if(key_up_count<KEY_COUNT_MAX)	key_up_count++;
+
+		//Navigation steps once per press and then repeats slowly; only value editing
+		//below uses the fast ladder.  Nothing follows this if/else chain, so returning
+		//early simply skips this tick.
+		if(KeyInNavMode() && !KeyNavStep(key_up_count))	return;
+
+		dummy += KeyRepeatStep(key_up_count);
 	
 		//print_short(key_up_count,test,3);		opstr("\r\n");
 		
@@ -3849,11 +3930,14 @@ void CheckUpDnKey(void)
 	}
 	else if(!DN_KEY)
 	{
-		if(key_dn_count<20)key_dn_count++;
-	
-		if(key_dn_count<10)			dummy--;
-		else if(key_dn_count<20)	dummy-=10;
-		else						dummy-=100;
+		if(key_dn_count<KEY_COUNT_MAX)	key_dn_count++;
+
+		//Navigation steps once per press and then repeats slowly; only value editing
+		//below uses the fast ladder.  Nothing follows this if/else chain, so returning
+		//early simply skips this tick.
+		if(KeyInNavMode() && !KeyNavStep(key_dn_count))	return;
+
+		dummy -= KeyRepeatStep(key_dn_count);
 	
 		switch(mode)
 		{
@@ -4047,7 +4131,7 @@ void CheckUpDnKey(void)
 		if(mode==NORMAL_MODE)
 		{
 			DPAutoCalModeTimer++;
-			if(DPAutoCalModeTimer > 20)
+			if(DPAutoCalModeTimer > KEY_HOLD_10SEC)
 			{
 				DPAutoCalModeTimer=0;
 				mode=DP_AUTO_CAL_MODE;
@@ -4672,6 +4756,113 @@ uint8_t find_Checksum(uint16_t Count,uint8_t *msg)
 }
 
 
+//=========================================================================================
+// Log-pointer persistence
+//
+// The regular- and 24-hour-log write pointers are saved after EVERY log record.
+//
+//   AT45DB321D - the DataFlash rewrites bytes in place, so the pointer is written straight
+//                back to its slot.  The 100-slot arrays only advance on a ring wrap.
+//
+//   XM25QH128A - NOR cannot rewrite a byte without erasing its whole 4 KB sector, so
+//                rewriting one slot per record would erase that sector ~2880 times a day
+//                at 1 log/min and exhaust its ~100k endurance in about five weeks.
+//                Instead each save APPENDS to the next slot of a dedicated sector, so it
+//                lands in erased space and costs a single page program.  The sector is
+//                erased only when its slots run out - once per 1024 (regular) or 2048
+//                (24-hour) records, i.e. roughly one erase every 17 / 34 hours.
+//                The live slot is never stored: at boot the sector is scanned for the
+//                last programmed slot, which holds the newest pointer.
+//=========================================================================================
+
+void SaveCurrentLogInd(void)
+{
+	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	XM25_PtrSave(XM25_PTR_LOG,CurrentLogInd);
+	#else
+	WriteEEPROMData((CURR_LOG_IND + (CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
+	#endif
+}
+
+void SaveCurrentLog24Ind(void)
+{
+	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	XM25_PtrSave(XM25_PTR_LOG24,CurrentLog24Ind);
+	#else
+	WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+	#endif
+}
+
+//Wipe the stored pointer and restart from the first slot
+void ResetCurrentLogInd(void)
+{
+	CurrentLogInd = 0;
+
+	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	XM25_PtrReset(XM25_PTR_LOG,CurrentLogInd);
+	#else
+	CurrentLogIndReadLoc = 0;
+	WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+	SaveCurrentLogInd();
+	#endif
+}
+
+void ResetCurrentLog24Ind(void)
+{
+	CurrentLog24Ind = 0;
+
+	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	XM25_PtrReset(XM25_PTR_LOG24,CurrentLog24Ind);
+	#else
+	CurrentLog24IndReadLoc = 0;
+	WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+	SaveCurrentLog24Ind();
+	#endif
+}
+
+//Recover the newest pointer at boot
+void LoadCurrentLogInd(void)
+{
+	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	CurrentLogInd = (uint32_t)XM25_PtrLoad(XM25_PTR_LOG);
+	#else
+	ReadEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+	if(CurrentLogIndReadLoc>=100)
+	{
+		CurrentLogIndReadLoc=0;
+		WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+	}
+	ReadEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
+	#endif
+
+	if(CurrentLogInd>=TOTAL_REGULAR_LOG)
+	{
+		CurrentLogInd = 0;
+		SaveCurrentLogInd();
+	}
+}
+
+void LoadCurrentLog24Ind(void)
+{
+	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+	CurrentLog24Ind = (uint16_t)XM25_PtrLoad(XM25_PTR_LOG24);
+	#else
+	ReadEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+	if(CurrentLog24IndReadLoc>=100)
+	{
+		CurrentLog24IndReadLoc = 0;
+		WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+	}
+	ReadEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+	#endif
+
+	if(CurrentLog24Ind>=LAST_LOG24_ADDR)
+	{
+		CurrentLog24Ind = 0;
+		SaveCurrentLog24Ind();
+	}
+}
+
 void EraseWholeFlash(void)
 {
 	if(gu16_parameterWord & ENABLE_M3LOG)
@@ -4681,20 +4872,11 @@ void EraseWholeFlash(void)
 	}
 	
 	//Reset Data Logging Parameter -------------------------------------------
-	CurrentLogIndReadLoc = 0;
-	WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
-	
 	FlashOVFByte=0;
 	WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 	
-	CurrentLogInd = 0;
-	WriteEEPROMData(CURR_LOG_IND,(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
-	
-	CurrentLog24IndReadLoc = 0;
-	WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-	
-	CurrentLog24Ind = 0;
-	WriteEEPROMData(CURR_LOG24_IND,(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+	ResetCurrentLogInd();
+	ResetCurrentLog24Ind();
 	
 	bool_DPLog[DP1]=0;
 	LastDP_Alrm_ON[DP1]=0;
@@ -4745,12 +4927,16 @@ void EraseWholeFlash(void)
 	disp_value();
 	
 	//Erase whole Flash
-	for(a1=0;a1<64;a1++)
 	{
-		AT45D_SectorErase(a1);
-		
-		//Serve Watchdog Timer
-		IWDG_ReloadCounter();
+		uint32_t eraseUnit;
+
+		for(eraseUnit=0; eraseUnit<DF_ERASE_UNITS; eraseUnit++)
+		{
+			DF_EraseUnit(eraseUnit);
+
+			//Serve Watchdog Timer
+			IWDG_ReloadCounter();
+		}
 	}
 	
 	RAMBufferLog=0;
@@ -4969,14 +5155,16 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 			{
 				CurrentLog24Ind=0;
 				
+				#if (DATAFLASH_PART == DATAFLASH_AT45DB321D)
 				CurrentLog24IndReadLoc++;
 				if(CurrentLog24IndReadLoc>=100)
 				{
 					CurrentLog24IndReadLoc=0;
 				}
 				WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+				#endif
 			}
-			WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+			SaveCurrentLog24Ind();
 			//sei();
 		}
 	}
@@ -5182,14 +5370,16 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 		
 			WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 		
+			#if (DATAFLASH_PART == DATAFLASH_AT45DB321D)
 			CurrentLogIndReadLoc++;
 			if(CurrentLogIndReadLoc>=100)
 			{
 				CurrentLogIndReadLoc=0;
 			}
 			WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
+			#endif
 		}
-		WriteEEPROMData((CURR_LOG_IND + (CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
+		SaveCurrentLogInd();
 
 		//sei();
 	}
@@ -9709,47 +9899,37 @@ void whileTask(void)
 	}
 	
 	#ifdef ENABLE_KEY_LOGIC
-	check_key();		//Check Keyboard
-	if(bool_mec500_blink_flag1)
+	//Both key scanners run on the fixed 50 ms tick.  check_key() used to run at whatever
+	//rate the main loop happened to spin at, so its debounce counted loop iterations
+	//(microseconds) rather than time, and stalled whenever the loop blocked on flash.
+	//check_key() must stay first: it clears key_up_count / key_dn_count on release.
+	if(bool_keyScan_flag)
 	{
+		check_key();		//Check Keyboard
 		CheckUpDnKey();		//Check UP and Down key
-		bool_mec500_blink_flag1=0;
+		bool_keyScan_flag=0;
 	}
 	#endif
 	
-	#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 	if(bool_msec250_flag)
 	{
+		//Read_SHT25() only exists in the TEMP/RH build - the differential pressure
+		//sampling below runs in BOTH modes, so only this call may be guarded.
+		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 		Read_SHT25();
+		#endif
 		
-		bool_msec250_flag=0;
-	}
-	#endif
-	
-	if(bool_msec50_flag)
-	{
-		if(RxTimeout)
-		{
-			RxTimeout--;
-			if(!RxTimeout)
-			{
-				gu8_rxMode=0;
-				RxTimeout=0;
-				RxInd=0;
-			}
-		}
-
 		//Read Differential Pressure -----------------------------------------
 		if(gu16_parameterWord & ENABLE_DP1) 
 		{
 			if(StageDP[DP1]==0)
 			{
-				TriggerConvSM9543(DP1);
+				DP_TriggerConv(DP1);
 				StageDP[DP1]=1;
 			}
 			else
 			{
-				if(!ReadXGZP6891D(DP1, &RealDpressure[DP1]))
+				if(!DP_ReadPressure(DP1,&RealDpressure[DP1]))
 				{
 					ReadDiffPressure(DP1);
 				}
@@ -9783,12 +9963,12 @@ void whileTask(void)
 		{
 			if(StageDP[DP2]==0)
 			{
-				TriggerConvSM9543(DP2);
+				DP_TriggerConv(DP2);
 				StageDP[DP2]=1;
 			}
 			else
 			{
-				if(!ReadXGZP6891D(DP2, &RealDpressure[DP2]))
+				if(!DP_ReadPressure(DP2,&RealDpressure[DP2]))
 				{
 					ReadDiffPressure(DP2);
 				}
@@ -9821,12 +10001,12 @@ void whileTask(void)
 		{
 			if(StageDP[DP3]==0)
 			{
-				TriggerConvSM9543(DP3);
+				DP_TriggerConv(DP3);
 				StageDP[DP3]=1;
 			}
 			else
 			{
-				if(!ReadXGZP6891D(DP3, &RealDpressure[DP3]))
+				if(!DP_ReadPressure(DP3,&RealDpressure[DP3]))
 				{
 					ReadDiffPressure(DP3);
 				}
@@ -9855,6 +10035,23 @@ void whileTask(void)
 			DP_StartUpTimer=0;
 		}
 		#endif
+		
+		bool_msec250_flag=0;
+	}
+	
+	if(bool_msec50_flag)
+	{
+		if(RxTimeout)
+		{
+			RxTimeout--;
+			if(!RxTimeout)
+			{
+				gu8_rxMode=0;
+				RxTimeout=0;
+				RxInd=0;
+			}
+		}
+		
 		//-------------------------------------------------------------
 		bool_msec50_flag=0;
 	}
@@ -9893,13 +10090,13 @@ void boot_data(void)
 	
 	ReadEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck));
 	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-	if(FirstTimeCheck != 0xAA)
+	if(FirstTimeCheck != 0xA0)
 	{
-		FirstTimeCheck=0xAA;
+		FirstTimeCheck=0xA0;
 	#else
-	if(FirstTimeCheck != 0xBB)
+	if(FirstTimeCheck != 0xB0)
 	{
-		FirstTimeCheck=0xBB;
+		FirstTimeCheck=0xB0;
 	#endif
 		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 		
@@ -9917,22 +10114,13 @@ void boot_data(void)
 		if(gu16_parameterWord & ENABLE_DATAFLASH)
 		{
 			//Reset Data Logging Parameter -------------------------------------------
-			CurrentLogIndReadLoc = 0;
-			WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
-			
 			FlashOVFByte=0;
 			WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 			
 			ResetMinMax();	
 			
-			CurrentLogInd = 0;
-			WriteEEPROMData(CURR_LOG_IND,(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
-			
-			CurrentLog24IndReadLoc = 0;
-			WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-			
-			CurrentLog24Ind = 0;
-			WriteEEPROMData(CURR_LOG24_IND,(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
+			ResetCurrentLogInd();
+			ResetCurrentLog24Ind();
 			
 			MinMaxMeanDayLogInd=0;
 			WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
@@ -10923,13 +11111,6 @@ void boot_data(void)
 				WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
 			}
 		
-			ReadEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
-			if(CurrentLogIndReadLoc>=100)
-			{
-				CurrentLogIndReadLoc=0;
-				WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
-			}
-			
 			ReadEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 			if(FlashOVFByte>1)
 			{
@@ -10937,26 +11118,8 @@ void boot_data(void)
 				WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 			}
 			
-			ReadEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
-			if(CurrentLogInd>=TOTAL_REGULAR_LOG)
-			{
-				CurrentLogInd = 0;
-				WriteEEPROMData((CURR_LOG_IND+(CurrentLogIndReadLoc*4)),(uint8_t*)&CurrentLogInd,sizeof(CurrentLogInd));
-			}
-			
-			ReadEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-			if(CurrentLog24IndReadLoc>=100)
-			{
-				CurrentLog24IndReadLoc = 0;
-				WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-			}
-			
-			ReadEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
-			if(CurrentLog24Ind>=LAST_LOG24_ADDR)
-			{
-				CurrentLog24Ind = 0;
-				WriteEEPROMData((CURR_LOG24_IND+(CurrentLog24IndReadLoc*2)),(uint8_t*)&CurrentLog24Ind,sizeof(CurrentLog24Ind));
-			}
+			LoadCurrentLogInd();
+			LoadCurrentLog24Ind();
 		}
 	}
 	
@@ -11015,7 +11178,7 @@ void Init_variables(void)
 
 	for(i=0;i<5;i++)
 	{
-		Kalman_Init(&Kalman[i], 0.01, 0.1, 0.0);  // Initialize with default values
+		Kalman_Init(&Kalman[i], KALMAN_Q, KALMAN_R, 0.0);	// tuning lives in sb_const.h
 	}
 	
 	//-------------------------------------------------------
@@ -11338,8 +11501,8 @@ int main(void)
 	//-------------------------------------------------------
 	
 	SPI_Configure();
-	AT45D_Init();
-	AT45D_set_page_size_to_pwr_of_two();
+	DF_Init();
+	DF_ConfigurePageSize();
 	boot_data();	//Boot Data from Dataflash
 
 	//-------------------------------------------------------

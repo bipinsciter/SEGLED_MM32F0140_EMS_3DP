@@ -131,6 +131,7 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 		static uint8_t mcnt=0,mcnt1=0,mcnt2=0;
 	
 		bool_msec50_flag = 1;
+		bool_keyScan_flag = 1;		//key scan runs on the 50 ms tick
 		
 		mcnt2++;
 		if(mcnt2>=5)
@@ -144,7 +145,6 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 		{
 			mcnt1=0;		
 			bool_mec500_blink_flag ^= 1;
-			bool_mec500_blink_flag1 = 1;
 			
 			bool_dp_sw_factor_add[DP1] = 1;
 			bool_dp_sw_factor_add[DP2] = 1;
