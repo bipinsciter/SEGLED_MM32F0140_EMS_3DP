@@ -188,6 +188,9 @@ bool bool_triggerXbeeReset=0;
 bool bool_RamAllReadCmd=0;
 bool bool_sec_flag=0,bool_msec_flag=0,bool_msec50_flag=0,bool_msec250_flag=0,bool_mec500_blink_flag=0,bool_keyScan_flag=0;
 
+//50 ms ticks left of the UART-acknowledge logo blink; 0 = logo steady on
+uint16_t gu16_logoAckBlinkTimer=0;
+
 struct lcdbits
 {
 	uint8_t Sym_LOGO : 1;	

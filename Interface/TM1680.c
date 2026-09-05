@@ -10,9 +10,9 @@ void TM1680Configure(void)
 		Write_Byte_I2C1(SYS_DISABLE);	
 		Write_Byte_I2C1(COM_OPTION);	
 		Write_Byte_I2C1(0x98);
-		Write_Byte_I2C1(BRIGHTNESS | 10);
-		Write_Byte_I2C1(SYS_ENABLE);
-		Write_Byte_I2C1(LED_ON);
+		//Write_Byte_I2C1(BRIGHTNESS | 10);
+		//Write_Byte_I2C1(SYS_ENABLE);
+		//Write_Byte_I2C1(LED_ON);
 		I2C1_Stop();              		// Stop condition
 	}
 }	

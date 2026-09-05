@@ -22,7 +22,12 @@
 #define DATAFLASH_AT45DB321D	0
 #define DATAFLASH_XM25QH128A	1
 
-#define DATAFLASH_PART			DATAFLASH_XM25QH128A
+#define DATAFLASH_PART			DATAFLASH_AT45DB321D
+
+//Set to 1 to build XM25_SelfTest() and its diagnostics into the image.  Leave at 0
+//for production: the test costs about 600 bytes of code and erases the scratch
+//sector at boot.  Result codes are listed in Interface/XM25QH128A.h (0 = pass).
+#define XM25_ENABLE_SELFTEST	0
 
 //************************************************************************/
 // PRESSURE SENSOR PART SELECTION - must match the part fitted on the board
@@ -33,7 +38,35 @@
 #define PRESSURE_SENSOR_XGZP6891D	0
 #define PRESSURE_SENSOR_WF200DP		1
 
-#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_XGZP6891D
+
+//************************************************************************/
+// LOGGING SUBSYSTEMS (compile time)
+//
+// Each switch builds one logging subsystem into the image - its code, its RAM,
+// its UART commands, its display mode and its slice of the data flash.  Set one
+// to 0 and none of that is built; the flash regions after it move down to close
+// the gap, so nothing is reserved for a log that does not exist.
+//
+// These are COMPILE-TIME switches.  They are separate from the ENABLE_* bits in
+// gu16_parameterWord below, which turn the same features on and off at RUN time:
+// a subsystem has to be built in before its run-time bit can do anything.
+//
+// Any combination builds.  Two pairs are related, in one direction each:
+//
+//  * BUILD_MINMAX_LOG's daily 'mean' column is the average of the 24 hourly means
+//    kept by BUILD_MEAN24_LOG.  With the mean log excluded the daily record is
+//    still written and still carries min and max; its mean column is simply zero.
+//
+//  * BUILD_RAM_BUFFER owns RAMBuffer, which BUILD_LOG24_LOG also uses to stage one
+//    record on its way to flash.  The buffer therefore sizes itself to whichever
+//    is built - see RAM_BUF_SIZE further down - rather than belonging to either.
+//************************************************************************/
+#define BUILD_REGULAR_LOG	1	//60000-record event log, LogReading()  (RDLG_* commands)
+#define BUILD_LOG24_LOG		1	//1440-record rolling 24 h ring         (FLASH24_* commands)
+#define BUILD_MINMAX_LOG	1	//15-day min/max/mean archive           (MIN_MAX_MEAN_MODE)
+#define BUILD_MEAN24_LOG	1	//24 hourly means                       (MEAN_HOUR_MODE)
+#define BUILD_RAM_BUFFER	1	//rolling RAM copy of recent readings   (RAM_ALL_ID / RAM_IND_ID)
 
 #define ENABLE_DP1			0x0001
 #define ENABLE_DP2			0x0002
@@ -227,13 +260,10 @@
 #define RH_LO_ALM_ON			(RH_UP_ALM_OFF+2)
 #define RH_LO_ALM_OFF			(RH_LO_ALM_ON+2)
 
-#define LAST_DP1_ALRM_STAT		(RH_LO_ALM_OFF+2)
-#define LAST_DP2_ALRM_STAT		(LAST_DP1_ALRM_STAT+1)
-#define LAST_DP3_ALRM_STAT		(LAST_DP2_ALRM_STAT+1)
-#define LAST_TM_ALRM_STAT		(LAST_DP3_ALRM_STAT+1)
-#define LAST_RH_ALRM_STAT		(LAST_TM_ALRM_STAT+1)
+//Last alarm state per channel - reserved hole on the XM25, see CFG_MINMAX_BLOCK
+#define CFG_ALRM_STAT_BLOCK		(RH_LO_ALM_OFF+2)	/* 5 bytes: DP1,DP2,DP3,TM,RH */
 
-#define TEMP_UNIT				(LAST_RH_ALRM_STAT+1)
+#define TEMP_UNIT				(CFG_ALRM_STAT_BLOCK+5)
 
 #define DEVICE_ID				(TEMP_UNIT+1)
 #define BUZZER_ON_TIME			(DEVICE_ID+1)
@@ -241,28 +271,22 @@
 #define LOG_INTERVAL			(BUZZER_OFF_TIME+2)
 #define UART_BAUDRATE			(LOG_INTERVAL+2)
 
-#define DP1_MAXIMUM				(UART_BAUDRATE+1)
-#define DP2_MAXIMUM				(DP1_MAXIMUM+4)
-#define DP3_MAXIMUM				(DP2_MAXIMUM+4)
-#define DP1_MINIMUM				(DP3_MAXIMUM+4)
-#define DP2_MINIMUM				(DP1_MINIMUM+4)
-#define DP3_MINIMUM				(DP2_MINIMUM+4)
-#define TEMP_MAXIMUM			(DP3_MINIMUM+4)
-#define TEMP_MINIMUM			(TEMP_MAXIMUM+4)
-#define RH_MAXIMUM				(TEMP_MINIMUM+4)
-#define RH_MINIMUM				(RH_MAXIMUM+4)
+//Min/max slots.  On the AT45 they live here; on the XM25 they move to the
+//real-time store further down, and this stays a reserved hole so that every
+//COLD address below keeps the byte offset it has always had.
+#define CFG_MINMAX_BLOCK		(UART_BAUDRATE+1)	/* 40 bytes */
 
-#define CUSTOMER_PASSWORD		(RH_MINIMUM+4)
+#define CUSTOMER_PASSWORD		(CFG_MINMAX_BLOCK+40)
 #define FAC_CUSTOMER_PASSWORD	(CUSTOMER_PASSWORD+2)
 #define ACK_TIMER				(FAC_CUSTOMER_PASSWORD+2)
 #define ACK_PWD_IND				(ACK_TIMER+2)
 #define ACK_PASSWORD			(ACK_PWD_IND+1)
 #define DEVICE_SR_NO			(ACK_PASSWORD+30)
-#define CURR_LOG_IND_RDLC		(DEVICE_SR_NO+16)
-#define FLSH_OVF_IND			(CURR_LOG_IND_RDLC+2)
-#define CURR_LOG_IND			(FLSH_OVF_IND+1)
-#define CURR_LOG24_IND_RDLC		(CURR_LOG_IND+400)
-#define CURR_LOG24_IND			(CURR_LOG24_IND_RDLC+1)
+//Log read pointer + overflow flag - reserved hole on the XM25
+#define CFG_LOG_PTR_BLOCK		(DEVICE_SR_NO+16)	/* 3 bytes: RDLC(2) + OVF(1) */
+#define CURR_LOG_IND			(CFG_LOG_PTR_BLOCK+3)
+#define CFG_LOG24_PTR_BLOCK		(CURR_LOG_IND+400)	/* 1 byte: 24 h RDLC */
+#define CURR_LOG24_IND			(CFG_LOG24_PTR_BLOCK+1)
 #define RTC_SET_FLAG_ADDR		(CURR_LOG24_IND+200)
 
 #define DP1_CAL_DATE_ADDR		(RTC_SET_FLAG_ADDR+1)
@@ -301,8 +325,9 @@
 #define TM_CAL_VAL_C_ADDR		(DP3_CAL_VAL_C_ADDR+2)
 #define RH_CAL_VAL_C_ADDR		(TM_CAL_VAL_C_ADDR+2)
 
-#define MIN_MAX_LOG_IND_ADDR	(RH_CAL_VAL_C_ADDR+2)
-#define MASTER_ENABLE_ADDR		(MIN_MAX_LOG_IND_ADDR+5)
+//Day index of the min/max/mean log - reserved hole on the XM25
+#define CFG_MINMAX_IND_BLOCK	(RH_CAL_VAL_C_ADDR+2)	/* 5 bytes */
+#define MASTER_ENABLE_ADDR		(CFG_MINMAX_IND_BLOCK+5)
 
 #define DOOR_SENSE_POLARITY_ADDR		(MASTER_ENABLE_ADDR+1)
 #define DOOR_SENSE_TIME_ADDR			(DOOR_SENSE_POLARITY_ADDR+1)
@@ -322,22 +347,192 @@
 #define LCD_CONTROL_ADDR				(DP_OFFSET_ADDR+6)
 #define COM_CONTROL_ADDR				(LCD_CONTROL_ADDR+1)
 
+//************************************************************************/
+// HOT (real-time) PARAMETERS
+//
+// These are rewritten while the device runs - min/max on every new extreme,
+// alarm state on every transition, the log pointers on every log record.  The
+// rest of the block above changes only when a user presses a key or sends a
+// UART command.
+//
+// The AT45DB321D rewrites any byte in place, so there they stay exactly where
+// they have always been.  The XM25QH128A can only erase whole 4 KB sectors, so
+// leaving them in the configuration sector meant every min/max update had to
+// read-modify-write the entire block of user settings - slow, and it exposed
+// those settings to corruption on every power cut.  On that part they move to
+// their own two-sector store (RT_PARA_ADDR, see the data-flash map below).
+//************************************************************************/
+#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+
+	#define DP1_MAXIMUM				(RT_PARA_ADDR+0)
+	#define DP2_MAXIMUM				(DP1_MAXIMUM+4)
+	#define DP3_MAXIMUM				(DP2_MAXIMUM+4)
+	#define DP1_MINIMUM				(RT_PARA_ADDR+12)
+	#define DP2_MINIMUM				(DP1_MINIMUM+4)
+	#define DP3_MINIMUM				(DP2_MINIMUM+4)
+	#define TEMP_MAXIMUM			(RT_PARA_ADDR+24)
+	#define TEMP_MINIMUM			(RT_PARA_ADDR+28)
+	#define RH_MAXIMUM				(RT_PARA_ADDR+32)
+	#define RH_MINIMUM				(RT_PARA_ADDR+36)
+
+	#define LAST_DP1_ALRM_STAT		(RT_PARA_ADDR+40)
+	#define LAST_DP2_ALRM_STAT		(LAST_DP1_ALRM_STAT+1)
+	#define LAST_DP3_ALRM_STAT		(LAST_DP2_ALRM_STAT+1)
+	#define LAST_TM_ALRM_STAT		(LAST_DP3_ALRM_STAT+1)
+	#define LAST_RH_ALRM_STAT		(LAST_TM_ALRM_STAT+1)
+
+	#define FLSH_OVF_IND			(RT_PARA_ADDR+45)
+	#define MIN_MAX_LOG_IND_ADDR	(RT_PARA_ADDR+46)	/* 5 bytes reserved */
+	#define CURR_LOG_IND_RDLC		(RT_PARA_ADDR+51)	/* 2 bytes */
+	#define CURR_LOG24_IND_RDLC		(RT_PARA_ADDR+53)
+
+	//Bytes 54..RT_PARA_SIZE-1 are spare.  Grow RT_PARA_SIZE if more is needed,
+	//never past RT_SLOT_SIZE-1 - the last byte of a slot is the completion tag.
+
+#else
+
+	#define DP1_MAXIMUM				(CFG_MINMAX_BLOCK+0)
+	#define DP2_MAXIMUM				(DP1_MAXIMUM+4)
+	#define DP3_MAXIMUM				(DP2_MAXIMUM+4)
+	#define DP1_MINIMUM				(DP3_MAXIMUM+4)
+	#define DP2_MINIMUM				(DP1_MINIMUM+4)
+	#define DP3_MINIMUM				(DP2_MINIMUM+4)
+	#define TEMP_MAXIMUM			(DP3_MINIMUM+4)
+	#define TEMP_MINIMUM			(TEMP_MAXIMUM+4)
+	#define RH_MAXIMUM				(TEMP_MINIMUM+4)
+	#define RH_MINIMUM				(RH_MAXIMUM+4)
+
+	#define LAST_DP1_ALRM_STAT		(CFG_ALRM_STAT_BLOCK+0)
+	#define LAST_DP2_ALRM_STAT		(LAST_DP1_ALRM_STAT+1)
+	#define LAST_DP3_ALRM_STAT		(LAST_DP2_ALRM_STAT+1)
+	#define LAST_TM_ALRM_STAT		(LAST_DP3_ALRM_STAT+1)
+	#define LAST_RH_ALRM_STAT		(LAST_TM_ALRM_STAT+1)
+
+	#define CURR_LOG_IND_RDLC		(CFG_LOG_PTR_BLOCK+0)
+	#define FLSH_OVF_IND			(CFG_LOG_PTR_BLOCK+2)
+	#define CURR_LOG24_IND_RDLC		(CFG_LOG24_PTR_BLOCK+0)
+	#define MIN_MAX_LOG_IND_ADDR	(CFG_MINMAX_IND_BLOCK+0)
+
+#endif
+
+//How often SecondTick() commits the real-time mirror to flash.  Only meaningful
+//on a NOR part - see the real-time store in Interface/XM25QH128A.c.
+//
+//The trade-off is wear against loss: one bank holds RT_SLOTS_PER_BANK (63) records
+//before its partner has to be erased, so at 60 s a bank is erased roughly every
+//63 minutes - about 4200 erase cycles a year against the part's rated 100,000.
+//Shortening it costs endurance proportionally; lengthening it risks losing more
+//min/max history on an unexpected power cut.
+#define RT_FLUSH_INTERVAL_SEC	60
+
 //--------------------------------------------------
+//The logo blinks to acknowledge UART traffic: it runs for LOGO_ACK_BLINK_MS from
+//the last valid message served, at the 500 ms rate the TIM1 ISR already keeps in
+//bool_mec500_blink_flag.  Counted in the 50 ms display ticks that gate
+//bool_msec50_flag, so the two stay in step.
+#define LOGO_ACK_BLINK_MS		5000
+#define LOGO_ACK_BLINK_TICKS	(LOGO_ACK_BLINK_MS/50)
+
 #define MIN_LOG_INTERVAL		1
 #define MAX_LOG_INTERVAL		1440
 
-#define DEFAUT_DP1_MIN				981.0
-#define DEFAUT_DP1_MAX				(-981.0)
-#define DEFAUT_DP2_MIN				981.0
-#define DEFAUT_DP2_MAX				(-981.0)
-#define DEFAUT_DP3_MIN				981.0
-#define DEFAUT_DP3_MAX				(-981.0)
+//************************************************************************/
+// MIN / MAX SEEDS AND RANGE
+//
+// DEFAUT_x_MIN starts at the TOP of the sensor's range and DEFAUT_x_MAX at the
+// BOTTOM, so the first reading beats both and the tracked extremes converge at
+// once.  boot_data() reuses the same two numbers as the validity bounds for the
+// stored extremes, so ANYTHING THE SENSOR CAN REPORT has to fit inside them -
+// otherwise a genuine reading is thrown away at the next power up.
+//
+// Pressure: this is the span the DRIVER can produce, which is wider than the
+// calibrated span on the XGZP part.
+//
+//   XGZP6891D  Calibrated -500..+500 Pa, but Pressure = PARA_A*ADC + PARA_B is a
+//              straight line across the whole 24-bit code range: PARA_B = -625 Pa
+//              at code 0, rising to +1875 Pa at 0xFFFFFF.  Readings beyond the
+//              calibrated span are not guaranteed accurate, but they ARE reported,
+//              so they must not be discarded.  See Interface/XGZP6891D.h.
+//   WF200DP    Two's complement normalised to -1.0..+1.0 then scaled by
+//              WF200DP_FULL_SCALE_PA, so it cannot leave -500..+500 Pa.
+//
+// Temperature / RH: the SHT25's rated range, and already correct.  Its conversion
+// formulas can compute slightly beyond it at the ends of the raw code range
+// (-46.85..+128.87 C from T = -46.85 + 175.72*ST/2^16, and -6..+119 %RH from
+// RH = -6 + 125*SRH/2^16); readings out there are outside the part's
+// specification, and clamping them to the rated range is deliberate.
+//************************************************************************/
+//Rated span of the fitted part, as a whole number of Pa.  Kept as an int so the
+//display-width check below can be a real #error - the preprocessor cannot compare
+//floats.
+#if (PRESSURE_SENSOR_PART == PRESSURE_SENSOR_WF200DP)
+	//WF200DPZ0.005B: +/-0.005 bar, and the reading is normalised to -1.0..+1.0
+	//before scaling, so the part cannot report outside this span at all.
+	#define DP_SENSOR_RATED_INT		500
+#else
+	//XGZP6891D on the -500..+500 Pa row of the transfer-function table.
+	#define DP_SENSOR_RATED_INT		500
+#endif
+
+#define DP_SENSOR_RATED_PA			((float)DP_SENSOR_RATED_INT)
+
+//The min/max SEEDS use the rated span too, and deliberately not the wider span the
+//XGZP driver can report (-625..+1875 Pa, where the transfer-function line simply
+//carries on past the calibrated row).  Two reasons:
+//
+//  * Those extremes are extrapolation artefacts, not measurements - zero sits at
+//    a quarter of the code range on that part, so the top of the line lands a long
+//    way out.
+//  * Each min/max field on the normal-mode display is THREE characters, and
+//    convert_float() writes as many digits as the value needs without bounding it.
+//    A four-digit seed overruns into the next channel's field.
+//
+//Trade-off: if EVERY reading sits outside the rated span, the corresponding
+//extreme stays at its seed instead of tracking - which on a +/-500 Pa part means
+//it is saturated and the reading is not trustworthy anyway.
+#define DEFAUT_DP_SENSOR_MIN		DP_SENSOR_RATED_PA
+#define DEFAUT_DP_SENSOR_MAX		(-DP_SENSOR_RATED_PA)
+
+#if (DP_SENSOR_RATED_INT > 999)
+	#error "DP min/max seeds and alarm setpoints are drawn in 3-digit fields (see convert_float call sites in conv_value) - a rated span above 999 Pa overruns the next channel's display field"
+#endif
+
+#define DEFAUT_DP1_MIN				DEFAUT_DP_SENSOR_MIN
+#define DEFAUT_DP1_MAX				DEFAUT_DP_SENSOR_MAX
+#define DEFAUT_DP2_MIN				DEFAUT_DP_SENSOR_MIN
+#define DEFAUT_DP2_MAX				DEFAUT_DP_SENSOR_MAX
+#define DEFAUT_DP3_MIN				DEFAUT_DP_SENSOR_MIN
+#define DEFAUT_DP3_MAX				DEFAUT_DP_SENSOR_MAX
+
+//SHT25 rated range - unchanged
 #define DEFAUT_RH_MIN				100
 #define DEFAUT_RH_MAX				0
 #define DEFAUT_TEMP_C_MIN			125.0
 #define DEFAUT_TEMP_C_MAX			(-40.0)
 #define DEFAUT_TEMP_F_MIN			257.0
 #define DEFAUT_TEMP_F_MAX			(-40.0)
+
+//How far a DP alarm setpoint may be set, in Pa.  This follows the sensor's RATED
+//span, not the wider span the driver can report.  Two reasons:
+//
+//  * An alarm is only meaningful where the reading is guaranteed accurate.
+//  * The setpoint is drawn by convert_char(dummy,&data[6],4) - FOUR digits of
+//    tenths - so nothing above 999.9 Pa can be displayed.  The XGZP part reports
+//    up to +1875 Pa, which would need five.
+//
+//The min/max bounds above deliberately use the wider reported span instead:
+//discarding a stored extreme is worse than keeping an uncalibrated one, and those
+//are not entered through this four-digit field.
+//
+//Setpoints are held in TENTHS of a Pa - DEFAULT_DP1_UPPER_ALM_ON = 550 is 55.0 Pa,
+//and the alarm test is Dpressure > DP_Upper_Alm_ON/10.0 - hence the *10 at each
+//use site.  int16_t caps a setpoint at +/-3276.7 Pa whatever this is set to.
+//
+//NOTE: this narrows the settable range from the +/-981 Pa it has always been.  A
+//unit already holding a setpoint outside +/-DP_SENSOR_RATED_PA has it reset to the
+//default on the first boot with this firmware.
+#define DP_ALM_LIMIT_MIN			DP_SENSOR_RATED_PA
+#define DP_ALM_LIMIT_MAX			(-DP_SENSOR_RATED_PA)
 #define DEFAULT_DP1_UPPER_ALM_ON	550
 #define DEFAULT_DP1_UPPER_ALM_OFF	500
 #define DEFAULT_DP1_LOWER_ALM_ON	(-550)
@@ -381,7 +576,7 @@
 #define FACT_ACK_PWD			1
 #define NO_OF_USER_CAL_DATE		10
 
-#define DEFAULT_LCD_BRIGHTNESS	 10
+#define DEFAULT_LCD_BRIGHTNESS	 15
 #define DEFAULT_AUTO_SENT_INTERVAL	 5
 #define DEFAULT_XBEE_RST_INTERVAL	 360
 #define DEFAULT_DEVICES_IN_GROUP	 5
@@ -440,7 +635,24 @@
 #define ALM_ACK_LOG				11
 #define POWER_UP_LOG			12
 
-#define RAM_BUF_SIZE			2000
+//RAMBuffer holds the most recent readings.  Built in full it keeps RAM_LOG_SLOTS
+//records for the RAM_ALL_ID / RAM_IND_ID reads; without that feature the 24 hour
+//ring still needs somewhere to stage ONE record on its way to flash, and if neither
+//is built the buffer collapses to nothing.  At 2000 bytes this is the single
+//largest object in RAM, so the difference is worth having.
+#if BUILD_RAM_BUFFER
+	#define RAM_LOG_SLOTS		30
+	#define RAM_BUF_SIZE		2000
+#elif BUILD_LOG24_LOG
+	#define RAM_LOG_SLOTS		1
+	//One whole record.  LOG_SIZE is declared in the data-flash driver header,
+	//which not every translation unit has seen by this point, so the size is
+	//spelled out here; dataflash.h checks the two still agree.
+	#define RAM_BUF_SIZE		(RAM_FILL_START + 50)
+#else
+	#define RAM_LOG_SLOTS		1
+	#define RAM_BUF_SIZE		1
+#endif
 #define RAM_FILL_START			5
 #define RAW_DP_CNT_IND			10
 #define XBEE_RX_IND_MAX			20
@@ -457,7 +669,26 @@
 	#define DF_SECTOR_SIZE			4096UL
 	#define DF_ALIGN_UP(x)			((((x)+DF_SECTOR_SIZE-1UL)/DF_SECTOR_SIZE)*DF_SECTOR_SIZE)
 
-	#define CONFIG_PARA_ADDR		0							/* sector 0 */
+	#define CONFIG_PARA_ADDR		0							/* sector 0 - COLD data only */
+
+	// Real-time parameter store (XM25_Rt* in Interface/XM25QH128A.c).
+	//
+	// Two sectors used as a ping-pong pair, mirrored in RAM.  The application still
+	// addresses these fields as plain EEPROM bytes; RT_PARA_ADDR is a VIRTUAL base
+	// outside the 16 MByte device, so ReadEEPROMData()/WriteEEPROMData() recognise
+	// them and route to the mirror instead of the bus.  Picking a base the part can
+	// never answer to means a raw access that slips past the check fails visibly
+	// rather than quietly corrupting whatever a truncated address would land on.
+	//
+	// The mirror is appended to flash as one whole record once a minute, so a burst
+	// of min/max updates costs a single 64-byte page program instead of one 4 KB
+	// read-modify-write each.
+	#define RT_PARA_SECTOR_A		(CONFIG_PARA_ADDR + DF_SECTOR_SIZE)		/* sector 1 */
+	#define RT_PARA_SECTOR_B		(RT_PARA_SECTOR_A + DF_SECTOR_SIZE)		/* sector 2 */
+	#define RT_PARA_ADDR			0x10000000UL
+	#define RT_PARA_SIZE			60UL		/* payload; see HOT PARAMETERS above */
+	#define RT_SLOT_SIZE			64UL		/* payload + trailing completion tag */
+	#define RT_SLOTS_PER_BANK		((DF_SECTOR_SIZE/RT_SLOT_SIZE)-1UL)	/* 63; slot 0 is the header */
 
 	// Wear-levelled log-pointer store.  Each pointer gets TWO sectors used as a
 	// ping-pong pair: saves append to the active bank (always erased space, one page
@@ -467,28 +698,28 @@
 	// generation) that identifies which bank is newer.  See XM25_PtrSave().
 	#define PTR_HDR_SIZE			4UL
 	#define PTR_SLOT_SIZE			4UL			/* 24-bit value + 8-bit validity tag */
-	#define CURR_LOG_IND_SECTOR_A	(CONFIG_PARA_ADDR + DF_SECTOR_SIZE)
+	#define CURR_LOG_IND_SECTOR_A	(RT_PARA_SECTOR_B + DF_SECTOR_SIZE)
 	#define CURR_LOG_IND_SECTOR_B	(CURR_LOG_IND_SECTOR_A + DF_SECTOR_SIZE)
 	#define CURR_LOG24_IND_SECTOR_A	(CURR_LOG_IND_SECTOR_B + DF_SECTOR_SIZE)
 	#define CURR_LOG24_IND_SECTOR_B	(CURR_LOG24_IND_SECTOR_A + DF_SECTOR_SIZE)
 	#define PTR_SLOTS_PER_BANK		((DF_SECTOR_SIZE-PTR_HDR_SIZE)/PTR_SLOT_SIZE)	/* 1023 */
 
-	// TOTAL_REGULAR_LOG is a RECORD COUNT (log-index wrap-around);
-	// LAST_LOG24_ADDR_OFFSET is the BYTE base of the 24-hour ring, padded up to a
-	// sector boundary so the two rings never share a sector.
+	// TOTAL_REGULAR_LOG is a RECORD COUNT (log-index wrap-around); the region base
+	// below is a BYTE address, padded up to a sector boundary so no two regions ever
+	// share a sector.  See the region chain after the #endif.
 	#define REGULAR_LOG_ADDR		(CURR_LOG24_IND_SECTOR_B + DF_SECTOR_SIZE)
 	#define TOTAL_REGULAR_LOG		60000
-	#define LAST_LOG24_ADDR_OFFSET	(REGULAR_LOG_ADDR + DF_ALIGN_UP(TOTAL_REGULAR_LOG*LOG_SIZE))
 
 #else
 
 	#define CONFIG_PARA_ADDR 		0
 	#define REGULAR_LOG_ADDR 		(CONFIG_PARA_ADDR+2048)
 	// Regular log ring.  TOTAL_REGULAR_LOG is a RECORD COUNT (use it for log-index
-	// wrap-around); LAST_LOG24_ADDR_OFFSET is the BYTE address one past the end of
-	// the ring, which is also the byte base of the 24-hour ring below.
+	// wrap-around).  The AT45 rewrites any byte in place, so its regions need no
+	// padding - DF_ALIGN_UP is the identity here and the shared region chain after
+	// the #endif produces exactly the byte addresses this part has always used.
 	#define TOTAL_REGULAR_LOG		60000
-	#define LAST_LOG24_ADDR_OFFSET	(REGULAR_LOG_ADDR+(TOTAL_REGULAR_LOG*LOG_SIZE))
+	#define DF_ALIGN_UP(x)			(x)
 
 #endif
 
@@ -504,11 +735,47 @@
 #define TOTAL_MEAN_HOUR				24
 #define HOUR_MEAN_VALUE_SPACE		(TOTAL_MEAN_HOUR*4)
 
-#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
-	#define MIN_MAX_LOG_ADDR_OFFSET	(LAST_LOG24_ADDR_OFFSET + DF_ALIGN_UP(LAST_LOG24_ADDR*LOG_SIZE))
+//------------------------------------------------------------------------------------
+// Region chain.  Every region is placed immediately after the one before it, and a
+// subsystem that is not built contributes nothing - so excluding a log genuinely
+// hands its flash back rather than leaving a hole.  DF_ALIGN_UP pads each region to
+// a 4 KB boundary on the XM25 (where erase granularity forces it) and is the
+// identity on the AT45.
+//
+// With all four subsystems built the addresses are identical to the original map.
+//------------------------------------------------------------------------------------
+#if BUILD_REGULAR_LOG
+	//1UL forces the 32-bit arithmetic that a (uint32_t) cast used to.  It has to be
+	//a multiplier and not a cast: these macros are reached from the #if guards in
+	//Interface/dataflash.h, and the preprocessor has no casts - `uint32_t' there is
+	//just an undefined identifier, which expands to 0 and breaks the expression.
+	#define REGULAR_LOG_SPACE		DF_ALIGN_UP(1UL*TOTAL_REGULAR_LOG*LOG_SIZE)
 #else
-	#define MIN_MAX_LOG_ADDR_OFFSET	(LAST_LOG24_ADDR_OFFSET+(LAST_LOG24_ADDR*LOG_SIZE))
+	#define REGULAR_LOG_SPACE		0UL
 #endif
+
+#if BUILD_LOG24_LOG
+	#define LOG24_SPACE				DF_ALIGN_UP(1UL*LAST_LOG24_ADDR*LOG_SIZE)
+#else
+	#define LOG24_SPACE				0UL
+#endif
+
+#if BUILD_MINMAX_LOG
+	#define MINMAX_SPACE			DF_ALIGN_UP(5UL*MIN_MAX_MEAN_LOG_SPACE)
+#else
+	#define MINMAX_SPACE			0UL
+#endif
+
+#if BUILD_MEAN24_LOG
+	#define MEAN24_SPACE			DF_ALIGN_UP(5UL*HOUR_MEAN_VALUE_SPACE)
+#else
+	#define MEAN24_SPACE			0UL
+#endif
+
+#define LAST_LOG24_ADDR_OFFSET		(REGULAR_LOG_ADDR + REGULAR_LOG_SPACE)
+#define MIN_MAX_LOG_ADDR_OFFSET		(LAST_LOG24_ADDR_OFFSET + LOG24_SPACE)
+#define MEAN24_LOG_ADDR_OFFSET		(MIN_MAX_LOG_ADDR_OFFSET + MINMAX_SPACE)
+#define DATA_FLASH_END_OFFSET		(MEAN24_LOG_ADDR_OFFSET + MEAN24_SPACE)
 
 #define LAST_DP1_MIN_MAX_OFFSET		(MIN_MAX_LOG_ADDR_OFFSET)
 #define LAST_DP2_MIN_MAX_OFFSET		(LAST_DP1_MIN_MAX_OFFSET+MIN_MAX_MEAN_LOG_SPACE)
@@ -516,7 +783,7 @@
 #define LAST_TM_MIN_MAX_OFFSET		(LAST_DP3_MIN_MAX_OFFSET+MIN_MAX_MEAN_LOG_SPACE)
 #define LAST_RH_MIN_MAX_OFFSET		(LAST_TM_MIN_MAX_OFFSET+MIN_MAX_MEAN_LOG_SPACE)
 
-#define DP1_CURR_24HR_MEAN_OFFSET	(LAST_RH_MIN_MAX_OFFSET+MIN_MAX_MEAN_LOG_SPACE)
+#define DP1_CURR_24HR_MEAN_OFFSET	(MEAN24_LOG_ADDR_OFFSET)
 #define DP2_CURR_24HR_MEAN_OFFSET	(DP1_CURR_24HR_MEAN_OFFSET+HOUR_MEAN_VALUE_SPACE)
 #define DP3_CURR_24HR_MEAN_OFFSET	(DP2_CURR_24HR_MEAN_OFFSET+HOUR_MEAN_VALUE_SPACE)
 #define TM_CURR_24HR_MEAN_OFFSET	(DP3_CURR_24HR_MEAN_OFFSET+HOUR_MEAN_VALUE_SPACE)

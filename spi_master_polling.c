@@ -80,7 +80,26 @@ void SPI_Configure(void)
     SPI_InitStruct.SPI_CPOL      = SPI_CPOL_Low;
     SPI_InitStruct.SPI_CPHA      = SPI_CPHA_1Edge;
     SPI_InitStruct.SPI_NSS       = SPI_NSS_Soft;
-    SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_256;
+    //SPI2 hangs off APB1.  SystemInit() runs the core at 72 MHz with HCLK = SYSCLK
+    //and PCLK1 = HCLK/2, so the SPI kernel clock is 36 MHz and /2 (18 MHz) is the
+    //fastest SCK this MCU can produce on this bus.  It used to run at /256 = 140 kHz,
+    //where a single 256-byte page transfer took about 15 ms on its own.
+    //
+    //This bus carries nothing but the data flash, and 18 MHz is well inside both
+    //parts' ratings:
+    //
+    //  AT45DB321D  fCAR1  66 MHz   continuous array read, opcode 0xE8 - the one the
+    //                              driver uses.  (fCAR2, the 0x03 low-frequency read,
+    //                              is 33 MHz, but that opcode is never issued here.)
+    //  XM25QH128A  fR     50 MHz   Read Data 0x03.  Everything else on that part -
+    //                              program, erase, status, ID - is rated fC = 104 MHz,
+    //                              so the plain read is the binding limit at 50 MHz.
+    //
+    //18 MHz is therefore about a third of the lower of the two ceilings, which leaves
+    //room for board parasitics.  Drop to _4 (9 MHz) or _8 (4.5 MHz) if a board ever
+    //shows read/write corruption - XM25_ENABLE_SELFTEST in sb_const.h builds the
+    //end-to-end check that will catch it.
+    SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2;
     SPI_InitStruct.SPI_FirstBit  = SPI_FirstBit_MSB;
     SPI_Init(SPI2, &SPI_InitStruct);
 

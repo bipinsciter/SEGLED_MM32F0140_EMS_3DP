@@ -110,14 +110,28 @@ uint8_t ReadXGZP6891D(uint8_t SensNo, float *value)
 		return 1;
 	}
 
+	//Registers 0x06/0x07/0x08 form ONE plain unsigned 24-bit value - the datasheet
+	//builds it exactly this way in its own reference code, and does not sign-extend it
+	//the way it does for the 16-bit temperature.
+	//
+	//This used to mask with 0x7FFFFF.  For the -500..+500 Pa part fitted here the
+	//calibrated span is codes 838861..7549746, so bit 23 is clear on every in-range
+	//reading and the mask looked harmless - but above +625 Pa the code passes 2^23 and
+	//the mask wrapped it round to a small value, i.e. a strong POSITIVE pressure was
+	//displayed as a strong negative one.  That is inside this product's working range:
+	//an alarm setpoint may be set as high as DP_ALM_LIMIT_MIN (981 Pa).  See
+	//XGZP6891D.h for the transfer-function table this all comes from.
 	pressure_adc  = (uint32_t)data[0];
 	pressure_adc <<= 8;
 	pressure_adc |= (uint32_t)data[1];
 	pressure_adc <<= 8;
 	pressure_adc |= (uint32_t)data[2];
-	pressure_adc &= 0x7FFFFF;
 	
-	if(pressure_adc == 0x7FFFFF) 
+	//Every 24-bit code maps to some pressure between -625 and +1875 Pa, so a dead bus
+	//cannot be spotted from the converted value - it has to be caught here.  A bus
+	//floating high reads all ones and one held low reads all zeros; both would
+	//otherwise pass for a reading at the extreme end of the line.
+	if((pressure_adc == 0x00FFFFFFUL) || (pressure_adc == 0x00000000UL))
 	{
 		DpError=1;
 	}

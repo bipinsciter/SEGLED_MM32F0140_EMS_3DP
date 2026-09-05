@@ -37,6 +37,14 @@
 		#error "XM25QH128A: CONFIG_PARA_ADDR must be 4 KB aligned"
 	#endif
 
+	#if ((RT_PARA_SECTOR_A % XM25_SECTOR_SIZE) != 0)
+		#error "XM25QH128A: RT_PARA_SECTOR_A must be 4 KB aligned"
+	#endif
+
+	#if ((RT_SLOT_SIZE % 4) || (RT_PARA_SIZE >= RT_SLOT_SIZE) || (XM25_PAGE_SIZE % RT_SLOT_SIZE))
+		#error "XM25QH128A: a real-time slot must hold the payload plus a tag and divide the page size"
+	#endif
+
 	#if ((REGULAR_LOG_ADDR % XM25_SECTOR_SIZE) != 0)
 		#error "XM25QH128A: REGULAR_LOG_ADDR must be 4 KB aligned - it currently shares a sector with the config block"
 	#endif
@@ -49,11 +57,15 @@
 		#error "XM25QH128A: MIN_MAX_LOG_ADDR_OFFSET must be 4 KB aligned"
 	#endif
 
-	#if ((RH_CURR_24HR_MEAN_OFFSET + HOUR_MEAN_VALUE_SPACE) > XM25_FLASH_SIZE)
+	#if ((MEAN24_LOG_ADDR_OFFSET % XM25_SECTOR_SIZE) != 0)
+		#error "XM25QH128A: MEAN24_LOG_ADDR_OFFSET must be 4 KB aligned"
+	#endif
+
+	#if (DATA_FLASH_END_OFFSET > XM25_FLASH_SIZE)
 		#error "XM25QH128A: data map does not fit in the device"
 	#endif
 
-	#if ((RH_CURR_24HR_MEAN_OFFSET + HOUR_MEAN_VALUE_SPACE) > XM25_SCRATCH_SECTOR)
+	#if (DATA_FLASH_END_OFFSET > XM25_SCRATCH_SECTOR)
 		#error "XM25QH128A: data map overlaps the scratch sector used by WriteEEPROMData()"
 	#endif
 
@@ -74,8 +86,11 @@
 	// sectors of a 16 MByte part would be pointless and far slower.  Sector erase is
 	// <= 0.7 s, which stays inside the watchdog window provided the caller reloads
 	// between units; a 64 KB block erase would not.
-	#define DF_ERASE_UNITS			(((RH_CURR_24HR_MEAN_OFFSET + HOUR_MEAN_VALUE_SPACE) + XM25_SECTOR_SIZE - 1UL) / XM25_SECTOR_SIZE)
+	#define DF_ERASE_UNITS			((DATA_FLASH_END_OFFSET + XM25_SECTOR_SIZE - 1UL) / XM25_SECTOR_SIZE)
 	#define DF_EraseUnit(i)			XM25_SectorErase((uint32_t)(i) * XM25_SECTOR_SIZE)
+
+	#define DF_RtFlush()			XM25_RtFlush()
+	#define DF_RtReset()			XM25_RtReset()
 
 #else
 
@@ -86,6 +101,22 @@
 	#define DF_ERASE_UNITS			64UL
 	#define DF_EraseUnit(i)			AT45D_SectorErase((uint8_t)(i))
 
+	//The AT45 rewrites any byte in place, so the real-time fields stay in the config
+	//block and there is nothing to batch or recover.
+	#define DF_RtFlush()			((void)0)
+	#define DF_RtReset()			((void)0)
+
+#endif
+
+//-------------------------------------------------------------------------------------
+// RAM_BUF_SIZE is set in sb_const.h without reference to LOG_SIZE, because headers that
+// pull in sb_const.h do not all see the driver header first.  This is where both are
+// visible, so this is where they get checked.
+//-------------------------------------------------------------------------------------
+#if (BUILD_LOG24_LOG && !BUILD_RAM_BUFFER)
+	#if (RAM_BUF_SIZE < (RAM_FILL_START + LOG_SIZE))
+		#error "RAM_BUF_SIZE must hold one whole log record - update it to match LOG_SIZE"
+	#endif
 #endif
 
 #endif	/* DATAFLASH_H_ */

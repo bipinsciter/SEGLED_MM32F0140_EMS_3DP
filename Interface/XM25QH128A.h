@@ -55,7 +55,10 @@
 // Scratch sector used by WriteEEPROMData() to preserve a sector across an erase.
 // Defaults to the LAST sector of the chip so it can never collide with the data map.
 //-------------------------------------------------------------------------------------
-#define XM25_SCRATCH_SECTOR		(XM25_FLASH_SIZE - XM25_SECTOR_SIZE)	// 0x00FFF000
+// NOT the last sector: sector 4095 is where the OTP sector is mapped, and erase
+// commands are disabled there while the part is in OTP mode.  Sector 1024 is an
+// ordinary sector, far above the data map (which tops out around 0x2F4690).
+#define XM25_SCRATCH_SECTOR		0x00400000UL					// sector 1024
 
 //-------------------------------------------------------------------------------------
 // Instruction set (Tables 5A - 5D)
@@ -119,6 +122,13 @@
 // Values are the datasheet maxima rounded up (Table 19 - tSE max was raised to 0.7 s
 // in datasheet revision G, so confirm against the revision you are building against).
 //-------------------------------------------------------------------------------------
+//An erase is only executed if CS# rises cleanly after the eighth bit of the last
+//address byte.  A page program has 256 more bytes of margin after that point,
+//which is why a marginal CS# edge can void every erase while programs still pass.
+//These guard bands cost nothing and remove that class of fault.
+#define XM25_CS_SETTLE_US				5UL
+#define XM25_ERASE_RETRIES				3
+
 #define XM25_TIMEOUT_PAGE_PROG_MS		10UL
 #define XM25_TIMEOUT_SECTOR_ERASE_MS	1000UL
 #define XM25_TIMEOUT_BLOCK_ERASE_MS		4000UL
@@ -135,7 +145,67 @@
 // Public API - deliberately identical to AT45DB321D.h so the part can be swapped by
 // changing DATAFLASH_PART alone.
 //-------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------
+// Self-test result codes (XM25_SelfTest)
+//-------------------------------------------------------------------------------------
+#define XM25_TEST_PASS			0	//everything below passed
+#define XM25_TEST_NO_DEVICE		1	//status reads 0xFF - nothing answering on MISO
+#define XM25_TEST_BAD_ID		2	//JEDEC ID is not 20 70 18
+#define XM25_TEST_PROTECTED		3	//block-protect bits will not clear (check WP# pin)
+#define XM25_TEST_BUSY			4	//WIP never cleared within the timeout
+#define XM25_TEST_ERASE_FAIL	5	//sector did not read back as 0xFF after erase
+#define XM25_TEST_PROGRAM_FAIL	6	//data did not read back as written
+#define XM25_TEST_WREN_FAIL		7	//WREN did not set the WEL bit - no write can work
+#define XM25_TEST_ERASE_STUCK	8	//erase started but WIP never cleared
+#define XM25_TEST_PROG1_FAIL	9	//a SINGLE byte would not program - no write reaches the array
+
+//Erase failed - these three split code 5 into its actual causes
+#define XM25_TEST_ERASE_REJECTED	10	//device never went busy: instruction refused
+#define XM25_TEST_ERASE_RAN_FAIL	11	//erase cycle ran to completion but did not blank
+#define XM25_TEST_ERASE_NEEDS_64K	12	//4 KB sector erase ignored, 64 KB block erase works
+#define XM25_TEST_WEL_LOST			13	//WEL was not set at the moment the erase was issued
+#define XM25_TEST_NO_ERASE_ENGINE	15	//NO erase opcode starts a cycle - not even Chip
+										//Erase, which is a bare 1-byte frame like WREN
+#define XM25_TEST_ERASE_NOT_DECODED	14	//WEL still set afterwards: the erase instruction
+										//was never recognised (framing / clock count / CS#)
+
+//Last values seen by the driver - handy in a debugger watch window
+extern uint8_t xm25_lastId[3];
+extern uint8_t xm25_lastStatus;
+extern uint8_t xm25_selfTestResult;
+extern uint8_t xm25_statusAfterWren;	//SR1 straight after a WREN - WEL (0x02) must be set
+extern uint8_t xm25_statusAfterProg;	//SR1 straight after a page program
+
+//Erase instrumentation, filled in by XM25_SelfTest()
+extern uint8_t  xm25_sr2;			//status register 2 (0x09) - carries the suspend bit
+extern uint8_t  xm25_sr3;			//status register 3 (0x95)
+
 void XM25_Init(void);
+
+/// Read SR1 and clear the block-protect bits if any are set.
+/// Returns 1 if the device ends up unprotected.
+uint8_t XM25_ClearProtection(void);
+
+/// Read status register 2 (0x09) / 3 (0x95) into xm25_sr2 / xm25_sr3.
+void XM25_ReadStatus23(void);
+
+#if XM25_ENABLE_SELFTEST
+
+/// End-to-end check: ID, status, unprotect, erase, program, verify.
+/// Uses the scratch sector only, so it never touches the data map.
+/// Returns XM25_TEST_PASS (0) or the code of the first failing step.
+uint8_t XM25_SelfTest(void);
+
+//Filled in by the self test - inspect these in a debugger watch window
+extern uint8_t  xm25_welBeforeErase;
+extern uint8_t  xm25_welAfterErase;
+extern uint8_t  xm25_eraseWipSeen;
+extern uint16_t xm25_eraseTimeMs;
+extern uint8_t  xm25_blockEraseOk;
+extern uint8_t  xm25_chipEraseWip;
+extern uint8_t  xm25_eraseAttempts;
+
+#endif	// XM25_ENABLE_SELFTEST
 
 uint8_t XM25_GetStatus(void);
 uint8_t XM25_Ready(void);
@@ -157,6 +227,15 @@ void XM25_Program(uint32_t Address,uint8_t *buffer,uint16_t bytes);
 /// Program, erasing any 4 KB sector this write is the first to enter.
 /// Correct for the append-only log rings, which advance monotonically.
 void XM25_ProgramLogStyle(uint32_t Address,uint8_t *buffer,uint16_t bytes);
+
+//-------------------------------------------------------------------------------------
+// Real-time parameter store.  The fields listed under HOT PARAMETERS in sb_const.h are
+// mirrored in RAM and committed as one record by XM25_RtFlush(); the application still
+// reads and writes them through ReadEEPROMData()/WriteEEPROMData() as before.
+//-------------------------------------------------------------------------------------
+void XM25_RtLoad(void);		//recover the newest record  (called by XM25_Init)
+void XM25_RtFlush(void);	//commit the mirror if it has changed
+void XM25_RtReset(void);	//re-open the store after a bulk erase
 
 void WriteLog(uint32_t AddrOffset,uint32_t LogInd,uint8_t *buffer,uint16_t bytes);
 void ReadLog(uint32_t LogInd,uint8_t *buffer,uint16_t bytes);
