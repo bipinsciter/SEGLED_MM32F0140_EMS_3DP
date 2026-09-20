@@ -577,6 +577,12 @@
 //The periods are derived, not stored - nothing to keep in step with the source.
 #define BUZZER_ON_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? (uint16_t)BUZZER_NEAR_ON_TIME  : Buzzer_ON_Time)
 #define BUZZER_OFF_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? (uint16_t)BUZZER_NEAR_OFF_TIME : Buzzer_OFF_Time)
+
+//A zero in EITHER half of the user's cadence means the buzzer is switched off.
+//This is checked against the USER settings, not against BUZZER_*_PERIOD(), so it
+//silences the early-warning beep as well - its periods are fixed constants, and
+//'buzzer off' has to mean the whole sounder, not just the alarm half of it.
+#define BUZZER_ENABLED()			((Buzzer_ON_Time != 0) && (Buzzer_OFF_Time != 0))
 #define DEFAULT_LOG_INTERVAL		1		//In Minutes
 #define DEFAULT_UART_BAUDRATE		8		//57600
 #define DEFAULT_CUSTOMER_PWD		100

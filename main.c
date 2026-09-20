@@ -4578,9 +4578,9 @@ void keyboard(void)
 								}
 								else
 								{
-									if(bool_buzzerStart==YES)
+									if((bool_buzzerStart==YES) && BUZZER_ENABLED())
 									{
-										buzzerOnTime=Buzzer_ON_Time;
+										buzzerOnTime=BUZZER_ON_PERIOD();
 										buzzerOffTime=0;
 										BUZZER_ON;
 									}
@@ -4759,6 +4759,9 @@ void keyboard(void)
 //gu8_buzzerSource - so setting it here is all that picks the pattern.
 void StartBuzzerFor(uint8_t source)
 {
+	//Switched off by the user - nothing to start.
+	if(!BUZZER_ENABLED())	return;
+	
 	if(bool_buzzerStart==NO)
 	{
 		gu8_buzzerSource=source;
@@ -6689,9 +6692,9 @@ void ServePCMsg(void)
 				}
 				else
 				{
-					if(bool_buzzerStart==YES)
+					if((bool_buzzerStart==YES) && BUZZER_ENABLED())
 					{
-						buzzerOnTime=Buzzer_ON_Time;
+						buzzerOnTime=BUZZER_ON_PERIOD();
 						buzzerOffTime=0;
 						BUZZER_ON;
 					}
@@ -8985,21 +8988,20 @@ void SecondTick(void)
 	//--------------------------------------------
 	if(bool_buzzerStart==YES)
 	{
-		if(buzzerOnTime)
+		//Switched off underneath us - the setting can change while a beep is running,
+		//so check here as well as in StartBuzzerFor().
+		if(!BUZZER_ENABLED())
+		{
+			StopBuzzer();
+		}
+		else if(buzzerOnTime)
 		{
 			buzzerOnTime--;
 			if(!buzzerOnTime)
 			{
 				buzzerOffTime=BUZZER_OFF_PERIOD();
 				
-				if(buzzerOffTime)
-				{
-					BUZZER_OFF;	
-				}
-				else
-				{
-					buzzerOnTime=BUZZER_ON_PERIOD();
-				}
+				BUZZER_OFF;
 			}
 		}
 		else if(buzzerOffTime)
@@ -9009,14 +9011,7 @@ void SecondTick(void)
 			{
 				buzzerOnTime=BUZZER_ON_PERIOD();
 				
-				if(buzzerOnTime)
-				{
-					BUZZER_ON;	
-				}
-				else
-				{
-					buzzerOffTime=BUZZER_OFF_PERIOD();	
-				}
+				BUZZER_ON;
 			}
 		}
 	}
