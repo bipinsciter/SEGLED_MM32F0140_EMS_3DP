@@ -744,6 +744,30 @@ static uint8_t DpDisplayAlarm(uint8_t SensNo)
 	return NO_ALARM;
 }
 
+//What disp_value() should DRAW for a channel.
+//
+//A real alarm renders steadily, exactly as before.  An early warning renders THE
+//SAME WAY - same bit plane, same alarm symbols - but only on alternate 500 ms
+//phases of bool_mec500_blink_flag, which the TIM1 ISR already toggles.  On the
+//other phase it falls back to the normal rendering, so the reading itself stays
+//on screen and legible the whole time and it is the alarm STYLING that flashes.
+//
+//To blank the digits outright on the off phase instead, return a state that draws
+//nothing rather than NO_ALARM here - but note the value then disappears for half
+//of every second, which is hard to read on a segment display.
+static uint8_t AlarmDisplayState(uint8_t alarm,uint8_t nearAlarm)
+{
+	if(alarm != NO_ALARM)								return alarm;
+	if(nearAlarm != NO_ALARM && bool_mec500_blink_flag)	return nearAlarm;
+
+	return NO_ALARM;
+}
+
+static uint8_t DpDisplayState(uint8_t SensNo)
+{
+	return AlarmDisplayState(DpDisplayAlarm(SensNo),gu8_DP_NearAlrm[SensNo]);
+}
+
 void disp_value(void)
 {
 	for(uint8_t i=1;i<NO_DIGIT;i++) disp_buffer[i]=seg_code[data[i]];
@@ -780,7 +804,7 @@ void disp_value(void)
 	
 	if(lcd.Sym_DP_UNIT) DP_UNIT_on;
 	
-	if(DpDisplayAlarm(DP1)==NO_ALARM)
+	if(DpDisplayState(DP1)==NO_ALARM)
 	{
 		if(lcd.Sym_DP_MIN) DP_MIN_on;
 		if(lcd.Sym_DP_LOGO) DP_LOGO_on;
@@ -810,7 +834,7 @@ void disp_value(void)
 		if(disp_buffer[6] & 0x20) final_buffer[21] |= BIT2;//DP_F3_on;
 		if(disp_buffer[6] & 0x40) final_buffer[22] |= BIT2;//DP_G3_on;
 	}
-	else if(DpDisplayAlarm(DP1)==LOWER_ALARM)
+	else if(DpDisplayState(DP1)==LOWER_ALARM)
 	{
 		if(lcd.Sym_DP_MIN_ALM) DP_MIN_ALM_on;
 		if(lcd.Sym_DP_LOGO_ALM) DP_LOGO_ALM_on;
@@ -903,7 +927,7 @@ void disp_value(void)
 	
 	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 	
-	if(DpDisplayAlarm(DP2)==NO_ALARM)
+	if(DpDisplayState(DP2)==NO_ALARM)
 	{
 		if(lcd.Sym_TM_MIN) TM_MIN_on;
 		//if(lcd.Sym_TM_LOGO) TM_LOGO_on;
@@ -933,7 +957,7 @@ void disp_value(void)
 		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT4;//TM_F3_on;
 		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT4;//TM_G3_on;
 	}
-	else if(DpDisplayAlarm(DP2)==LOWER_ALARM)
+	else if(DpDisplayState(DP2)==LOWER_ALARM)
 	{
 		if(lcd.Sym_TM_MIN_ALM) TM_MIN_ALM_on;
 		
@@ -1021,7 +1045,7 @@ void disp_value(void)
 		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT5;//TM_G3_on;
 	}
 	
-	if(DpDisplayAlarm(DP3)==NO_ALARM)
+	if(DpDisplayState(DP3)==NO_ALARM)
 	{
 		if(lcd.Sym_RH_MIN) RH_MIN_on;
 		
@@ -1050,7 +1074,7 @@ void disp_value(void)
 		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
 		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
 	}
-	else if(DpDisplayAlarm(DP3)==LOWER_ALARM)
+	else if(DpDisplayState(DP3)==LOWER_ALARM)
 	{
 		if(lcd.Sym_RH_MIN_ALM) RH_MIN_ALM_on;
 		
@@ -1143,7 +1167,7 @@ void disp_value(void)
 	if(lcd.Sym_TM_UNIT_C) TM_UNIT_C_on;
 	if(lcd.Sym_TM_UNIT_F) TM_UNIT_F_on;
 	
-	if(TM_Alrm_ON==NO_ALARM)
+	if(AlarmDisplayState(TM_Alrm_ON,gu8_TM_NearAlrm)==NO_ALARM)
 	{
 		if(lcd.Sym_TM_MIN) TM_MIN_on;
 		if(lcd.Sym_TM_LOGO) TM_LOGO_on;
@@ -1173,7 +1197,7 @@ void disp_value(void)
 		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT4;//TM_F3_on;
 		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT4;//TM_G3_on;
 	}
-	else if(TM_Alrm_ON==LOWER_ALARM)
+	else if(AlarmDisplayState(TM_Alrm_ON,gu8_TM_NearAlrm)==LOWER_ALARM)
 	{
 		if(lcd.Sym_TM_MIN_ALM) TM_MIN_ALM_on;
 		if(lcd.Sym_TM_LOGO_ALM) TM_LOGO_ALM_on;
@@ -1265,7 +1289,7 @@ void disp_value(void)
 
 	if(lcd.Sym_RH_UNIT) RH_UNIT_on;
 	
-	if(RH_Alrm_ON==NO_ALARM)
+	if(AlarmDisplayState(RH_Alrm_ON,gu8_RH_NearAlrm)==NO_ALARM)
 	{
 		if(lcd.Sym_RH_MIN) RH_MIN_on;
 		if(lcd.Sym_RH_LOGO) RH_LOGO_on;
@@ -1295,7 +1319,7 @@ void disp_value(void)
 		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
 		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
 	}
-	else if(RH_Alrm_ON==LOWER_ALARM)
+	else if(AlarmDisplayState(RH_Alrm_ON,gu8_RH_NearAlrm)==LOWER_ALARM)
 	{
 		if(lcd.Sym_RH_MIN_ALM) RH_MIN_ALM_on;
 		if(lcd.Sym_RH_LOGO_ALM) RH_LOGO_ALM_on;
