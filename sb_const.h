@@ -560,6 +560,23 @@
 #define DEFAULT_DEVICE_ID			1
 #define DEFAULT_BUZZER_ON_TIME		1		//In seconds
 #define DEFAULT_BUZZER_OFF_TIME		2		//In seconds
+
+//Cadence for the near-alarm (early warning) beep.  The buzzer state machine runs
+//on the 1 Hz SecondTick(), so one second is the finest grain available and the
+//two patterns have to be told apart by the GAP: a real alarm repeats every
+//ON+OFF = 3 s by default, the early warning every 7 s.
+#define BUZZER_NEAR_ON_TIME			1		//In seconds
+#define BUZZER_NEAR_OFF_TIME		6		//In seconds
+
+//Which condition is currently sounding the buzzer.  A real alarm outranks an
+//early warning, and the cadence follows whichever is active.
+#define BUZZER_SRC_NONE				0
+#define BUZZER_SRC_NEAR				1
+#define BUZZER_SRC_ALARM			2
+
+//The periods are derived, not stored - nothing to keep in step with the source.
+#define BUZZER_ON_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? (uint16_t)BUZZER_NEAR_ON_TIME  : Buzzer_ON_Time)
+#define BUZZER_OFF_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? (uint16_t)BUZZER_NEAR_OFF_TIME : Buzzer_OFF_Time)
 #define DEFAULT_LOG_INTERVAL		1		//In Minutes
 #define DEFAULT_UART_BAUDRATE		8		//57600
 #define DEFAULT_CUSTOMER_PWD		100

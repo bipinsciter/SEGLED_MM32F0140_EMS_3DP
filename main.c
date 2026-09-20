@@ -4730,12 +4730,17 @@ void keyboard(void)
 
 #endif
 
-void StartBuzzer(void)
+//Start the buzzer on the cadence belonging to `source`.  The state machine in
+//SecondTick() reloads through BUZZER_ON_PERIOD()/BUZZER_OFF_PERIOD(), which read
+//gu8_buzzerSource - so setting it here is all that picks the pattern.
+void StartBuzzerFor(uint8_t source)
 {
 	if(bool_buzzerStart==NO)
 	{
+		gu8_buzzerSource=source;
+		
 		bool_buzzerStart=YES;
-		buzzerOnTime=Buzzer_ON_Time;
+		buzzerOnTime=BUZZER_ON_PERIOD();
 		buzzerOffTime=0;
 		
 		if(buzzerOnTime)
@@ -4743,6 +4748,12 @@ void StartBuzzer(void)
 			BUZZER_ON;
 		}
 	}
+}
+
+//A real alarm keeps the user-configured Buzzer_ON_Time/Buzzer_OFF_Time cadence.
+void StartBuzzer(void)
+{
+	StartBuzzerFor(BUZZER_SRC_ALARM);
 }
 
 void StopBuzzer(void)
@@ -8955,7 +8966,7 @@ void SecondTick(void)
 			buzzerOnTime--;
 			if(!buzzerOnTime)
 			{
-				buzzerOffTime=Buzzer_OFF_Time;
+				buzzerOffTime=BUZZER_OFF_PERIOD();
 				
 				if(buzzerOffTime)
 				{
@@ -8963,7 +8974,7 @@ void SecondTick(void)
 				}
 				else
 				{
-					buzzerOnTime=Buzzer_ON_Time;
+					buzzerOnTime=BUZZER_ON_PERIOD();
 				}
 			}
 		}
@@ -8972,7 +8983,7 @@ void SecondTick(void)
 			buzzerOffTime--;
 			if(!buzzerOffTime)
 			{
-				buzzerOnTime=Buzzer_ON_Time;
+				buzzerOnTime=BUZZER_ON_PERIOD();
 				
 				if(buzzerOnTime)
 				{
@@ -8980,7 +8991,7 @@ void SecondTick(void)
 				}
 				else
 				{
-					buzzerOffTime=Buzzer_OFF_Time;	
+					buzzerOffTime=BUZZER_OFF_PERIOD();	
 				}
 			}
 		}
@@ -9118,6 +9129,11 @@ void SecondTick(void)
 	
 	if(gu16_parameterWord & ENABLE_ALERT)
 	{
+		//Work out WHICH condition wants the buzzer.  A real alarm (or an open door)
+		//outranks an early warning, so escalating from near to tripped swaps the cadence
+		//rather than leaving the gentler pattern running.
+		uint8_t buzzerWant = BUZZER_SRC_NONE;
+		
 		if((bool_doorStatus==OPEN) || (DP_Alrm_ON[DP1]!=NO_ALARM)
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			||(DP_Alrm_ON[DP2]!=NO_ALARM)||(DP_Alrm_ON[DP3]!=NO_ALARM)
@@ -9125,6 +9141,21 @@ void SecondTick(void)
 			||(TM_Alrm_ON!=NO_ALARM)||(RH_Alrm_ON!=NO_ALARM)
 			#endif
 		)
+		{
+			buzzerWant = BUZZER_SRC_ALARM;
+		}
+		else if((gu8_DP_NearAlrm[DP1]!=NO_ALARM)
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+			||(gu8_DP_NearAlrm[DP2]!=NO_ALARM)||(gu8_DP_NearAlrm[DP3]!=NO_ALARM)
+			#else
+			||(gu8_TM_NearAlrm!=NO_ALARM)||(gu8_RH_NearAlrm!=NO_ALARM)
+			#endif
+		)
+		{
+			buzzerWant = BUZZER_SRC_NEAR;
+		}
+		
+		if(buzzerWant != BUZZER_SRC_NONE)
 		{	
 			if(bool_buzzeralert==0)
 			{	
@@ -9132,9 +9163,16 @@ void SecondTick(void)
 				if(gu8_doorSensingTimer>=gu8_doorSensingTime)
 				{
 					gu8_doorSensingTimer=0;
-					StartBuzzer();
+					StartBuzzerFor(buzzerWant);
 					bool_buzzeralert=1;
 				}	
+			}
+			else if((buzzerWant != gu8_buzzerSource) && !AlarmAckTimer)
+			{
+				//The kind changed while sounding - restart on the other cadence.  Skipped
+				//while an acknowledge is silencing us, or the swap would undo the ACK.
+				StopBuzzer();
+				StartBuzzerFor(buzzerWant);
 			}
 		}
 		else
@@ -9144,6 +9182,7 @@ void SecondTick(void)
 				StopBuzzer();
 				gu8_doorSensingTimer=0;
 				bool_buzzeralert=0;
+				gu8_buzzerSource=BUZZER_SRC_NONE;
 			}	
 		}
 	}

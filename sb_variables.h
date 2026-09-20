@@ -189,6 +189,8 @@ bool bool_FlashReadCmd=0;
 bool bool_msgRcvOK=0;
 bool bool_autoSendResponse=0;
 bool bool_buzzeralert=0;
+//BUZZER_SRC_NONE / _NEAR / _ALARM - selects the cadence, see BUZZER_ON_PERIOD()
+uint8_t gu8_buzzerSource=BUZZER_SRC_NONE;
 bool bool_resetDevice=0;
 bool bool_triggerXbeeReset=0;
 bool bool_RamAllReadCmd=0;

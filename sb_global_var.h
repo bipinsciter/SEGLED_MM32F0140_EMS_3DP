@@ -179,6 +179,7 @@ extern bool bool_FlashReadCmd;
 extern bool bool_msgRcvOK;
 extern bool bool_autoSendResponse;
 extern bool bool_buzzeralert;
+extern uint8_t gu8_buzzerSource;
 extern bool bool_resetDevice;
 extern bool bool_triggerXbeeReset;
 extern bool bool_RamAllReadCmd;

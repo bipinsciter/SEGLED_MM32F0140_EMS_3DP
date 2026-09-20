@@ -68,7 +68,7 @@ extern "C" {
 #define LED3_RED_OFF		GPIO_SetBits(GPIOB, GPIO_Pin_2)
 #define LED3_RED_TOGGLE		GPIO_WriteBit(GPIOB, GPIO_Pin_2, GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_2) ? Bit_RESET : Bit_SET);
 
-#define BUZZER_ON		GPIO_ResetBits(GPIOB, GPIO_Pin_11)//GPIO_SetBits(GPIOB, GPIO_Pin_11)
+#define BUZZER_ON		GPIO_SetBits(GPIOB, GPIO_Pin_11)
 #define BUZZER_OFF		GPIO_ResetBits(GPIOB, GPIO_Pin_11)
 #define BUZZER_TOGGLE	GPIO_WriteBit(GPIOB, GPIO_Pin_11, GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_11) ? Bit_RESET : Bit_SET);
 
