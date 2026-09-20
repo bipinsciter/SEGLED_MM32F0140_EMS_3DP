@@ -92,6 +92,9 @@ uint8_t TM_Alrm_ON=0;
 uint8_t RH_Alrm_ON=0;
 uint8_t LastTM_Alrm_ON=0;
 uint8_t LastRH_Alrm_ON=0;
+//NO_ALARM / UPPER_ALARM / LOWER_ALARM - see gu8_DP_NearAlrm[]
+uint8_t gu8_TM_NearAlrm=0;
+uint8_t gu8_RH_NearAlrm=0;
 float humidityRH=0;            
 float temperatureC=0,temperatureF=0;          
 float RealtemperatureC=0,RealtemperatureF=0;
@@ -117,6 +120,9 @@ uint8_t HrDPSampleInd[MAX_SUPPORTED_DP]={0};
 uint8_t StageDP[MAX_SUPPORTED_DP]={0};
 uint8_t DP_Alrm_ON[MAX_SUPPORTED_DP]={0};
 uint8_t LastDP_Alrm_ON[MAX_SUPPORTED_DP]={0};
+//NO_ALARM / UPPER_ALARM / LOWER_ALARM - non-zero while the reading is within
+//ALARM_NEAR_THRESHOLD of that setpoint but has not tripped it yet
+uint8_t gu8_DP_NearAlrm[MAX_SUPPORTED_DP]={0};
 uint8_t gu8_DpAlarmSensingTime[MAX_SUPPORTED_DP]={0};
 uint8_t gu8_DpAlarmSensingTimer[MAX_SUPPORTED_DP]={0};
 uint8_t DP_limit[MAX_SUPPORTED_DP]={0};

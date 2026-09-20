@@ -38,7 +38,7 @@
 #define PRESSURE_SENSOR_XGZP6891D	0
 #define PRESSURE_SENSOR_WF200DP		1
 
-#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_XGZP6891D
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
 
 //************************************************************************/
 // LOGGING SUBSYSTEMS (compile time)
@@ -822,6 +822,12 @@
 //Long-press hold times for the key combinations, also in 50 ms ticks
 #define KEY_HOLD_5SEC		100
 #define KEY_HOLD_10SEC		200
+
+//How close a reading has to get to an alarm setpoint before the near-alarm flag
+//is raised, in the same unit as the value itself: Pa for DP, degrees for
+//temperature (so it follows the C/F selection), %RH for humidity.  One value
+//covers all five; split it per quantity here if they need to differ.
+#define ALARM_NEAR_THRESHOLD	3.0
 
 #define NO_ALARM				0
 #define UPPER_ALARM				1

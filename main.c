@@ -3994,22 +3994,22 @@ void CheckUpDnKey(void)
 						break;
 						case TM_ALM_UP_OFF_DISP:		if(dummy>TM_Upper_Alm_ON)dummy=(TM_Upper_Alm_ON-1);		break;
 						case TM_ALM_LO_OFF_DISP:	if(dummy>TM_Upper_Alm_OFF)dummy=(TM_Upper_Alm_OFF-1);	break;
-						case TM_ALM_LO_ON_DISP:	if(dummy>TM_Lower_Alm_OFF)dummy=(TM_Lower_Alm_OFF-1);	break;
-						case TM_UNIT_DISP:	dummy=1;												break;
-						case RH_ALM_UP_ON_DISP:	if(dummy>DEFAUT_RH_MIN*10.0)dummy=DEFAUT_RH_MIN*10.0;	break;
+						case TM_ALM_LO_ON_DISP:	if(dummy>TM_Lower_Alm_OFF)dummy=(TM_Lower_Alm_OFF-1);		break;
+						case TM_UNIT_DISP:	dummy=1;														break;
+						case RH_ALM_UP_ON_DISP:	if(dummy>DEFAUT_RH_MIN*10.0)dummy=DEFAUT_RH_MIN*10.0;		break;
 						case RH_ALM_UP_OFF_DISP:	if(dummy>RH_Upper_Alm_ON)dummy=(RH_Upper_Alm_ON-1);		break;
 						case RH_ALM_LO_OFF_DISP:	if(dummy>RH_Upper_Alm_OFF)dummy=(RH_Upper_Alm_OFF-1);	break;
-						case RH_ALM_LO_ON_DISP:	if(dummy>RH_Lower_Alm_OFF)dummy=(RH_Lower_Alm_OFF-1);	break;
+						case RH_ALM_LO_ON_DISP:	if(dummy>RH_Lower_Alm_OFF)dummy=(RH_Lower_Alm_OFF-1);		break;
 						#endif
 						case RTC_HR_DISP: 	if(dummy>23)dummy=23; 	bool_RTCChangeOccure = 1;			break;
 						case RTC_MN_DISP: 	if(dummy>59)dummy=59; 	bool_RTCChangeOccure = 1;			break;
 						case RTC_DT_DISP: 	if(dummy>31)dummy=31; 	bool_RTCChangeOccure = 1;			break;
 						case RTC_MH_DISP: 	if(dummy>12)dummy=12; 	bool_RTCChangeOccure = 1;			break;
 						case RTC_YR_DISP: 	if(dummy>99)dummy=99;	bool_RTCChangeOccure = 1;			break;
-						case BUZ_ON_DISP:	if(dummy>60)dummy=60;									break;
-						case BUZ_OFF_DISP:	if(dummy>960)dummy=960;									break;
-						case UART_BDT_DISP:	if(dummy>9)dummy=9;		bool_UARTChanged = 1;			break;
-						case CAL_DISP:		if(dummy>999)dummy=999;									break;
+						case BUZ_ON_DISP:	if(dummy>60)dummy=60;										break;
+						case BUZ_OFF_DISP:	if(dummy>960)dummy=960;										break;
+						case UART_BDT_DISP:	if(dummy>9)dummy=9;		bool_UARTChanged = 1;				break;
+						case CAL_DISP:		if(dummy>999)dummy=999;										break;
 						default: break;
 					}
 				}
@@ -8663,6 +8663,8 @@ void ReadDiffPressure(uint8_t SensNo)
 	}
 	Dpressure[SensNo] += TempDpressure[SensNo];
 	//------------------------------------------------------------------
+	
+	//------------------------------------------------------------------
 	if(Dpressure[SensNo] > f32_dp_limit[SensNo]) 
 	{
 		Dpressure[SensNo] = f32_dp_limit[SensNo];
@@ -8705,6 +8707,29 @@ void ReadDiffPressure(uint8_t SensNo)
 		
 		if(gu16_parameterWord & ENABLE_ALERT)
 		{			
+			//Near-alarm band: raised while the pressure is within ALARM_NEAR_THRESHOLD of a
+			//setpoint on the APPROACH side, and cleared otherwise - including once the
+			//alarm itself trips, since past the setpoint it is no longer 'nearly' there.
+			//Evaluated every sample, ahead of the trip chain below, so it never depends
+			//on which branch of that chain runs.
+			{
+				float nearHi = (float)DP_Upper_Alm_ON[SensNo]/10.0;
+				float nearLo = (float)DP_Lower_Alm_ON[SensNo]/10.0;
+			
+				if((Dpressure[SensNo] < nearHi) && (Dpressure[SensNo] >= (nearHi - ALARM_NEAR_THRESHOLD)))
+				{
+					gu8_DP_NearAlrm[SensNo] = UPPER_ALARM;
+				}
+				else if((Dpressure[SensNo] > nearLo) && (Dpressure[SensNo] <= (nearLo + ALARM_NEAR_THRESHOLD)))
+				{
+					gu8_DP_NearAlrm[SensNo] = LOWER_ALARM;
+				}
+				else
+				{
+					gu8_DP_NearAlrm[SensNo] = NO_ALARM;
+				}
+			}
+			
 			//Check Alarm Limit for DP ------------------------------------------------------------------------
 			if(Dpressure[SensNo] > (float)DP_Upper_Alm_ON[SensNo]/10.0)
 			{
@@ -9565,6 +9590,29 @@ void Read_SHT25(void)
 					WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
 				}
 								
+				//Near-alarm band: raised while the temperature is within ALARM_NEAR_THRESHOLD of a
+				//setpoint on the APPROACH side, and cleared otherwise - including once the
+				//alarm itself trips, since past the setpoint it is no longer 'nearly' there.
+				//Evaluated every sample, ahead of the trip chain below, so it never depends
+				//on which branch of that chain runs.
+				{
+					float nearHi = (float)TM_Upper_Alm_ON/10.0;
+					float nearLo = (float)TM_Lower_Alm_ON/10.0;
+				
+					if((tempvar < nearHi) && (tempvar >= (nearHi - ALARM_NEAR_THRESHOLD)))
+					{
+						gu8_TM_NearAlrm = UPPER_ALARM;
+					}
+					else if((tempvar > nearLo) && (tempvar <= (nearLo + ALARM_NEAR_THRESHOLD)))
+					{
+						gu8_TM_NearAlrm = LOWER_ALARM;
+					}
+					else
+					{
+						gu8_TM_NearAlrm = NO_ALARM;
+					}
+				}
+				
 				//Check Alarm Limit for Temp -----------------------------------------------
 				if(tempvar > (float)TM_Upper_Alm_ON/10.0)
 				{
@@ -9675,6 +9723,29 @@ void Read_SHT25(void)
 				{
 					RH_Min = humidityRH;
 					WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
+				}
+				
+				//Near-alarm band: raised while the humidity is within ALARM_NEAR_THRESHOLD of a
+				//setpoint on the APPROACH side, and cleared otherwise - including once the
+				//alarm itself trips, since past the setpoint it is no longer 'nearly' there.
+				//Evaluated every sample, ahead of the trip chain below, so it never depends
+				//on which branch of that chain runs.
+				{
+					float nearHi = (float)RH_Upper_Alm_ON/10.0;
+					float nearLo = (float)RH_Lower_Alm_ON/10.0;
+				
+					if((humidityRH < nearHi) && (humidityRH >= (nearHi - ALARM_NEAR_THRESHOLD)))
+					{
+						gu8_RH_NearAlrm = UPPER_ALARM;
+					}
+					else if((humidityRH > nearLo) && (humidityRH <= (nearLo + ALARM_NEAR_THRESHOLD)))
+					{
+						gu8_RH_NearAlrm = LOWER_ALARM;
+					}
+					else
+					{
+						gu8_RH_NearAlrm = NO_ALARM;
+					}
 				}
 				
 				//Check Alarm Limit for RH -----------------------------------------------
