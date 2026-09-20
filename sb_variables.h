@@ -145,6 +145,8 @@ float DP_Mean[MAX_SUPPORTED_DP]={0};
 float HourDP_Mean[MAX_SUPPORTED_DP]={0};
 float f32_dp_sw_factor[MAX_SUPPORTED_DP]={0},f32_dp_offset[MAX_SUPPORTED_DP]={0},f32_dp_limit[MAX_SUPPORTED_DP]={0};
 uint16_t u16_dp_limit[MAX_SUPPORTED_DP]={0};
+//Signed per-slot DP trim, in tenths of a Pa; 0 = no correction for that slot
+int16_t DpRangeSlotOffset[MAX_SUPPORTED_DP][DP_RANGE_SLOTS]={0};
 int16_t su16_dp_sw_factor[MAX_SUPPORTED_DP]={0},su16_dp_offset[MAX_SUPPORTED_DP]={0};
 uint8_t gu8_dp_sw_factor_add_cnt[MAX_SUPPORTED_DP]={0};
 uint16_t gu16_DPAutoCalTimer10Sec[MAX_SUPPORTED_DP] = {0},gu16_DPAutoCalTimer5Min[MAX_SUPPORTED_DP] = {0};

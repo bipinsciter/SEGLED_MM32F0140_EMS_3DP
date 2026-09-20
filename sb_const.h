@@ -231,6 +231,10 @@
 #define LCD_CONTROL_ID				0x6F
 #define COM_CONTROL_ID				0x70
 #define DP_OFFSET_ID				0x71
+//Per-slot DP trim.  Indexed like DP_LIMIT_ID but with TWO indices:
+//  RxBuffer[4] = channel '0'..'2', RxBuffer[5] = slot '0'..'5',
+//  RxBuffer[6..10] = 5-digit signed value in tenths of a Pa.
+#define DP_SLOT_OFFSET_ID			0x72
 
 
 //************************************************************************/
@@ -346,6 +350,11 @@
 #define DP_OFFSET_ADDR					(DP_LIMIT_ADDR+6)
 #define LCD_CONTROL_ADDR				(DP_OFFSET_ADDR+6)
 #define COM_CONTROL_ADDR				(LCD_CONTROL_ADDR+1)
+
+//Per-slot DP offsets: MAX_SUPPORTED_DP channels x DP_RANGE_SLOTS slots, int16_t
+//each, addressed as DP_SLOT_OFFSET_ADDR + ((channel*DP_RANGE_SLOTS)+slot)*2.
+//Appended at the END of the chain so no existing address moves.
+#define DP_SLOT_OFFSET_ADDR			(COM_CONTROL_ADDR+1)	/* 3*6*2 = 36 bytes */
 
 //************************************************************************/
 // HOT (real-time) PARAMETERS
@@ -850,6 +859,43 @@
 //is raised, in the same unit as the value itself: Pa for DP, degrees for
 //temperature (so it follows the C/F selection), %RH for humidity.  One value
 //covers all five; split it per quantity here if they need to differ.
+//Piecewise DP offset correction.  The reading is bucketed by MAGNITUDE and the
+//matching slot's offset is added, which lets a sensor be trimmed at several
+//points of its range rather than with one flat offset.
+//
+//Boundaries and offsets are both in TENTHS of a Pa, the unit the correction
+//works in.  The six slots cover 0..300 Pa in 50 Pa steps:
+//
+//    slot 0 : |DP| <  50 Pa       slot 3 : |DP| < 200 Pa
+//    slot 1 : |DP| < 100 Pa       slot 4 : |DP| < 250 Pa
+//    slot 2 : |DP| < 150 Pa       slot 5 : |DP| < 300 Pa
+//
+//A reading at or above the last boundary gets NO offset - it falls off the end
+//of the ladder.  Note f32_dp_limit clamps the reading well before that on a
+//default unit (u16_dp_limit = 2500, i.e. 250 Pa), so slot 5 is only reachable
+//if the DP limit is raised.
+#define DP_RANGE_SLOTS			6
+#define DP_SLOT_1_LIMIT			500		/*  50 Pa */
+#define DP_SLOT_2_LIMIT			1000	/* 100 Pa */
+#define DP_SLOT_3_LIMIT			1500	/* 150 Pa */
+#define DP_SLOT_4_LIMIT			2000	/* 200 Pa */
+#define DP_SLOT_5_LIMIT			2500	/* 250 Pa */
+#define DP_SLOT_6_LIMIT			3000	/* 300 Pa */
+
+//Reading clamp, in tenths of a Pa - see f32_dp_limit in ReadDiffPressure().  It has
+//to reach the top of the slot ladder or the highest slot can never be entered: the
+//clamp bites first and every reading above it is pinned to the clamp value.
+#define DEFAULT_DP_LIMIT		3000	/* 300 Pa */
+
+#if (DEFAULT_DP_LIMIT < DP_SLOT_6_LIMIT)
+	#error "DEFAULT_DP_LIMIT is below DP_SLOT_6_LIMIT - the top DP offset slot can never be reached"
+#endif
+
+//Rejects an offset that could only be corruption.  A blank flash cell reads
+//0xFFFF, which as an int16_t is -1 and would otherwise pass as a valid -0.1 Pa,
+//so that exact pattern is treated as 'never written' - see boot_data().
+#define DP_SLOT_OFFSET_LIMIT	(DP_SENSOR_RATED_INT*10)
+
 #define ALARM_NEAR_THRESHOLD	3.0
 
 #define NO_ALARM				0

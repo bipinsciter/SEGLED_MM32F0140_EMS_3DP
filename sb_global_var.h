@@ -140,6 +140,7 @@ extern float DP_Mean[MAX_SUPPORTED_DP];
 extern float HourDP_Mean[MAX_SUPPORTED_DP];
 extern float f32_dp_sw_factor[MAX_SUPPORTED_DP],f32_dp_offset[MAX_SUPPORTED_DP],f32_dp_limit[MAX_SUPPORTED_DP];
 extern uint16_t u16_dp_limit[MAX_SUPPORTED_DP];
+extern int16_t DpRangeSlotOffset[MAX_SUPPORTED_DP][DP_RANGE_SLOTS];
 extern int16_t su16_dp_sw_factor[MAX_SUPPORTED_DP],su16_dp_offset[MAX_SUPPORTED_DP];
 extern uint8_t gu8_dp_sw_factor_add_cnt[MAX_SUPPORTED_DP];
 extern uint16_t gu16_DPAutoCalTimer10Sec[MAX_SUPPORTED_DP],gu16_DPAutoCalTimer5Min[MAX_SUPPORTED_DP];

@@ -6376,6 +6376,12 @@ void ServePCMsg(void)
 				tempshort = findValue(&RxBuffer[5],5);
 			
 			break;
+			case DP_SLOT_OFFSET_ID:
+			
+				//Two index bytes ahead of the value: channel then slot
+				tempshort = findValue(&RxBuffer[6],5);
+			
+			break;
 			
 			default: 
 				tempshort = findValue(&RxBuffer[4],RxInd-6);
@@ -6866,6 +6872,30 @@ void ServePCMsg(void)
 					u16_dp_limit[index]=tempshort;
 					f32_dp_limit[index]=(float)u16_dp_limit[index]/10.0;
 					WriteEEPROMData((DP_LIMIT_ADDR+(index*2)),(uint8_t*)&u16_dp_limit[index],sizeof(u16_dp_limit[index]));
+				}
+			
+			break;
+			case DP_SLOT_OFFSET_ID:
+			
+				{
+					uint8_t slot;
+					
+					index = RxBuffer[4]-'0';
+					slot  = RxBuffer[5]-'0';
+					
+					//Both indices and the value are range checked: a bad frame must not
+					//write past the 18-entry region and into whatever follows it.
+					if((index<MAX_SUPPORTED_DP) && (slot<DP_RANGE_SLOTS)
+						&& (tempshort >= -DP_SLOT_OFFSET_LIMIT) && (tempshort <= DP_SLOT_OFFSET_LIMIT))
+					{
+						DpRangeSlotOffset[index][slot]=tempshort;
+						WriteEEPROMData(DP_SLOT_OFFSET_ADDR + (((index*DP_RANGE_SLOTS)+slot)*2),
+							(uint8_t*)&DpRangeSlotOffset[index][slot],sizeof(DpRangeSlotOffset[index][slot]));
+					}
+					else
+					{
+						bool_paraIdNotValid=1;
+					}
 				}
 			
 			break;
@@ -7473,6 +7503,25 @@ void ServePCMsg(void)
 				if(index<MAX_SUPPORTED_DP)
 				{
 					tempshort = u16_dp_limit[index];
+				}
+			
+			break;
+			case DP_SLOT_OFFSET_ID:
+			
+				{
+					uint8_t slot;
+					
+					index = RxBuffer[4]-'0';
+					slot  = RxBuffer[5]-'0';
+					
+					if((index<MAX_SUPPORTED_DP) && (slot<DP_RANGE_SLOTS))
+					{
+						tempshort = DpRangeSlotOffset[index][slot];
+					}
+					else
+					{
+						bool_paraIdNotValid=1;
+					}
 				}
 			
 			break;
@@ -8700,6 +8749,31 @@ void ReadDiffPressure(uint8_t SensNo)
 		bool_dp_sw_factor_add[SensNo] = 0;
 	}
 	Dpressure[SensNo] += TempDpressure[SensNo];
+	//------------------------------------------------------------------
+	
+	//Piecewise offset: bucket the reading by MAGNITUDE and add that slot's trim.
+	//Both the ladder and the offsets are in tenths of a Pa - see DP_SLOT_n_LIMIT.
+	//
+	//The working value is SIGNED: differential pressure goes negative, and in an
+	//unsigned type -3.0 Pa would wrap to 65506, match no slot, and convert back as
+	//+6550.6 Pa.  Rounding is applied on the way in so the round trip through
+	//tenths does not bias every reading toward zero by up to 0.1 Pa.
+	{
+		int16_t ls16_Dpressure;
+		int16_t ls16_Magnitude;
+		
+		ls16_Dpressure = (int16_t)((Dpressure[SensNo] * 10.0f) + ((Dpressure[SensNo] >= 0.0f) ? 0.5f : -0.5f));
+		ls16_Magnitude = (ls16_Dpressure < 0) ? -ls16_Dpressure : ls16_Dpressure;
+		
+		if(ls16_Magnitude < DP_SLOT_1_LIMIT)		ls16_Dpressure += DpRangeSlotOffset[SensNo][0];
+		else if(ls16_Magnitude < DP_SLOT_2_LIMIT)	ls16_Dpressure += DpRangeSlotOffset[SensNo][1];
+		else if(ls16_Magnitude < DP_SLOT_3_LIMIT)	ls16_Dpressure += DpRangeSlotOffset[SensNo][2];
+		else if(ls16_Magnitude < DP_SLOT_4_LIMIT)	ls16_Dpressure += DpRangeSlotOffset[SensNo][3];
+		else if(ls16_Magnitude < DP_SLOT_5_LIMIT)	ls16_Dpressure += DpRangeSlotOffset[SensNo][4];
+		else if(ls16_Magnitude < DP_SLOT_6_LIMIT)	ls16_Dpressure += DpRangeSlotOffset[SensNo][5];
+		
+		Dpressure[SensNo] = (float)ls16_Dpressure / 10.0f;
+	}
 	//------------------------------------------------------------------
 	
 	//------------------------------------------------------------------
@@ -10520,6 +10594,25 @@ void boot_data(void)
 		RTCSetFlag=0;
 		WriteEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
 		
+		//Per-slot DP trim starts at zero on a fresh device - no correction until
+		//somebody sets one.  boot_data() also defaults these further down on EVERY
+		//boot, which is what covers a unit that is upgraded rather than fresh.
+		{
+			uint8_t ch,slot;
+			
+			for(ch=0; ch<MAX_SUPPORTED_DP; ch++)
+			{
+				for(slot=0; slot<DP_RANGE_SLOTS; slot++)
+				{
+					DpRangeSlotOffset[ch][slot]=0;
+					WriteEEPROMData(DP_SLOT_OFFSET_ADDR + (((ch*DP_RANGE_SLOTS)+slot)*2),
+						(uint8_t*)&DpRangeSlotOffset[ch][slot],sizeof(DpRangeSlotOffset[ch][slot]));
+					
+					IWDG_ReloadCounter();
+				}
+			}
+		}
+		
 		if(gu16_parameterWord & ENABLE_DP1)
 		{
 			//DPressure1 Parameter -----------------------------------------------------
@@ -10558,7 +10651,7 @@ void boot_data(void)
 			f32_dp_sw_factor[DP1]=0.0;
 			WriteEEPROMData((DP_SW_FACT_ADDR),(uint8_t*)&su16_dp_sw_factor[DP1],sizeof(su16_dp_sw_factor[DP1]));
 			
-			u16_dp_limit[DP1]=2500;
+			u16_dp_limit[DP1]=DEFAULT_DP_LIMIT;
 			WriteEEPROMData((DP_LIMIT_ADDR),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
 			f32_dp_limit[DP1]=(float)u16_dp_limit[DP1]/10.0;
 			
@@ -10604,7 +10697,7 @@ void boot_data(void)
 			f32_dp_sw_factor[DP2]=0.0;
 			WriteEEPROMData((DP_SW_FACT_ADDR+2),(uint8_t*)&su16_dp_sw_factor[DP2],sizeof(su16_dp_sw_factor[DP2]));
 			
-			u16_dp_limit[DP2]=2500;
+			u16_dp_limit[DP2]=DEFAULT_DP_LIMIT;
 			WriteEEPROMData((DP_LIMIT_ADDR+2),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
 			f32_dp_limit[DP2]=(float)u16_dp_limit[DP2]/10.0;
 			
@@ -10650,7 +10743,7 @@ void boot_data(void)
 			f32_dp_sw_factor[DP3]=0.0;
 			WriteEEPROMData((DP_SW_FACT_ADDR+4),(uint8_t*)&su16_dp_sw_factor[DP3],sizeof(su16_dp_sw_factor[DP3]));
 			
-			u16_dp_limit[DP3]=2500;
+			u16_dp_limit[DP3]=DEFAULT_DP_LIMIT;
 			WriteEEPROMData((DP_LIMIT_ADDR+4),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
 			f32_dp_limit[DP3]=(float)u16_dp_limit[DP3]/10.0;
 			
@@ -10899,6 +10992,38 @@ void boot_data(void)
 			RTCSetFlag=0;
 			WriteEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
 		}
+		
+		//Per-slot DP offsets.  Loaded here rather than seeded in the first-boot block so
+		//that a unit which has ALREADY had its first boot picks up the default too - these
+		//are new addresses, so on any existing device they read back blank.
+		//
+		//A blank cell is 0xFFFF, which as an int16_t is -1 and would otherwise pass for a
+		//valid -0.1 Pa trim, so that exact pattern is treated as 'never written'.  The only
+		//cost is that -0.1 Pa cannot be stored; it rounds to 0.
+		{
+			uint8_t ch,slot;
+			uint16_t addr;
+			
+			for(ch=0; ch<MAX_SUPPORTED_DP; ch++)
+			{
+				for(slot=0; slot<DP_RANGE_SLOTS; slot++)
+				{
+					addr = DP_SLOT_OFFSET_ADDR + (((ch*DP_RANGE_SLOTS)+slot)*2);
+					
+					ReadEEPROMData(addr,(uint8_t*)&DpRangeSlotOffset[ch][slot],sizeof(DpRangeSlotOffset[ch][slot]));
+					
+					if((DpRangeSlotOffset[ch][slot] == (int16_t)0xFFFF)
+						|| (DpRangeSlotOffset[ch][slot] < -DP_SLOT_OFFSET_LIMIT)
+						|| (DpRangeSlotOffset[ch][slot] >  DP_SLOT_OFFSET_LIMIT))
+					{
+						DpRangeSlotOffset[ch][slot] = 0;
+						WriteEEPROMData(addr,(uint8_t*)&DpRangeSlotOffset[ch][slot],sizeof(DpRangeSlotOffset[ch][slot]));
+					}
+					
+					IWDG_ReloadCounter();
+				}
+			}
+		}
 
 		if(gu16_parameterWord & ENABLE_DP1)
 		{
@@ -11001,7 +11126,7 @@ void boot_data(void)
 			ReadEEPROMData((DP_LIMIT_ADDR+(DP1*2)),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
 			if((u16_dp_limit[DP1]<500) || (u16_dp_limit[DP1]>9990))
 			{
-				u16_dp_limit[DP1]=2500;
+				u16_dp_limit[DP1]=DEFAULT_DP_LIMIT;
 				WriteEEPROMData((DP_LIMIT_ADDR+(DP1*2)),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
 			}
 			f32_dp_limit[DP1]=(float)u16_dp_limit[DP1]/10.0;
@@ -11108,7 +11233,7 @@ void boot_data(void)
 			ReadEEPROMData((DP_LIMIT_ADDR+(DP2*2)),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
 			if((u16_dp_limit[DP2]<500) || (u16_dp_limit[DP2]>9990))
 			{
-				u16_dp_limit[DP2]=2500;
+				u16_dp_limit[DP2]=DEFAULT_DP_LIMIT;
 				WriteEEPROMData((DP_LIMIT_ADDR+(DP2*2)),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
 			}
 			f32_dp_limit[DP2]=(float)u16_dp_limit[DP2]/10.0;
@@ -11215,7 +11340,7 @@ void boot_data(void)
 			ReadEEPROMData((DP_LIMIT_ADDR+(DP3*2)),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
 			if((u16_dp_limit[DP3]<500) || (u16_dp_limit[DP3]>9990))
 			{
-				u16_dp_limit[DP3]=2500;
+				u16_dp_limit[DP3]=DEFAULT_DP_LIMIT;
 				WriteEEPROMData((DP_LIMIT_ADDR+(DP3*2)),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
 			}
 			f32_dp_limit[DP3]=(float)u16_dp_limit[DP3]/10.0;
