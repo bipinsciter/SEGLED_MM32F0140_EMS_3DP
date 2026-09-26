@@ -4,7 +4,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	3
+#define FW_PATCH	4
 
 #define ENABLE_KEY_LOGIC
 
@@ -38,7 +38,7 @@
 #define PRESSURE_SENSOR_XGZP6891D	0
 #define PRESSURE_SENSOR_WF200DP		1
 
-#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_XGZP6891D
 
 //************************************************************************/
 // LOGGING SUBSYSTEMS (compile time)
@@ -438,7 +438,7 @@
 //The logo blinks to acknowledge UART traffic: it runs for LOGO_ACK_BLINK_MS from
 //the last valid message served, at the 500 ms rate the TIM1 ISR already keeps in
 //bool_mec500_blink_flag.  Counted in the 50 ms display ticks that gate
-//bool_msec50_flag, so the two stay in step.
+//the 50 ms tick, so the two stay in step.
 #define LOGO_ACK_BLINK_MS		5000
 #define LOGO_ACK_BLINK_TICKS	(LOGO_ACK_BLINK_MS/50)
 
@@ -542,30 +542,37 @@
 //default on the first boot with this firmware.
 #define DP_ALM_LIMIT_MIN			DP_SENSOR_RATED_PA
 #define DP_ALM_LIMIT_MAX			(-DP_SENSOR_RATED_PA)
+
 #define DEFAULT_DP1_UPPER_ALM_ON	550
 #define DEFAULT_DP1_UPPER_ALM_OFF	500
 #define DEFAULT_DP1_LOWER_ALM_ON	(-550)
 #define DEFAULT_DP1_LOWER_ALM_OFF	(-500)
+
 #define DEFAULT_DP2_UPPER_ALM_ON	550
 #define DEFAULT_DP2_UPPER_ALM_OFF	500
 #define DEFAULT_DP2_LOWER_ALM_ON	(-550)
 #define DEFAULT_DP2_LOWER_ALM_OFF	(-500)
+
 #define DEFAULT_DP3_UPPER_ALM_ON	550
 #define DEFAULT_DP3_UPPER_ALM_OFF	500
 #define DEFAULT_DP3_LOWER_ALM_ON	(-550)
 #define DEFAULT_DP3_LOWER_ALM_OFF	(-500)
+
 #define DEFAULT_TM_C_UPPER_ALM_ON	800
 #define DEFAULT_TM_C_UPPER_ALM_OFF	750
 #define DEFAULT_TM_C_LOWER_ALM_ON	(-350)
 #define DEFAULT_TM_C_LOWER_ALM_OFF	(-300)
+
 #define DEFAULT_TM_F_UPPER_ALM_ON	1760
 #define DEFAULT_TM_F_UPPER_ALM_OFF	1400
 #define DEFAULT_TM_F_LOWER_ALM_ON	(-310)
 #define DEFAULT_TM_F_LOWER_ALM_OFF	(-220)
+
 #define DEFAULT_RH_UPPER_ALM_ON		900
 #define DEFAULT_RH_UPPER_ALM_OFF	850
 #define DEFAULT_RH_LOWER_ALM_ON		150
 #define DEFAULT_RH_LOWER_ALM_OFF	200
+
 #define DEFAULT_DEVICE_ID			1
 #define DEFAULT_BUZZER_ON_TIME		1		//In seconds
 #define DEFAULT_BUZZER_OFF_TIME		2		//In seconds
@@ -574,18 +581,78 @@
 //on the 1 Hz SecondTick(), so one second is the finest grain available and the
 //two patterns have to be told apart by the GAP: a real alarm repeats every
 //ON+OFF = 3 s by default, the early warning every 7 s.
-#define BUZZER_NEAR_ON_TIME			1		//In seconds
-#define BUZZER_NEAR_OFF_TIME		6		//In seconds
+//The buzzer state machine runs on the 50 ms tick in whileTask(), so every period
+//below is a COUNT OF 50 ms TICKS.  It used to run on the 1 Hz SecondTick(), which
+//could not express anything shorter than a second.
+#define BUZZER_TICK_MS				50
+#define BUZZER_MS_TO_TICKS(ms)		((uint16_t)((ms)/BUZZER_TICK_MS))
+#define BUZZER_SEC_TO_TICKS(s)		((uint16_t)((s)*(1000/BUZZER_TICK_MS)))
+
+//Early-warning cadence.  Short blip, long gap - audibly less urgent than a real
+//alarm, and distinct from it without needing a second sounder.
+#define BUZZER_NEAR_ON_MS			150		//length of one chirp
+#define BUZZER_NEAR_GAP_MS			150		//silence between chirps of a burst
+#define BUZZER_NEAR_PERIOD_MS		20000	//burst to burst
+
+//The burst grows from one chirp to two once any single parameter has been in
+//near alarm continuously for this long.  Counted in SecondTick(), per parameter:
+//parameters flickering in and out do not accumulate towards it, only one that
+//stays near without a break.
+#define BUZZER_NEAR_ESCALATE_SEC	(10*60)
+#define BUZZER_NEAR_PULSES			1
+#define BUZZER_NEAR_PULSES_LONG		2
+
+//Silence after the last chirp of a burst, so that burst-to-burst stays exactly
+//BUZZER_NEAR_PERIOD_MS whatever the pulse count:
+//   1 chirp  -> 20000 - 150             = 19850 ms  (397 ticks)
+//   2 chirps -> 20000 - 300 - 150       = 19550 ms  (391 ticks)
+#define BUZZER_NEAR_TAIL_MS(p)		(BUZZER_NEAR_PERIOD_MS - ((p)*BUZZER_NEAR_ON_MS) - (((p)-1)*BUZZER_NEAR_GAP_MS))
+
+//How many chirps the current burst should contain.  A real alarm is always one
+//continuous beep, so its count is 1 and the burst logic never engages.
+//Chirps (and display flashes) in one near-alarm burst.  Split out from
+//BUZZER_PULSES() so the display can share the cadence without going through the
+//buzzer's source selection.
+#define NEAR_PULSES()				(gu8_nearAlrmEscalated ? BUZZER_NEAR_PULSES_LONG : BUZZER_NEAR_PULSES)
+
+//Display flash cadence.  Same RHYTHM as the chirp - same period, same number of
+//pulses, same escalation - but its own on-time: 150 ms is long enough to hear and
+//too short to notice on a segment display, so the flash is held for 500 ms.
+//
+//Period is shared deliberately.  Only the on-time and the tail differ, so the flash
+//and the chirp keep the same 20 s rhythm instead of slowly sliding apart.
+#define NEAR_BLINK_ON_MS			2000
+#define NEAR_BLINK_GAP_MS			1000					/* wide enough that two flashes read as two */
+#define NEAR_BLINK_PERIOD_MS		BUZZER_NEAR_PERIOD_MS
+#define NEAR_BLINK_TAIL_MS(p)		(NEAR_BLINK_PERIOD_MS - ((p)*NEAR_BLINK_ON_MS) - (((p)-1)*NEAR_BLINK_GAP_MS))
+
+//How many chirps the current burst should contain.  A real alarm is always one
+//continuous beep, so its count is 1 and the burst logic never engages.
+#define BUZZER_PULSES()				((gu8_buzzerSource==BUZZER_SRC_NEAR) ? NEAR_PULSES() : 1)
 
 //Which condition is currently sounding the buzzer.  A real alarm outranks an
 //early warning, and the cadence follows whichever is active.
+//Parameters that can raise a near alarm: DP1..DP3, temperature, humidity.  Only
+//the ones the current DEVICE_MODE builds are ever set; the rest stay clear.
+#define NEAR_PARAM_COUNT			(MAX_SUPPORTED_DP + 2)
+
 #define BUZZER_SRC_NONE				0
 #define BUZZER_SRC_NEAR				1
 #define BUZZER_SRC_ALARM			2
 
 //The periods are derived, not stored - nothing to keep in step with the source.
-#define BUZZER_ON_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? (uint16_t)BUZZER_NEAR_ON_TIME  : Buzzer_ON_Time)
-#define BUZZER_OFF_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? (uint16_t)BUZZER_NEAR_OFF_TIME : Buzzer_OFF_Time)
+//Both return a count of 50 ms ticks.  Buzzer_ON_Time / Buzzer_OFF_Time stay in
+//SECONDS everywhere the user sees them - in the key menu, over UART and in flash -
+//and are converted here, so no stored value or display changes meaning.
+//
+//Worst case fits uint16_t: boot_data() caps Buzzer_OFF_Time at 960 s, which is
+//19200 ticks, and Buzzer_ON_Time at 60 s, which is 1200.
+#define BUZZER_ON_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? BUZZER_MS_TO_TICKS(BUZZER_NEAR_ON_MS) : BUZZER_SEC_TO_TICKS(Buzzer_ON_Time))
+#define BUZZER_GAP_PERIOD()			BUZZER_MS_TO_TICKS(BUZZER_NEAR_GAP_MS)
+
+//The tail is read straight after gu8_buzzerPulsesLeft has been reloaded for the
+//NEXT burst, so burst-to-burst spacing stays right even as the count changes.
+#define BUZZER_OFF_PERIOD()			((gu8_buzzerSource==BUZZER_SRC_NEAR) ? BUZZER_MS_TO_TICKS(BUZZER_NEAR_TAIL_MS(gu8_buzzerPulsesLeft)) : BUZZER_SEC_TO_TICKS(Buzzer_OFF_Time))
 
 //A zero in EITHER half of the user's cadence means the buzzer is switched off.
 //This is checked against the USER settings, not against BUZZER_*_PERIOD(), so it
@@ -600,7 +667,18 @@
 #define FACTORY_PARASET_PWD		1234
 #define FACTORY_PASSWORD		1000
 #define DFU_PASSWORD			3123
-#define SOFT_VER				920  //means 9.20
+//Firmware version as reported over UART by SFVER_ID.  DERIVED from FW_MAJOR/FW_MINOR/
+//FW_PATCH so the two can no longer drift: this used to be a standalone literal (920,
+//documented as "9.20") while the firmware itself was version 1.0.3.
+//
+//Encoded as MAJOR*100 + MINOR*10 + PATCH, so 1.0.3 is reported as 103 and the host
+//reads the version off the digits.  That holds only while MINOR and PATCH each stay
+//below 10 - the check below fails the build rather than let the encoding go wrong.
+#define SOFT_VER				((FW_MAJOR*100) + (FW_MINOR*10) + FW_PATCH)
+
+#if ((FW_MINOR > 9) || (FW_PATCH > 9))
+	#error "SOFT_VER packs MINOR and PATCH as one digit each - widen the encoding here and tell the host software before releasing this version"
+#endif
 #define NO_OF_ACKPWD			15
 #define NO_OF_XBEE_MAC			2
 #define NO_OF_DEVICES_IN_GROUP	5
@@ -896,7 +974,21 @@
 //so that exact pattern is treated as 'never written' - see boot_data().
 #define DP_SLOT_OFFSET_LIMIT	(DP_SENSOR_RATED_INT*10)
 
-#define ALARM_NEAR_THRESHOLD	3.0
+//How close a reading has to get to an alarm setpoint before the near-alarm flag is
+//raised, each in the unit of its own quantity.
+//
+//Temperature is specified in CELSIUS and converted, so the margin is the same real
+//temperature difference whichever unit the display is set to.  Only the 1.8 scale
+//applies and not the +32 offset: this is a DIFFERENCE between two temperatures, not
+//a temperature, so the offset cancels.  2.0 C therefore becomes 3.6 F.
+//
+//tempvar and the TM setpoints are both held in the displayed unit (see TMUNT_ID),
+//which is why the threshold has to follow TM_Unit rather than being a constant.
+#define ALARM_NEAR_THRESHOLD_DP		3.0		//Pa
+#define ALARM_NEAR_THRESHOLD_TM_C	2.0		//degrees Celsius - the real margin
+#define DEG_C_TO_F_SPAN(c)			((c)*1.8)	/* a DIFFERENCE, so no +32 */
+#define ALARM_NEAR_THRESHOLD_TM		(TM_Unit ? DEG_C_TO_F_SPAN(ALARM_NEAR_THRESHOLD_TM_C) : (ALARM_NEAR_THRESHOLD_TM_C))
+#define ALARM_NEAR_THRESHOLD_RH		2.0		//%RH
 
 #define NO_ALARM				0
 #define UPPER_ALARM				1

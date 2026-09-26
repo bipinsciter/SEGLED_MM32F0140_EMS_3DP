@@ -7,7 +7,7 @@
 
 #if (PRESSURE_SENSOR_PART == PRESSURE_SENSOR_XGZP6891D)
 
-void TriggerConvSM9543(uint8_t SensNo)
+void TriggerConvXGZP6891D(uint8_t SensNo)
 {
 	switch(SensNo)
 	{

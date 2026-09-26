@@ -130,8 +130,20 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
     {
 		static uint8_t mcnt=0,mcnt1=0,mcnt2=0;
 	
-		bool_msec50_flag = 1;
 		bool_keyScan_flag = 1;		//key scan runs on the 50 ms tick
+		
+		//Free-running 50 ms tick.  Never reset and never read here - whileTask()
+		//tracks the DIFFERENCE since it last looked, so a pass that overruns a tick
+		//catches up instead of losing it.  The boolean flags above cannot do that:
+		//setting one that is already set is a no-op, so the tick simply vanishes.
+		gu16_tick50++;
+		
+		//Buzzer cadence is timed here, not in whileTask().  Those flags above are
+		//booleans: a pass of whileTask() takes about 85 ms because it refreshes the
+		//display every time, so ticks are regularly missed and anything counting
+		//them runs slow.  BuzzerTick() only decrements counters and toggles a GPIO.
+		BuzzerTick();
+		NearBlinkTick();
 		
 		mcnt2++;
 		if(mcnt2>=5)

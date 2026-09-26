@@ -34,7 +34,7 @@
 #define PARA_A 0.000149012
 #define PARA_B -625.0000559
 
-void TriggerConvSM9543(uint8_t SensNo);
+void TriggerConvXGZP6891D(uint8_t SensNo);
 uint8_t ReadXGZP6891D(uint8_t SensNo, float *value);
 
 #endif

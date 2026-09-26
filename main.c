@@ -757,8 +757,8 @@ static uint8_t DpDisplayAlarm(uint8_t SensNo)
 //of every second, which is hard to read on a segment display.
 static uint8_t AlarmDisplayState(uint8_t alarm,uint8_t nearAlarm)
 {
-	if(alarm != NO_ALARM)								return alarm;
-	if(nearAlarm != NO_ALARM && bool_mec500_blink_flag)	return nearAlarm;
+	if(alarm != NO_ALARM)						return alarm;
+	if(nearAlarm != NO_ALARM && gu8_nearBlinkOn)	return nearAlarm;
 
 	return NO_ALARM;
 }
@@ -1197,7 +1197,7 @@ void disp_value(void)
 		if(disp_buffer[9] & 0x20) final_buffer[13] |= BIT4;//TM_F3_on;
 		if(disp_buffer[9] & 0x40) final_buffer[14] |= BIT4;//TM_G3_on;
 	}
-	else if(AlarmDisplayState(TM_Alrm_ON,gu8_TM_NearAlrm)==LOWER_ALARM)
+	else if(AlarmDisplayState(TM_Alrm_ON,gu8_TM_NearAlrm)==UPPER_ALARM)
 	{
 		if(lcd.Sym_TM_MIN_ALM) TM_MIN_ALM_on;
 		if(lcd.Sym_TM_LOGO_ALM) TM_LOGO_ALM_on;
@@ -1319,7 +1319,7 @@ void disp_value(void)
 		if(disp_buffer[12] & 0x20) final_buffer[5] |= BIT2;//RH_F3_on;
 		if(disp_buffer[12] & 0x40) final_buffer[6] |= BIT2;//RH_G3_on;
 	}
-	else if(AlarmDisplayState(RH_Alrm_ON,gu8_RH_NearAlrm)==LOWER_ALARM)
+	else if(AlarmDisplayState(RH_Alrm_ON,gu8_RH_NearAlrm)==UPPER_ALARM)
 	{
 		if(lcd.Sym_RH_MIN_ALM) RH_MIN_ALM_on;
 		if(lcd.Sym_RH_LOGO_ALM) RH_LOGO_ALM_on;
@@ -3166,6 +3166,8 @@ void conv_value(void)
 					data[11] = P;
 
 					convert_char(dummy,&data[6],4);
+				
+					data[8] += 10;
 						
 				break;
 				
@@ -3183,6 +3185,8 @@ void conv_value(void)
 				
 					convert_char(dummy,&data[6],4);
 				
+					data[8] += 10;
+				
 				break;
 				
 				case RH_ALM_LO_OFF_DISP:
@@ -3199,6 +3203,8 @@ void conv_value(void)
 
 					convert_char(dummy,&data[6],4);
 				
+					data[8] += 10;
+				
 				break;
 				
 				case RH_ALM_LO_ON_DISP:
@@ -3213,6 +3219,8 @@ void conv_value(void)
 					data[11] = 0;
 
 					convert_char(dummy,&data[6],4);
+				
+					data[8] += 10;
 				
 				break;	
 				
@@ -4764,9 +4772,12 @@ void StartBuzzerFor(uint8_t source)
 	
 	if(bool_buzzerStart==NO)
 	{
+		//Set everything up BEFORE arming bool_buzzerStart: BuzzerTick() runs from the
+		//TIM1 ISR and keys off that flag, so arming last means it can never observe a
+		//half-built state.
 		gu8_buzzerSource=source;
+		gu8_buzzerPulsesLeft=BUZZER_PULSES();
 		
-		bool_buzzerStart=YES;
 		buzzerOnTime=BUZZER_ON_PERIOD();
 		buzzerOffTime=0;
 		
@@ -4774,6 +4785,8 @@ void StartBuzzerFor(uint8_t source)
 		{
 			BUZZER_ON;
 		}
+		
+		bool_buzzerStart=YES;
 	}
 }
 
@@ -4783,9 +4796,115 @@ void StartBuzzer(void)
 	StartBuzzerFor(BUZZER_SRC_ALARM);
 }
 
+//One 50 ms step of the near-alarm DISPLAY flash.  Same pattern as the chirp and
+//built from the same constants, so the two stay in lockstep.
+//
+//Generated here rather than read off the buzzer on purpose: the sounder can be
+//acknowledged or switched off entirely (Buzzer_ON_Time / Buzzer_OFF_Time = 0),
+//and the visual warning has to survive both.
+void NearBlinkTick(void)
+{
+	if(!gu8_nearAlrmActive)
+	{
+		//Nothing near - park the pattern so the next one starts from its first flash.
+		gu8_nearBlinkOn=0;
+		gu8_nearBlinkPulses=0;
+		gu16_nearBlinkTimer=0;
+		return;
+	}
+	
+	if(gu16_nearBlinkTimer)
+	{
+		gu16_nearBlinkTimer--;
+		if(gu16_nearBlinkTimer)	return;		//current phase still running
+	}
+	
+	if(gu8_nearBlinkOn)
+	{
+		gu8_nearBlinkOn=0;
+		
+		if(gu8_nearBlinkPulses > 1)
+		{
+			//More flashes in this burst - short gap only.
+			gu8_nearBlinkPulses--;
+			gu16_nearBlinkTimer=BUZZER_MS_TO_TICKS(NEAR_BLINK_GAP_MS);
+		}
+		else
+		{
+			//Burst done - reload the count, then size the tail to match it.
+			gu8_nearBlinkPulses=NEAR_PULSES();
+			gu16_nearBlinkTimer=BUZZER_MS_TO_TICKS(NEAR_BLINK_TAIL_MS(gu8_nearBlinkPulses));
+		}
+	}
+	else
+	{
+		gu8_nearBlinkOn=1;
+		gu16_nearBlinkTimer=BUZZER_MS_TO_TICKS(NEAR_BLINK_ON_MS);
+	}
+}
+
+//One 50 ms step of the buzzer cadence.  Called from the TIM1 ISR rather than
+//whileTask(): a pass there takes far longer than a tick because it runs
+//disp_value() every time -
+//32 bytes over bit-banged I2C, about 85 ms.  Timing the buzzer off that counted
+//loop passes rather than time and stretched a 20 s period to 34 s.
+//
+//Only the phase timing lives here.  The decision (which alarm wants the buzzer)
+//and start/stop stay in main, so this touches nothing that is not already
+//byte- or halfword-atomic on a Cortex-M0.
+void BuzzerTick(void)
+{
+	if(bool_buzzerStart!=YES)	return;
+	
+	//Switched off underneath us - the setting can change while a beep is running.
+	if(!BUZZER_ENABLED())
+	{
+		bool_buzzerStart=NO;
+		BUZZER_OFF;
+		buzzerOnTime=0;
+		buzzerOffTime=0;
+		return;
+	}
+	
+	if(buzzerOnTime)
+	{
+		buzzerOnTime--;
+		if(!buzzerOnTime)
+		{
+			BUZZER_OFF;
+			
+			if(gu8_buzzerPulsesLeft > 1)
+			{
+				//More chirps to come in this burst - short gap only.
+				gu8_buzzerPulsesLeft--;
+				buzzerOffTime=BUZZER_GAP_PERIOD();
+			}
+			else
+			{
+				//Burst finished.  Reload the count first so a change of escalation is
+				//picked up, then size the tail to match it.
+				gu8_buzzerPulsesLeft=BUZZER_PULSES();
+				buzzerOffTime=BUZZER_OFF_PERIOD();
+			}
+		}
+	}
+	else if(buzzerOffTime)
+	{
+		buzzerOffTime--;
+		if(!buzzerOffTime)
+		{
+			buzzerOnTime=BUZZER_ON_PERIOD();
+			
+			BUZZER_ON;
+		}
+	}
+}
+
 void StopBuzzer(void)
 {
+	//Disarm FIRST so the ISR stops stepping before the counters are cleared.
 	bool_buzzerStart=NO;
+	
 	BUZZER_OFF;
 	buzzerOnTime=0;
 	buzzerOffTime=0;
@@ -8819,7 +8938,7 @@ void ReadDiffPressure(uint8_t SensNo)
 		
 		if(gu16_parameterWord & ENABLE_ALERT)
 		{			
-			//Near-alarm band: raised while the pressure is within ALARM_NEAR_THRESHOLD of a
+			//Near-alarm band: raised while the pressure is within ALARM_NEAR_THRESHOLD_DP of a
 			//setpoint on the APPROACH side, and cleared otherwise - including once the
 			//alarm itself trips, since past the setpoint it is no longer 'nearly' there.
 			//Evaluated every sample, ahead of the trip chain below, so it never depends
@@ -8828,11 +8947,11 @@ void ReadDiffPressure(uint8_t SensNo)
 				float nearHi = (float)DP_Upper_Alm_ON[SensNo]/10.0;
 				float nearLo = (float)DP_Lower_Alm_ON[SensNo]/10.0;
 			
-				if((Dpressure[SensNo] < nearHi) && (Dpressure[SensNo] >= (nearHi - ALARM_NEAR_THRESHOLD)))
+				if((Dpressure[SensNo] < nearHi) && (Dpressure[SensNo] >= (nearHi - ALARM_NEAR_THRESHOLD_DP)))
 				{
 					gu8_DP_NearAlrm[SensNo] = UPPER_ALARM;
 				}
-				else if((Dpressure[SensNo] > nearLo) && (Dpressure[SensNo] <= (nearLo + ALARM_NEAR_THRESHOLD)))
+				else if((Dpressure[SensNo] > nearLo) && (Dpressure[SensNo] <= (nearLo + ALARM_NEAR_THRESHOLD_DP)))
 				{
 					gu8_DP_NearAlrm[SensNo] = LOWER_ALARM;
 				}
@@ -9059,36 +9178,6 @@ void SecondTick(void)
 		}
 	}
 	
-	//--------------------------------------------
-	if(bool_buzzerStart==YES)
-	{
-		//Switched off underneath us - the setting can change while a beep is running,
-		//so check here as well as in StartBuzzerFor().
-		if(!BUZZER_ENABLED())
-		{
-			StopBuzzer();
-		}
-		else if(buzzerOnTime)
-		{
-			buzzerOnTime--;
-			if(!buzzerOnTime)
-			{
-				buzzerOffTime=BUZZER_OFF_PERIOD();
-				
-				BUZZER_OFF;
-			}
-		}
-		else if(buzzerOffTime)
-		{
-			buzzerOffTime--;
-			if(!buzzerOffTime)
-			{
-				buzzerOnTime=BUZZER_ON_PERIOD();
-				
-				BUZZER_ON;
-			}
-		}
-	}
 	if(DP_StartUpTimer)DP_StartUpTimer--;
 	#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 	if(TMRH_StartUpTimer)TMRH_StartUpTimer--;
@@ -9215,6 +9304,46 @@ void SecondTick(void)
 	}	
 	#endif
 	//====================================================
+	//How long each parameter has been CONTINUOUSLY in near alarm.  Per parameter, not
+	//one shared timer: a channel that keeps dropping in and out is not the sustained
+	//drift this is meant to catch, so only an unbroken run counts.  One second per
+	//SecondTick(), saturating at the threshold so the counter cannot wrap.
+	{
+		uint8_t i;
+		uint8_t nearNow[NEAR_PARAM_COUNT];
+		
+		nearNow[0] = gu8_DP_NearAlrm[DP1];
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		nearNow[1] = gu8_DP_NearAlrm[DP2];
+		nearNow[2] = gu8_DP_NearAlrm[DP3];
+		nearNow[3] = NO_ALARM;
+		nearNow[4] = NO_ALARM;
+		#else
+		nearNow[1] = NO_ALARM;
+		nearNow[2] = NO_ALARM;
+		nearNow[3] = gu8_TM_NearAlrm;
+		nearNow[4] = gu8_RH_NearAlrm;
+		#endif
+		
+		gu8_nearAlrmEscalated = 0;
+		gu8_nearAlrmActive = 0;
+		
+		for(i=0; i<NEAR_PARAM_COUNT; i++)
+		{
+			if(nearNow[i] != NO_ALARM)
+			{
+				gu8_nearAlrmActive = 1;
+				
+				if(gu16_nearAlrmTimer[i] < BUZZER_NEAR_ESCALATE_SEC)	gu16_nearAlrmTimer[i]++;
+				if(gu16_nearAlrmTimer[i] >= BUZZER_NEAR_ESCALATE_SEC)	gu8_nearAlrmEscalated = 1;
+			}
+			else
+			{
+				gu16_nearAlrmTimer[i] = 0;
+			}
+		}
+	}
+	
 	if(AlarmAckTimer)
 	{
 		StopBuzzer();
@@ -9222,12 +9351,27 @@ void SecondTick(void)
 	
 	if(gu16_parameterWord & ENABLE_ALERT)
 	{
+		if(bool_doorStatus==OPEN)
+		{
+			gu8_doorSensingTimer++;
+			if(gu8_doorSensingTimer>=gu8_doorSensingTime)
+			{
+				gu8_doorSensingTimer=0;
+				DOOR_Alrm_ON = 1;
+			}	
+		}
+		else
+		{
+			gu8_doorSensingTimer=0;
+			DOOR_Alrm_ON = 0;
+		}
+		
 		//Work out WHICH condition wants the buzzer.  A real alarm (or an open door)
 		//outranks an early warning, so escalating from near to tripped swaps the cadence
 		//rather than leaving the gentler pattern running.
 		uint8_t buzzerWant = BUZZER_SRC_NONE;
 		
-		if((bool_doorStatus==OPEN) || (DP_Alrm_ON[DP1]!=NO_ALARM)
+		if((DOOR_Alrm_ON) || (DP_Alrm_ON[DP1]!=NO_ALARM)
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			||(DP_Alrm_ON[DP2]!=NO_ALARM)||(DP_Alrm_ON[DP3]!=NO_ALARM)
 			#else
@@ -9237,7 +9381,7 @@ void SecondTick(void)
 		{
 			buzzerWant = BUZZER_SRC_ALARM;
 		}
-		else if((gu8_DP_NearAlrm[DP1]!=NO_ALARM)
+		else if((DOOR_Alrm_ON) || (gu8_DP_NearAlrm[DP1]!=NO_ALARM)
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			||(gu8_DP_NearAlrm[DP2]!=NO_ALARM)||(gu8_DP_NearAlrm[DP3]!=NO_ALARM)
 			#else
@@ -9246,19 +9390,15 @@ void SecondTick(void)
 		)
 		{
 			buzzerWant = BUZZER_SRC_NEAR;
+			printf("BUZZER_SRC_NEAR\n");
 		}
 		
 		if(buzzerWant != BUZZER_SRC_NONE)
 		{	
 			if(bool_buzzeralert==0)
 			{	
-				gu8_doorSensingTimer++;
-				if(gu8_doorSensingTimer>=gu8_doorSensingTime)
-				{
-					gu8_doorSensingTimer=0;
-					StartBuzzerFor(buzzerWant);
-					bool_buzzeralert=1;
-				}	
+				StartBuzzerFor(buzzerWant);
+				bool_buzzeralert=1;
 			}
 			else if((buzzerWant != gu8_buzzerSource) && !AlarmAckTimer)
 			{
@@ -9273,7 +9413,6 @@ void SecondTick(void)
 			if(bool_buzzeralert==1)
 			{
 				StopBuzzer();
-				gu8_doorSensingTimer=0;
 				bool_buzzeralert=0;
 				gu8_buzzerSource=BUZZER_SRC_NONE;
 			}	
@@ -9722,7 +9861,7 @@ void Read_SHT25(void)
 					WriteEEPROMData(TEMP_MINIMUM,(uint8_t*)&TM_Min,sizeof(TM_Min));
 				}
 								
-				//Near-alarm band: raised while the temperature is within ALARM_NEAR_THRESHOLD of a
+				//Near-alarm band: raised while the temperature is within ALARM_NEAR_THRESHOLD_TM of a
 				//setpoint on the APPROACH side, and cleared otherwise - including once the
 				//alarm itself trips, since past the setpoint it is no longer 'nearly' there.
 				//Evaluated every sample, ahead of the trip chain below, so it never depends
@@ -9731,11 +9870,11 @@ void Read_SHT25(void)
 					float nearHi = (float)TM_Upper_Alm_ON/10.0;
 					float nearLo = (float)TM_Lower_Alm_ON/10.0;
 				
-					if((tempvar < nearHi) && (tempvar >= (nearHi - ALARM_NEAR_THRESHOLD)))
+					if((tempvar < nearHi) && (tempvar >= (nearHi - ALARM_NEAR_THRESHOLD_TM)))
 					{
 						gu8_TM_NearAlrm = UPPER_ALARM;
 					}
-					else if((tempvar > nearLo) && (tempvar <= (nearLo + ALARM_NEAR_THRESHOLD)))
+					else if((tempvar > nearLo) && (tempvar <= (nearLo + ALARM_NEAR_THRESHOLD_TM)))
 					{
 						gu8_TM_NearAlrm = LOWER_ALARM;
 					}
@@ -9857,7 +9996,7 @@ void Read_SHT25(void)
 					WriteEEPROMData(RH_MINIMUM,(uint8_t*)&RH_Min,sizeof(RH_Min));
 				}
 				
-				//Near-alarm band: raised while the humidity is within ALARM_NEAR_THRESHOLD of a
+				//Near-alarm band: raised while the humidity is within ALARM_NEAR_THRESHOLD_RH of a
 				//setpoint on the APPROACH side, and cleared otherwise - including once the
 				//alarm itself trips, since past the setpoint it is no longer 'nearly' there.
 				//Evaluated every sample, ahead of the trip chain below, so it never depends
@@ -9866,11 +10005,11 @@ void Read_SHT25(void)
 					float nearHi = (float)RH_Upper_Alm_ON/10.0;
 					float nearLo = (float)RH_Lower_Alm_ON/10.0;
 				
-					if((humidityRH < nearHi) && (humidityRH >= (nearHi - ALARM_NEAR_THRESHOLD)))
+					if((humidityRH < nearHi) && (humidityRH >= (nearHi - ALARM_NEAR_THRESHOLD_RH)))
 					{
 						gu8_RH_NearAlrm = UPPER_ALARM;
 					}
-					else if((humidityRH > nearLo) && (humidityRH <= (nearLo + ALARM_NEAR_THRESHOLD)))
+					else if((humidityRH > nearLo) && (humidityRH <= (nearLo + ALARM_NEAR_THRESHOLD_RH)))
 					{
 						gu8_RH_NearAlrm = LOWER_ALARM;
 					}
@@ -10460,26 +10599,41 @@ void whileTask(void)
 		bool_msec250_flag=0;
 	}
 	
-	if(bool_msec50_flag)
+	//Step everything that runs on the 50 ms tick, once per tick that has actually
+	//elapsed, rather than once per pass of whileTask().  A whileTask()
+	//pass takes about 85 ms (it refreshes the display every time), so gating on a
+	//boolean flag lost roughly every second tick and made these run ~1.7x long.
+	//
+	//Reading a free-running counter and consuming the difference is race free: the
+	//ISR only ever writes it, main only ever reads it, and unsigned subtraction
+	//stays correct across the 16-bit wrap.
 	{
-		if(RxTimeout)
+		static uint16_t lu16_lastTick50=0;
+		uint16_t lu16_now = gu16_tick50;
+		uint16_t lu16_elapsed = (uint16_t)(lu16_now - lu16_lastTick50);
+		
+		lu16_lastTick50 = lu16_now;
+		
+		while(lu16_elapsed)
 		{
-			RxTimeout--;
-			if(!RxTimeout)
+			lu16_elapsed--;
+			
+			if(RxTimeout)
 			{
-				gu8_rxMode=0;
-				RxTimeout=0;
-				RxInd=0;
+				RxTimeout--;
+				if(!RxTimeout)
+				{
+					gu8_rxMode=0;
+					RxTimeout=0;
+					RxInd=0;
+				}
 			}
+			
+			//Run down the UART-acknowledge logo blink.  Only the hold-off is counted
+			//here; the 500 ms phase comes from bool_mec500_blink_flag, which the TIM1
+			//ISR toggles every 10 of these ticks.
+			if(gu16_logoAckBlinkTimer) gu16_logoAckBlinkTimer--;
 		}
-		
-		//Run down the UART-acknowledge logo blink.  Only the hold-off is counted
-		//here; the 500 ms phase comes from bool_mec500_blink_flag, which the TIM1
-		//ISR toggles every 10 of these ticks.
-		if(gu16_logoAckBlinkTimer) gu16_logoAckBlinkTimer--;
-		
-		//-------------------------------------------------------------
-		bool_msec50_flag=0;
 	}
 
 	conv_value();
@@ -10516,13 +10670,13 @@ void boot_data(void)
 	
 	ReadEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck));
 	#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-	if(FirstTimeCheck != 0xA0)
+	if(FirstTimeCheck != 0xA1)
 	{
-		FirstTimeCheck=0xA0;
+		FirstTimeCheck=0xA1;
 	#else
-	if(FirstTimeCheck != 0xB1)
+	if(FirstTimeCheck != 0xB2)
 	{
-		FirstTimeCheck=0xB1;
+		FirstTimeCheck=0xB2;
 	#endif
 		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 		
@@ -12064,12 +12218,6 @@ int main(void)
     GPIO_Configure();
 	
 	//-------------------------------------------------------
-	//Initialize UART
-	//-------------------------------------------------------
-	UART_Configure(UART_BaudRate);
-	printf("Powered ON\n");
-	
-	//-------------------------------------------------------
 	//Initialize SPI for AT45DB321D
 	//-------------------------------------------------------
 	SPI_Configure();
@@ -12084,6 +12232,12 @@ int main(void)
 	
 	boot_data();	//Boot Data from Dataflash
 
+	//-------------------------------------------------------
+	//Initialize UART
+	//-------------------------------------------------------
+	UART_Configure(UART_BaudRate);
+	printf("Powered ON\n");
+	
 	//boot_data() seeds and range-checks the real-time parameters, which on a NOR
 	//part land in the RAM mirror rather than in flash.  Commit them now: a fresh
 	//unit power-cycled before the first timed flush would otherwise come back up

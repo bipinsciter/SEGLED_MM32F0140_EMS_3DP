@@ -37,7 +37,7 @@
 
 #else
 
-	#define DP_TriggerConv(n)			TriggerConvSM9543(n)
+	#define DP_TriggerConv(n)			TriggerConvXGZP6891D(n)
 	#define DP_ReadPressure(n,v)		ReadXGZP6891D((n),(v))
 
 	//XGZP6891D as fitted: PARA_A * 2^23 = 1250 Pa span, offset by PARA_B -> +/-625 Pa

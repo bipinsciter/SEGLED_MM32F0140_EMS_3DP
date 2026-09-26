@@ -121,7 +121,7 @@ uint8_t StageDP[MAX_SUPPORTED_DP]={0};
 uint8_t DP_Alrm_ON[MAX_SUPPORTED_DP]={0};
 uint8_t LastDP_Alrm_ON[MAX_SUPPORTED_DP]={0};
 //NO_ALARM / UPPER_ALARM / LOWER_ALARM - non-zero while the reading is within
-//ALARM_NEAR_THRESHOLD of that setpoint but has not tripped it yet
+//ALARM_NEAR_THRESHOLD_* of that setpoint but has not tripped it yet
 uint8_t gu8_DP_NearAlrm[MAX_SUPPORTED_DP]={0};
 uint8_t gu8_DpAlarmSensingTime[MAX_SUPPORTED_DP]={0};
 uint8_t gu8_DpAlarmSensingTimer[MAX_SUPPORTED_DP]={0};
@@ -176,6 +176,10 @@ bool bool_resetMinMax=0;
 bool bool_Sec_blink_flag=0;
 bool bool_AM_PM_Flag=0;
 bool bool_doorStatus=CLOSE;
+//Latched door alarm.  Declared here rather than with the temperature/RH block:
+//door sensing exists in BOTH device modes, and the buzzer decision reads this
+//unconditionally, so a DP1_DP2_DP3_MODE build cannot see a mode-guarded copy.
+uint8_t DOOR_Alrm_ON=0;
 bool bool_rtcValid=0;
 
 bool bool_FactoryCalibrationOn=0;
@@ -193,10 +197,26 @@ bool bool_autoSendResponse=0;
 bool bool_buzzeralert=0;
 //BUZZER_SRC_NONE / _NEAR / _ALARM - selects the cadence, see BUZZER_ON_PERIOD()
 uint8_t gu8_buzzerSource=BUZZER_SRC_NONE;
+//Chirps still to sound in the current burst; 1 for a real alarm
+uint8_t gu8_buzzerPulsesLeft=1;
+//Seconds each parameter has been continuously in near alarm, and the resulting
+//'escalate the burst' decision - see BUZZER_NEAR_ESCALATE_SEC
+uint16_t gu16_nearAlrmTimer[NEAR_PARAM_COUNT]={0};
+uint8_t gu8_nearAlrmEscalated=0;
+//1 while ANY parameter is in near alarm - gates the display flash cadence
+uint8_t gu8_nearAlrmActive=0;
+//Display flash phase, driven on the near-alarm cadence by NearBlinkTick()
+uint8_t gu8_nearBlinkOn=0;
+uint8_t gu8_nearBlinkPulses=0;
+uint16_t gu16_nearBlinkTimer=0;
 bool bool_resetDevice=0;
 bool bool_triggerXbeeReset=0;
 bool bool_RamAllReadCmd=0;
-bool bool_sec_flag=0,bool_msec_flag=0,bool_msec50_flag=0,bool_msec250_flag=0,bool_mec500_blink_flag=0,bool_keyScan_flag=0;
+bool bool_sec_flag=0,bool_msec_flag=0,bool_msec250_flag=0,bool_mec500_blink_flag=0,bool_keyScan_flag=0;
+
+//Free-running count of 50 ms ticks, incremented by the TIM1 ISR only.  volatile:
+//main reads it in a loop condition and must not cache it.
+volatile uint16_t gu16_tick50=0;
 
 //50 ms ticks left of the UART-acknowledge logo blink; 0 = logo steady on
 uint16_t gu16_logoAckBlinkTimer=0;

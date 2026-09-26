@@ -166,6 +166,7 @@ extern bool bool_resetMinMax;
 extern bool bool_Sec_blink_flag;
 extern bool bool_AM_PM_Flag;
 extern bool bool_doorStatus;
+extern uint8_t DOOR_Alrm_ON;
 extern bool bool_rtcValid;
 extern bool bool_FactoryCalibrationOn;
 extern bool bool_CustmerCalibrationOn;
@@ -181,10 +182,24 @@ extern bool bool_msgRcvOK;
 extern bool bool_autoSendResponse;
 extern bool bool_buzzeralert;
 extern uint8_t gu8_buzzerSource;
+extern uint8_t gu8_buzzerPulsesLeft;
+
+//Defined in main.c, called from the TIM1 ISR - see the comment on BuzzerTick()
+void BuzzerTick(void);
+extern uint16_t gu16_nearAlrmTimer[NEAR_PARAM_COUNT];
+extern uint8_t gu8_nearAlrmEscalated;
+extern uint8_t gu8_nearAlrmActive;
+extern uint8_t gu8_nearBlinkOn;
+extern uint8_t gu8_nearBlinkPulses;
+extern uint16_t gu16_nearBlinkTimer;
+
+//Defined in main.c, called from the TIM1 ISR
+void NearBlinkTick(void);
 extern bool bool_resetDevice;
 extern bool bool_triggerXbeeReset;
 extern bool bool_RamAllReadCmd;
-extern bool bool_sec_flag,bool_msec_flag,bool_msec50_flag,bool_msec250_flag,bool_mec500_blink_flag,bool_keyScan_flag;
+extern bool bool_sec_flag,bool_msec_flag,bool_msec250_flag,bool_mec500_blink_flag,bool_keyScan_flag;
+extern volatile uint16_t gu16_tick50;
 extern uint16_t gu16_logoAckBlinkTimer;
 
 #endif	// SB_GLOBAL_VAR_H_
