@@ -23,6 +23,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text;
@@ -379,7 +380,11 @@ namespace NiyamaConfig
                 port.Write(frame, 0, frame.Length);
                 if (hexLog()) log("TX  " + Hex(frame));
 
-                var deadline = DateTime.UtcNow.AddMilliseconds(ReplyTimeoutMs);
+                //A bulk reply is over a kilobyte, which at 57600 baud is a quarter of a
+                //second of transmission on its own. Give long replies the time they
+                //physically need on the wire, on top of the device's own turnaround.
+                int budget = ReplyTimeoutMs + (expectedLen > 0 ? (expectedLen * 10000) / 57600 : 0);
+                var deadline = DateTime.UtcNow.AddMilliseconds(budget);
                 while (DateTime.UtcNow < deadline)
                 {
                     if (port.BytesToRead > 0)
@@ -441,6 +446,11 @@ namespace NiyamaConfig
                 lblAlm = new Label[3], lblChan = new Label[3];
 
         DataGridView grid, slotGrid;
+        TextBox txtLogOut;
+        NumericUpDown numRingCount, numDayCount;
+        CheckBox chkLogRegular, chkLogRing, chkLogRam, chkLogDays, chkLogMeans;
+        DateTimePicker dtFrom, dtTo;
+        ProgressBar barLogs;
         TextBox txtLog;
         CheckBox chkPoll, chkHexLog;
         ComboBox cboSlotCh, cboLimitCh, cboOffCh;
@@ -536,6 +546,7 @@ namespace NiyamaConfig
             tabs.TabPages.Add(LiveTab());
             tabs.TabPages.Add(ParamTab());
             tabs.TabPages.Add(CalTab());
+            tabs.TabPages.Add(LogsTab());
             tabs.TabPages.Add(LogTab());
             return tabs;
         }
@@ -827,6 +838,230 @@ namespace NiyamaConfig
 
             tp.Controls.AddRange(new Control[] { g1, g2, g3, g4 });
             return tp;
+        }
+
+        // ------------------------------------------------ logs tab
+
+        TabPage LogsTab()
+        {
+            var tp = new TabPage("Logs") { Padding = new Padding(10) };
+
+            var top = new Panel { Dock = DockStyle.Top, Height = 132 };
+
+            chkLogRegular = new CheckBox { Text = "Regular log, by date", Checked = true,
+                                          Location = new Point(12, 10), Width = 150 };
+            dtFrom = new DateTimePicker { Location = new Point(168, 8), Width = 150,
+                                          Format = DateTimePickerFormat.Custom,
+                                          CustomFormat = "dd-MMM-yyyy HH:mm",
+                                          Value = DateTime.Now.Date };
+            dtTo = new DateTimePicker { Location = new Point(326, 8), Width = 150,
+                                        Format = DateTimePickerFormat.Custom,
+                                        CustomFormat = "dd-MMM-yyyy HH:mm",
+                                        Value = DateTime.Now.AddMinutes(5) };
+
+            chkLogRing = new CheckBox { Text = "24 hour ring, newest", Checked = true,
+                                        Location = new Point(12, 38), Width = 150 };
+            numRingCount = new NumericUpDown { Location = new Point(168, 36), Width = 70,
+                                               Minimum = 1, Maximum = 1440, Value = 60 };
+
+            chkLogRam = new CheckBox { Text = "RAM buffer, last 30 readings", Checked = true,
+                                       Location = new Point(12, 66), Width = 220 };
+
+            chkLogDays = new CheckBox { Text = "15 day min/max/mean, days", Checked = true,
+                                        Location = new Point(12, 94), Width = 170 };
+            numDayCount = new NumericUpDown { Location = new Point(190, 92), Width = 50,
+                                              Minimum = 1, Maximum = 15, Value = 15 };
+
+            chkLogMeans = new CheckBox { Text = "24 hourly means", Checked = true,
+                                         Location = new Point(326, 94), Width = 150 };
+
+            var bRead = new Button { Text = "Read and build report", Location = new Point(500, 34),
+                                     Width = 160, Height = 30 };
+            bRead.Click += delegate { ReadLogsAndReport(); };
+
+            barLogs = new ProgressBar { Location = new Point(500, 72), Width = 160, Height = 14 };
+
+            top.Controls.AddRange(new Control[] {
+                chkLogRegular, dtFrom, dtTo, chkLogRing, numRingCount, chkLogRam,
+                chkLogDays, numDayCount, chkLogMeans, bRead, barLogs,
+                new Label { Text = "from", Location = new Point(168, 30), AutoSize = true,
+                            ForeColor = Color.DimGray },
+                new Label { Text = "to", Location = new Point(326, 30), AutoSize = true,
+                            ForeColor = Color.DimGray },
+                new Label { Text = "records", Location = new Point(244, 40), AutoSize = true,
+                            ForeColor = Color.DimGray } });
+
+            txtLogOut = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
+                                      ScrollBars = ScrollBars.Both, WordWrap = false,
+                                      Font = new Font("Consolas", 8.5f), BackColor = Color.White };
+
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 34 };
+            var bSave = new Button { Text = "Save report and CSV", Width = 150 };
+            bSave.Click += delegate { SaveReport(); };
+            bar.Controls.Add(bSave);
+            bar.Controls.Add(new Label {
+                Text = "A log is only as good as the clock behind it, so the report leads with both.",
+                AutoSize = true, ForeColor = Color.DimGray, Padding = new Padding(12, 8, 0, 0) });
+
+            tp.Controls.Add(txtLogOut);
+            tp.Controls.Add(bar);
+            tp.Controls.Add(top);
+            return tp;
+        }
+
+        ReportData lastReport;
+
+        void ReadLogsAndReport()
+        {
+            if (!Ready) { Say("Not connected."); return; }
+
+            Serialised(delegate
+            {
+                var d = new ReportData();
+                Action<string> note = delegate(string s) { Log("logs: " + s); };
+
+                barLogs.Value = 0;
+                barLogs.Maximum = 100;
+                txtLogOut.Text = "Reading...";
+                Application.DoEvents();
+
+                // ---- identity and clock first: the logs mean little without them
+                d.DeviceId = DevId;
+                var v = Exchange(Proto.BuildRead(DevId, Proto.ID_SFVER, null), 0, "version");
+                int iv;
+                if (Good(v) && int.TryParse(v.Text, out iv))
+                    d.FirmwareVersion = string.Format("{0}.{1}.{2}", iv / 100, (iv / 10) % 10, iv % 10);
+
+                var sr = Exchange(Proto.BuildRead(DevId, Proto.ID_SRNO, null),
+                                  Proto.SRNO_LEN, "serial");
+                if (sr != null && sr.CrcOk && sr.Payload.Length >= Proto.SRNO_CHARS)
+                    d.SerialNumber = Encoding.ASCII.GetString(sr.Payload, 0, Proto.SRNO_CHARS);
+
+                d.ChannelLayout = deviceMode == Mode.ThreeDp ? "DP1 + DP2 + DP3" : "DP1 + Temp + RH";
+
+                var ck = Exchange(Proto.BuildRead(DevId, Proto.ID_DATETIME, null),
+                                  Proto.DATETIME_LEN, "clock");
+                if (ck != null && ck.CrcOk && ck.Payload.Length >= 12)
+                {
+                    string s = Encoding.ASCII.GetString(ck.Payload, 0, 12);
+                    int dd, mo, yy, hh, mi, ss;
+                    if (int.TryParse(s.Substring(0, 2), out dd) && int.TryParse(s.Substring(2, 2), out mo)
+                     && int.TryParse(s.Substring(4, 2), out yy) && int.TryParse(s.Substring(6, 2), out hh)
+                     && int.TryParse(s.Substring(8, 2), out mi) && int.TryParse(s.Substring(10, 2), out ss))
+                    {
+                        try { d.DeviceClock = new DateTime(2000 + yy, mo, dd, hh, mi, ss); }
+                        catch (ArgumentOutOfRangeException) { }
+                    }
+                    d.ClockTrusted = (ck.Status & Proto.ST_RTC_INVALID) == 0;
+                }
+                barLogs.Value = 10; Application.DoEvents();
+
+                // ---- every parameter the device will answer for
+                foreach (var pm in Params.All)
+                {
+                    if (pm.Only != Mode.Unknown && deviceMode != Mode.Unknown && pm.Only != deviceMode)
+                        continue;
+                    var r = Exchange(Proto.BuildRead(DevId, pm.Id, null), 0, pm.Name);
+                    string val;
+                    if (r == null || !r.CrcOk) val = "?";
+                    else if (r.InvalidPara) continue;
+                    else
+                    {
+                        double dv;
+                        val = double.TryParse(r.Text, NumberStyles.Integer,
+                                              CultureInfo.InvariantCulture, out dv)
+                            ? (dv / pm.Scale).ToString("F" + pm.Decimals, CultureInfo.InvariantCulture)
+                            : r.Text;
+                    }
+                    d.Parameters.Add(new string[] {
+                        pm.Group, pm.Name, "0x" + pm.Id.ToString("X2"), val, pm.Units });
+                }
+                barLogs.Value = 35; Application.DoEvents();
+
+                // ---- counters
+                d.LogInterval = ReadInt(0x19);
+                d.RegularCount = ReadInt(Logs.ID_RDLG_CNT);
+                d.RingIndex = ReadInt(Logs.ID_FLASH24_CUR);
+                barLogs.Value = 45; Application.DoEvents();
+
+                // ---- the logs themselves, straight off the port: these are streamed,
+                //      so they do not go through the single request/reply exchange
+                if (chkLogRam.Checked)
+                {
+                    d.Ram = Logs.ReadRam(port, DevId, note);
+                    Say("RAM buffer: " + d.Ram.Count + " records"); Application.DoEvents();
+                }
+                barLogs.Value = 55; Application.DoEvents();
+
+                if (chkLogRegular.Checked)
+                {
+                    int reported;
+                    d.Regular = Logs.ReadRegular(port, DevId, dtFrom.Value, dtTo.Value,
+                                                 note, out reported);
+                    if (reported >= 0 && d.RegularCount < 0) d.RegularCount = reported;
+                    Say("Regular log: " + d.Regular.Count + " records"); Application.DoEvents();
+                }
+                barLogs.Value = 70; Application.DoEvents();
+
+                if (chkLogRing.Checked)
+                {
+                    d.Ring = Logs.ReadRing(port, DevId, (int)numRingCount.Value, note);
+                    Say("24 hour ring: " + d.Ring.Count + " records"); Application.DoEvents();
+                }
+                barLogs.Value = 85; Application.DoEvents();
+
+                var names = Report.ChannelNames(d.ChannelLayout);
+                if (chkLogDays.Checked)
+                {
+                    for (int c = 0; c < 3; c++)
+                        d.Days[names[c]] = Logs.ReadDays(port, DevId, c,
+                                                         (int)numDayCount.Value, note);
+                }
+                if (chkLogMeans.Checked)
+                {
+                    for (int c = 0; c < 3; c++)
+                        d.HourlyMeans[names[c]] = Logs.ReadHourlyMeans(port, DevId, c, note);
+                }
+                barLogs.Value = 100;
+
+                lastReport = d;
+                txtLogOut.Text = Report.BuildText(d).Replace("\n", Environment.NewLine);
+                txtLogOut.Select(0, 0);
+                Say("Report built. Use Save report and CSV to keep it.");
+            });
+        }
+
+        int ReadInt(byte id)
+        {
+            var r = Exchange(Proto.BuildRead(DevId, id, null), 0, "counter");
+            int v;
+            if (r == null || !r.CrcOk || r.InvalidPara) return -1;
+            return int.TryParse(r.Text, NumberStyles.Integer,
+                                CultureInfo.InvariantCulture, out v) ? v : -1;
+        }
+
+        void SaveReport()
+        {
+            if (lastReport == null) { Say("Read the logs first."); return; }
+
+            using (var dlg = new SaveFileDialog())
+            {
+                dlg.Filter = "Report (*.txt)|*.txt";
+                dlg.FileName = "NIYAMA_" +
+                    (lastReport.SerialNumber ?? "device").Trim() + "_" +
+                    DateTime.Now.ToString("yyyyMMdd_HHmm") + ".txt";
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+                try
+                {
+                    File.WriteAllText(dlg.FileName, Report.BuildText(lastReport));
+                    string csv = Path.ChangeExtension(dlg.FileName, ".csv");
+                    File.WriteAllText(csv, Report.BuildCsv(lastReport));
+                    Say("Saved " + Path.GetFileName(dlg.FileName)
+                        + " and " + Path.GetFileName(csv));
+                }
+                catch (Exception ex) { Say("Could not save: " + ex.Message); }
+            }
         }
 
         // ------------------------------------------------ log tab

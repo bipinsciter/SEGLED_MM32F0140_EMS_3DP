@@ -62,20 +62,22 @@
 //    record on its way to flash.  The buffer therefore sizes itself to whichever
 //    is built - see RAM_BUF_SIZE further down - rather than belonging to either.
 //************************************************************************/
-#define BUILD_REGULAR_LOG	1	//60000-record event log, LogReading()  (RDLG_* commands)
-#define BUILD_LOG24_LOG		1	//1440-record rolling 24 h ring         (FLASH24_* commands)
-#define BUILD_MINMAX_LOG	1	//15-day min/max/mean archive           (MIN_MAX_MEAN_MODE)
-#define BUILD_MEAN24_LOG	1	//24 hourly means                       (MEAN_HOUR_MODE)
-#define BUILD_RAM_BUFFER	1	//rolling RAM copy of recent readings   (RAM_ALL_ID / RAM_IND_ID)
+#define BUILD_REGULAR_LOG	0	//60000-record event log, LogReading()  (RDLG_* commands)
+#define BUILD_LOG24_LOG		0	//1440-record rolling 24 h ring         (FLASH24_* commands)
+#define BUILD_MINMAX_LOG	0	//15-day min/max/mean archive           (MIN_MAX_MEAN_MODE)
+#define BUILD_MEAN24_LOG	0	//24 hourly means                       (MEAN_HOUR_MODE)
+#define BUILD_RAM_BUFFER	0	//rolling RAM copy of recent readings   (RAM_ALL_ID / RAM_IND_ID)
 
 #define ENABLE_DP1			0x0001
 #define ENABLE_DP2			0x0002
 #define ENABLE_DP3			0x0004
 #define ENABLE_RTC			0x0008
 #define ENABLE_ALERT		0x0010
+
 #define ENABLE_DATAFLASH	0x0020
 #define ENABLE_LOG			0x0040
 #define ENABLE_M3LOG		0x0080
+
 #define ENABLE_RH			0x0100
 #define ENABLE_TEMP			0x0200
 

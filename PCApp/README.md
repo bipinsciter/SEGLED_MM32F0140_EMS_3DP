@@ -39,6 +39,16 @@ instrument**, not a correction — the device works out the correction itself as
 reading minus what you enter, and resets that channel's recorded minimum and maximum
 at the same time.
 
+**Logs** — reads the device's five logs and builds a report. Choose which to read,
+the date range for the regular log and how many records to pull from the ring, then
+*Save report and CSV*: a report meant to be read by a person, and the same records as
+CSV for a spreadsheet.
+
+The report leads with the instrument and its clock — serial number, firmware, address,
+channel layout, feature word, the device clock against this PC's and whether the
+device still trusts it. A log is worth little without knowing that, so it comes before
+the data rather than after. Every settable parameter follows, then the log sections.
+
 **Log** — every exchange, with an option to record each frame in hex.
 
 ## Things the firmware does that the application works around
@@ -93,12 +103,36 @@ at the same time.
   reply types echo the parameter ID in byte 4; the application checks it and discards
   anything that does not match what it just asked for.
 
+## The logs
+
+Five of them, all gated at run time by the feature word (0x4E, factory password 1234)
+and all refusing to write unless the clock has been set and is trusted:
+
+| log | command | frame | holds |
+|---|---|---|---|
+| regular log | `RDLG_DT` 0x49 | 70 bytes, record at 5 | 60000 records |
+| 24 hour ring | `FLASH24_IND` 0x47 | 72 bytes, record at 7 | 1440 records |
+| 15 day min/max/mean | `MINMAXMEAN_IND` 0x53 | 25 bytes, record at 7 | 15 days |
+| 24 hourly means | `MEAN_HR` 0x54 | 13 bytes, float at 7 | 24 values |
+| RAM buffer | `RAM_ALL` 0x45 | 1507 bytes, 30 records from 5 | last 30 readings |
+
+Four of the five are **streamed**: the request arms a transfer and the device pushes
+one frame per main-loop pass until its count runs out. So a read is one request and
+then however many frames arrive. `RAM_ALL` is the exception, one reply with the lot.
+
+Two things make the records easy to misread. They are all 50 bytes and all open the
+same way - an epoch, then the log type, user, password, fault flags, and the readings
+from offset 10 - so a wrong offset still parses and yields plausible nonsense. And the
+frames cannot be split by scanning for the 0xFC terminator, because the floats inside
+contain that byte; they are taken by fixed length instead. The count frame that leads
+a regular-log transfer carries a uint32, not the ASCII the ordinary replies use.
+
 ## Rebuilding
 
 No SDK or IDE is needed — the compiler is already on the machine:
 
 ```bash
-C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:winexe /optimize+ /out:NiyamaConfig.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs
+C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:winexe /optimize+ /out:NiyamaConfig.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs Logs.cs Report.cs
 ```
 
 `Verify.cs` runs the whole workload against a real device through the application's

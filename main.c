@@ -303,7 +303,14 @@ void Check_RTC(void)
 
 			if(gu16_parameterWord & ENABLE_TEMP)
 			{
-				HourTM_Mean += temperatureC;
+				if(!TM_Unit)
+				{
+					HourTM_Mean += temperatureC;
+				}
+				else
+				{
+					HourTM_Mean += temperatureF;
+				}
 				HrTMSampleInd++;
 			}
 		
@@ -4942,7 +4949,14 @@ void SendToSlave(void)
 	memcpy(&Buffer1[15],(uint8_t*)&Dpressure[DP2],4);
 	memcpy(&Buffer1[19],(uint8_t*)&Dpressure[DP3],4);
 	#else
-	memcpy(&Buffer1[15],(unsigned char*)&temperatureC,4);
+	if(!TM_Unit) 
+	{
+		memcpy(&Buffer1[15],(unsigned char*)&temperatureC,4);
+	}
+	else 
+	{
+		memcpy(&Buffer1[15],(unsigned char*)&temperatureF,4);
+	}
 	memcpy(&Buffer1[19],(unsigned char*)&humidityRH,4);
 	#endif
 	
@@ -5265,7 +5279,14 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP2],4);		RAMBufferInd += 4;
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&Dpressure[DP3],4);		RAMBufferInd += 4;
 		#else
-		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&temperatureC,4);			RAMBufferInd += 4;
+		if(!TM_Unit) 
+		{
+			memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&temperatureC,4);			RAMBufferInd += 4;
+		}
+		else
+		{
+			memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&temperatureF,4);			RAMBufferInd += 4;
+		}
 		memcpy(&RAMBuffer[RAMBufferInd],(uint8_t*)&humidityRH,4);			RAMBufferInd += 4;
 		
 		#endif
@@ -5494,7 +5515,14 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 		memcpy(&Buffer1[14],(uint8_t*)&Dpressure[DP2],4);
 		memcpy(&Buffer1[18],(uint8_t*)&Dpressure[DP3],4);
 		#else
-		memcpy(&Buffer1[14],(unsigned char*)&temperatureC,4);
+		if(!TM_Unit)
+		{
+			memcpy(&Buffer1[14],(unsigned char*)&temperatureC,4);
+		}
+		else
+		{
+			memcpy(&Buffer1[14],(unsigned char*)&temperatureF,4);
+		}
 		memcpy(&Buffer1[18],(unsigned char*)&humidityRH,4);
 		#endif
 		memcpy(&Buffer1[22],(uint8_t*)&DP_Min[DP1],4);
@@ -8036,6 +8064,42 @@ void ServePCMsg(void)
 			NoOf24Log=24;
 		}
 		#endif	// BUILD_MEAN24_LOG
+		#if BUILD_REGULAR_LOG
+		else if(RxBuffer[3]==RDLG_CNT_ID)
+		{
+			//How many records the regular log holds.  This used to be an empty case,
+			//so the command answered 0 however many were stored - and answered rather
+			//than raising INVALID_PARA, which made it look implemented.
+			//
+			//CurrentLogInd is a uint32_t reaching 60000, so it cannot go through the
+			//int16_t tempshort the generic reply is built from; past 32767 it would
+			//come back negative.  fillValue() takes a long, so the reply is built here.
+			//
+			//It is the write index, which is the record count until the ring wraps -
+			//the same meaning FLASH24_CUR_IND_ID carries for the 24 hour ring.
+			TxBuffer[0]=0xFD;
+			TxBuffer[1]=RxBuffer[1];
+			TxBuffer[2]=RxBuffer[2];
+			TxBuffer[3]=0x00;
+			if(bool_paraIdNotValid)	TxBuffer[3] |= INVALID_PARA;
+			if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
+			if(bool_DP_NC[DP1])			TxBuffer[3] |= DP1_FAULTY;
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+			if(bool_DP_NC[DP2])			TxBuffer[3] |= DP2_FAULTY;
+			if(bool_DP_NC[DP3])			TxBuffer[3] |= DP3_FAULTY;
+			#else
+			if(bool_RH_TEMP_NC)			TxBuffer[3] |= RH_TEMP_FAULTY;
+			#endif
+			TxBuffer[4]=RxBuffer[3];
+			
+			tempchar = fillValue(&TxBuffer[5],(long)CurrentLogInd);
+			
+			TxBuffer[5+tempchar]=CalCRC(&TxBuffer[1],4+tempchar);
+			TxBuffer[6+tempchar]=0xFC;
+			
+			SetTxmode(TxBuffer,7+tempchar);
+		}
+		#endif	// BUILD_REGULAR_LOG
 		else if(RxBuffer[3]==REALTIME_VAL_ID)
 		{
 			TxBuffer[0]=0xFD;
@@ -8070,7 +8134,14 @@ void ServePCMsg(void)
 			memcpy(&TxBuffer[14],(uint8_t*)&Dpressure[DP2],4);
 			memcpy(&TxBuffer[18],(uint8_t*)&Dpressure[DP3],4);
 			#else
-			memcpy(&TxBuffer[14],(uint8_t*)&temperatureC,4);
+			if(!TM_Unit)
+			{
+				memcpy(&TxBuffer[14],(uint8_t*)&temperatureC,4);
+			}
+			else
+			{
+				memcpy(&TxBuffer[14],(uint8_t*)&temperatureF,4);
+			}
 			memcpy(&TxBuffer[18],(uint8_t*)&humidityRH,4);
 			#endif
 			memcpy(&TxBuffer[22],(uint8_t*)&DP_Min[DP1],4);
@@ -10219,7 +10290,14 @@ void whileTask(void)
 		{
 			//Body gated, not the branch: this is the head of the else-if chain below.
 			#if BUILD_REGULAR_LOG
-			if(TotalLog && !bool_logtransferStart)
+			//A request for nothing to send, so end the transfer rather than leave
+			//the flag set - whileTask() serves no commands at all while one is,
+			//so the host could not even ask again.
+			if(!TotalLog)
+			{
+				bool_FlashReadCmd=0;
+			}
+			else if(TotalLog && !bool_logtransferStart)
 			{
 				//cli();
 				
@@ -10251,7 +10329,11 @@ void whileTask(void)
 					templong=0;
 				}
 				
-				bool_logtransferStart=1;
+				//Released, not latched: the next pass sends the next record.  Latching it
+				//here stalled the transfer after one record and, because the command gate
+				//in whileTask() ignores all traffic while a transfer is armed, left the
+				//device deaf until it was power cycled.
+				bool_logtransferStart=0;
 				
 				SetTxmode(TxBuffer,70);
 				//sei();
@@ -10267,7 +10349,14 @@ void whileTask(void)
 		#if BUILD_LOG24_LOG
 		else if(bool_Flash24ReadCmd)
 		{
-			if(NoOf24Log && !bool_logtransferStart)
+			//A request for nothing to send, so end the transfer rather than leave
+			//the flag set - whileTask() serves no commands at all while one is,
+			//so the host could not even ask again.
+			if(!NoOf24Log)
+			{
+				bool_Flash24ReadCmd=0;
+			}
+			else if(NoOf24Log && !bool_logtransferStart)
 			{
 				//cli();
 				
@@ -10302,7 +10391,11 @@ void whileTask(void)
 					flash24_StartInd=LAST_LOG24_ADDR-1;
 				}
 				
-				bool_logtransferStart=1;
+				//Released, not latched: the next pass sends the next record.  Latching it
+				//here stalled the transfer after one record and, because the command gate
+				//in whileTask() ignores all traffic while a transfer is armed, left the
+				//device deaf until it was power cycled.
+				bool_logtransferStart=0;
 				
 				SetTxmode(TxBuffer,72);
 				
@@ -10326,7 +10419,14 @@ void whileTask(void)
 		#if BUILD_MINMAX_LOG
 		else if((gu16_parameterWord & ENABLE_M3LOG) && (bool_MinMaxMeanLogReadCmd))
 		{
-			if(NoOf24Log && !bool_logtransferStart)
+			//A request for nothing to send, so end the transfer rather than leave
+			//the flag set - whileTask() serves no commands at all while one is,
+			//so the host could not even ask again.
+			if(!NoOf24Log)
+			{
+				bool_MinMaxMeanLogReadCmd=0;
+			}
+			else if(NoOf24Log && !bool_logtransferStart)
 			{
 				//cli();
 				
@@ -10377,7 +10477,11 @@ void whileTask(void)
 					flash24_StartInd=TOTAL_MIN_MAX_MEAN_LOG-1;
 				}
 				
-				bool_logtransferStart=1;
+				//Released, not latched: the next pass sends the next record.  Latching it
+				//here stalled the transfer after one record and, because the command gate
+				//in whileTask() ignores all traffic while a transfer is armed, left the
+				//device deaf until it was power cycled.
+				bool_logtransferStart=0;
 				
 				SetTxmode(TxBuffer,25);
 				
@@ -10394,7 +10498,14 @@ void whileTask(void)
 		#if BUILD_MEAN24_LOG
 		else if((gu16_parameterWord & ENABLE_M3LOG) && (bool_MeanHrLogReadCmd))
 		{
-			if(NoOf24Log && !bool_logtransferStart)
+			//A request for nothing to send, so end the transfer rather than leave
+			//the flag set - whileTask() serves no commands at all while one is,
+			//so the host could not even ask again.
+			if(!NoOf24Log)
+			{
+				bool_MeanHrLogReadCmd=0;
+			}
+			else if(NoOf24Log && !bool_logtransferStart)
 			{
 				//cli();
 				
@@ -10434,7 +10545,11 @@ void whileTask(void)
 				
 				flash24_StartInd++;
 				
-				bool_logtransferStart=1;
+				//Released, not latched: the next pass sends the next record.  Latching it
+				//here stalled the transfer after one record and, because the command gate
+				//in whileTask() ignores all traffic while a transfer is armed, left the
+				//device deaf until it was power cycled.
+				bool_logtransferStart=0;
 				
 				SetTxmode(TxBuffer,13);
 				
@@ -10451,7 +10566,14 @@ void whileTask(void)
 		#if BUILD_RAM_BUFFER
 		else if(bool_RamReadCmd)
 		{
-			if(NoOf24Log && !bool_logtransferStart)
+			//A request for nothing to send, so end the transfer rather than leave
+			//the flag set - whileTask() serves no commands at all while one is,
+			//so the host could not even ask again.
+			if(!NoOf24Log)
+			{
+				bool_RamReadCmd=0;
+			}
+			else if(NoOf24Log && !bool_logtransferStart)
 			{
 				//cli();
 				TxBuffer[0]=0xFD;
@@ -10485,7 +10607,11 @@ void whileTask(void)
 					flash24_StartInd=29;
 				}
 				
-				bool_logtransferStart=1;
+				//Released, not latched: the next pass sends the next record.  Latching it
+				//here stalled the transfer after one record and, because the command gate
+				//in whileTask() ignores all traffic while a transfer is armed, left the
+				//device deaf until it was power cycled.
+				bool_logtransferStart=0;
 				
 				SetTxmode(TxBuffer,71);
 				//sei();
