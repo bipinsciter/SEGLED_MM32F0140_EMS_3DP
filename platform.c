@@ -32,6 +32,9 @@
 /* Files include */
 #include <stdio.h>
 #include "platform.h"
+//For DEBUG_PRINTF.  Without it the switch below is simply undefined here, which
+//compiles out to the same thing but would ignore anyone turning it back on.
+#include "sb_const.h"
 
 /**
   * @addtogroup MM32F0140_LibSamples
@@ -411,11 +414,17 @@ void PLATFORM_Init(void)
 {
     PLATFORM_InitDelay();
 
+#if DEBUG_PRINTF
+    //Both of these talk on UART1, which the RS485 protocol owns.  The console is
+    //brought up at 115200 transmit-only and the banner goes out before
+    //UART_Configure() has set the protocol's own baud rate, so with a host attached
+    //this is pure noise on the wire.  Only built when the debug output is wanted.
     PLATFORM_InitConsole(115200);
 
-//    PLATFORM_InitLED();
-
     PLATFORM_PrintInfo();
+#endif
+
+//    PLATFORM_InitLED();
 }
 
 /**

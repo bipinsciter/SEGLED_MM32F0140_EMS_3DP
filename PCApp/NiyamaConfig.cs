@@ -46,6 +46,8 @@ namespace NiyamaConfig
         public const byte ID_TMUNIT = 0x2E, ID_DVCID = 0x1A, ID_BAUD = 0x41;
         public const byte ID_DP_LIMIT = 0x6E, ID_DP_SLOT_OFFSET = 0x72;
         public const byte ID_DP_OFFSET = 0x71, ID_CAL_CPWD = 0x38, ID_CAL_FPWD = 0x37;
+        public const byte ID_PARAM_WORD = 0x4E;
+        public const string FACTORY_PARASET_PWD = "1234";
         public const byte ID_SRNO = 0x40, ID_TMCAL = 0x32, ID_RHCAL = 0x33;
         public const byte ID_DFLT_CAL = 0x52;
 
@@ -447,6 +449,9 @@ namespace NiyamaConfig
 
         DataGridView grid, slotGrid;
         TextBox txtLogOut;
+        readonly List<CheckBox> paramBits = new List<CheckBox>();
+        Label lblParamWord;
+        GroupBox grpParamWord;
         NumericUpDown numRingCount, numDayCount;
         CheckBox chkLogRegular, chkLogRing, chkLogRam, chkLogDays, chkLogMeans;
         DateTimePicker dtFrom, dtTo;
@@ -670,6 +675,16 @@ namespace NiyamaConfig
                 }
             }
 
+            grpParamWord = new GroupBox { Dock = DockStyle.Top, Height = 92,
+                                          Text = "Enabled parameters   (0x4E - the device restarts when this is written)" };
+            var bwRead = new Button { Text = "Read", Location = new Point(14, 52), Width = 62 };
+            var bwWrite = new Button { Text = "Write", Location = new Point(82, 52), Width = 62 };
+            bwRead.Click += delegate { ReadParamWord(); };
+            bwWrite.Click += delegate { WriteParamWord(); };
+            lblParamWord = new Label { Location = new Point(156, 57), AutoSize = true,
+                                       ForeColor = Color.DimGray, Text = "not read yet" };
+            grpParamWord.Controls.AddRange(new Control[] { bwRead, bwWrite, lblParamWord });
+
             var bar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 36 };
             var bRead = new Button { Text = "Read all", Width = 82 };
             var bReadSel = new Button { Text = "Read selected", Width = 104 };
@@ -684,7 +699,121 @@ namespace NiyamaConfig
 
             tp.Controls.Add(grid);
             tp.Controls.Add(bar);
+            tp.Controls.Add(grpParamWord);
             return tp;
+        }
+
+        /// The bits, in the order they are laid out, for the build this device runs.
+        /// DP2/DP3 and RH/Temp occupy different bits, so the list follows the device.
+        List<KeyValuePair<int, string>> ParamBitList()
+        {
+            var bits = new List<KeyValuePair<int, string>>();
+            bits.Add(new KeyValuePair<int, string>(0x0001, "DP1"));
+            bits.Add(new KeyValuePair<int, string>(0x0002, "Clock"));
+            bits.Add(new KeyValuePair<int, string>(0x0004, "Alerts"));
+            if (deviceMode == Mode.ThreeDp)
+            {
+                bits.Add(new KeyValuePair<int, string>(0x0008, "DP2"));
+                bits.Add(new KeyValuePair<int, string>(0x0010, "DP3"));
+            }
+            else
+            {
+                bits.Add(new KeyValuePair<int, string>(0x0020, "Humidity"));
+                bits.Add(new KeyValuePair<int, string>(0x0040, "Temperature"));
+            }
+            return bits;
+        }
+
+        void BuildParamBits()
+        {
+            if (grpParamWord == null) return;
+            foreach (var c in paramBits) grpParamWord.Controls.Remove(c);
+            paramBits.Clear();
+
+            int x = 14;
+            foreach (var b in ParamBitList())
+            {
+                var cb = new CheckBox { Text = b.Value, Location = new Point(x, 24),
+                                        AutoSize = true, Tag = b.Key };
+                grpParamWord.Controls.Add(cb);
+                paramBits.Add(cb);
+                x += Math.Max(70, cb.PreferredSize.Width + 16);
+            }
+        }
+
+        void ReadParamWord()
+        {
+            Serialised(delegate
+            {
+                var r = Exchange(Proto.BuildRead(DevId, Proto.ID_PARAM_WORD,
+                                                 Proto.FACTORY_PARASET_PWD), 0, "parameter word");
+                int w;
+                if (!Good(r) || !int.TryParse(r.Text, NumberStyles.Integer,
+                                              CultureInfo.InvariantCulture, out w))
+                { Say("Could not read the parameter word."); return; }
+
+                if (paramBits.Count == 0) BuildParamBits();
+                foreach (var cb in paramBits) cb.Checked = (w & (int)cb.Tag) != 0;
+                lblParamWord.Text = "word " + w + "  (0x" + w.ToString("X4") + ")";
+                Say("Parameter word is " + w + ".");
+            });
+        }
+
+        void WriteParamWord()
+        {
+            if (paramBits.Count == 0) { Say("Read the parameter word first."); return; }
+
+            int w = 0;
+            var on = new List<string>();
+            var off = new List<string>();
+            foreach (var cb in paramBits)
+            {
+                if (cb.Checked) { w |= (int)cb.Tag; on.Add(cb.Text); }
+                else off.Add(cb.Text);
+            }
+
+            var warn = "";
+            if ((w & 0x0002) == 0)
+                warn = Environment.NewLine + Environment.NewLine
+                     + "The clock is about to be switched off. Every log refuses to write "
+                     + "without it, so logging will stop.";
+
+            if (MessageBox.Show(
+                    "Write parameter word " + w + " (0x" + w.ToString("X4") + ")?"
+                    + Environment.NewLine + Environment.NewLine
+                    + "  on:  " + (on.Count == 0 ? "nothing" : string.Join(", ", on.ToArray()))
+                    + Environment.NewLine
+                    + "  off: " + (off.Count == 0 ? "nothing" : string.Join(", ", off.ToArray()))
+                    + Environment.NewLine + Environment.NewLine
+                    + "The device restarts a few seconds after accepting this."
+                    + warn,
+                    "Confirm parameter word", MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Warning) != DialogResult.OK) return;
+
+            Serialised(delegate
+            {
+                var r = Exchange(Proto.BuildWrite(DevId, Proto.ID_PARAM_WORD,
+                                                  Proto.FACTORY_PARASET_PWD + w.ToString("D5")),
+                                 0, "parameter word");
+                if (!Good(r)) { Say("The parameter word was not accepted."); return; }
+
+                Say("Written. Waiting for the device to restart...");
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(9000);
+
+                var back = Exchange(Proto.BuildRead(DevId, Proto.ID_PARAM_WORD,
+                                                    Proto.FACTORY_PARASET_PWD), 0, "parameter word");
+                int got;
+                if (Good(back) && int.TryParse(back.Text, NumberStyles.Integer,
+                                               CultureInfo.InvariantCulture, out got))
+                {
+                    lblParamWord.Text = "word " + got + "  (0x" + got.ToString("X4") + ")";
+                    foreach (var cb in paramBits) cb.Checked = (got & (int)cb.Tag) != 0;
+                    Say(got == w ? "Parameter word is now " + got + "."
+                                 : "Wrote " + w + " but it reads back as " + got + ".");
+                }
+                else Say("Written, but the device has not answered yet - read it again shortly.");
+            });
         }
 
         List<DataGridViewRow> VisibleRows()
@@ -1212,6 +1341,8 @@ namespace NiyamaConfig
             }
 
             // Only DP1 exists on a Temp/RH unit, so the channel pickers collapse to it.
+            BuildParamBits();
+
             bool three = deviceMode != Mode.TempRh;
             foreach (var c in new[] { cboLimitCh, cboSlotCh, cboOffCh })
             {

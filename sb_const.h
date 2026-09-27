@@ -62,32 +62,44 @@
 //    record on its way to flash.  The buffer therefore sizes itself to whichever
 //    is built - see RAM_BUF_SIZE further down - rather than belonging to either.
 //************************************************************************/
-#define BUILD_REGULAR_LOG	0	//60000-record event log, LogReading()  (RDLG_* commands)
-#define BUILD_LOG24_LOG		0	//1440-record rolling 24 h ring         (FLASH24_* commands)
-#define BUILD_MINMAX_LOG	0	//15-day min/max/mean archive           (MIN_MAX_MEAN_MODE)
-#define BUILD_MEAN24_LOG	0	//24 hourly means                       (MEAN_HOUR_MODE)
-#define BUILD_RAM_BUFFER	0	//rolling RAM copy of recent readings   (RAM_ALL_ID / RAM_IND_ID)
+//Debug output over the console.
+//
+//printf() goes to UART1 on GPIOB 6 and 7, which is the SAME peripheral and the same
+//pins the RS485 protocol uses - PLATFORM_InitConsole() and UART_Configure() configure
+//one and the same UART.  So anything printed lands in the middle of the protocol
+//stream and a host sees it as corruption.
+//
+//Leave this at 0 for a working instrument.  Set it to 1 only on the bench, and expect
+//the protocol on that wire to be unusable while it is on.
+#define DEBUG_PRINTF		0
+
+#if DEBUG_PRINTF
+	#define DBG_PRINTF(...)		printf(__VA_ARGS__)
+#else
+	#define DBG_PRINTF(...)		((void)0)
+#endif
+
+#define BUILD_REGULAR_LOG	1	//60000-record event log, LogReading()  (RDLG_* commands)
+#define BUILD_LOG24_LOG		1	//1440-record rolling 24 h ring         (FLASH24_* commands)
+#define BUILD_MINMAX_LOG	1	//15-day min/max/mean archive           (MIN_MAX_MEAN_MODE)
+#define BUILD_MEAN24_LOG	1	//24 hourly means                       (MEAN_HOUR_MODE)
+#define BUILD_RAM_BUFFER	1	//rolling RAM copy of recent readings   (RAM_ALL_ID / RAM_IND_ID)
 
 #define ENABLE_DP1			0x0001
-#define ENABLE_DP2			0x0002
-#define ENABLE_DP3			0x0004
-#define ENABLE_RTC			0x0008
-#define ENABLE_ALERT		0x0010
-
-#define ENABLE_DATAFLASH	0x0020
-#define ENABLE_LOG			0x0040
-#define ENABLE_M3LOG		0x0080
-
-#define ENABLE_RH			0x0100
-#define ENABLE_TEMP			0x0200
+#define ENABLE_RTC			0x0002
+#define ENABLE_ALERT		0x0004
 
 #if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 
-	#define PARAMETER_WORD	(ENABLE_DP1 | ENABLE_DP2 | ENABLE_DP3 | ENABLE_RTC | ENABLE_ALERT)// | ENABLE_DATAFLASH)
+	#define ENABLE_DP2			0x0008
+	#define ENABLE_DP3			0x0010
+	#define PARAMETER_WORD	(ENABLE_DP1 | ENABLE_DP2 | ENABLE_DP3 | ENABLE_RTC | ENABLE_ALERT)
 
 #else
 
-	#define PARAMETER_WORD	(ENABLE_DP1 | ENABLE_RH | ENABLE_TEMP | ENABLE_RTC | ENABLE_ALERT)// | ENABLE_DATAFLASH)
+	#define ENABLE_RH			0x0020
+	#define ENABLE_TEMP			0x0040
+	#define PARAMETER_WORD	(ENABLE_DP1 | ENABLE_RH | ENABLE_TEMP | ENABLE_RTC | ENABLE_ALERT)
 
 #endif
 

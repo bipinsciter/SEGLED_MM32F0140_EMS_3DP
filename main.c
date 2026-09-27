@@ -71,7 +71,7 @@ void ReadADCChannel(void)
 	RVxVoltage[0] = ADC_GetChannelConvertedValue(ADC1, ADC_Channel_1);
 	RVxVoltage[1] = ADC_GetChannelConvertedValue(ADC1, ADC_Channel_2);
 
-	printf("CH1 = %d  \tCH2 = %d\n", RVxVoltage[0], RVxVoltage[1]);
+	DBG_PRINTF("CH1 = %d  \tCH2 = %d\n", RVxVoltage[0], RVxVoltage[1]);
 }
 
 //------------------------------------------------------------------------------
@@ -266,6 +266,7 @@ void Check_RTC(void)
 	{
 		last_min = current_min;
 		
+		#if BUILD_REGULAR_LOG
 		if(logTimer)
 		{
 			logTimer--;
@@ -275,10 +276,13 @@ void Check_RTC(void)
 				logTimer=LogInterval;
 			}
 		}
-		FillRamBuffer(NORMAL_LOG,0,0xFFFF);
+		#endif	// BUILD_REGULAR_LOG
 		
-		if(gu16_parameterWord & ENABLE_M3LOG)
-		{
+		#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
+		FillRamBuffer(NORMAL_LOG,0,0xFFFF);
+		#endif
+		
+		#if BUILD_MEAN24_LOG
 			if(gu16_parameterWord & ENABLE_DP1)
 			{
 				HourDP_Mean[DP1] += Dpressure[DP1];
@@ -321,7 +325,7 @@ void Check_RTC(void)
 			}
 
 			#endif
-		}
+		#endif	// BUILD_MEAN24_LOG
 	}
 	
 	//---------------------------------------------------------------
@@ -330,8 +334,7 @@ void Check_RTC(void)
 		//last_hr indexes TOTAL_MEAN_HOUR slots - a corrupt RTC hour must not address past them.
 		//RTCSetFlag/bool_rtcValid: never log against an unset or untrustworthy clock.
 		#if BUILD_MEAN24_LOG
-		if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG)
-			&& RTCSetFlag && bool_rtcValid && (last_hr < TOTAL_MEAN_HOUR))
+		if(RTCSetFlag && bool_rtcValid && (last_hr < TOTAL_MEAN_HOUR))
 		{
 			if(gu16_parameterWord & ENABLE_DP1)
 			{
@@ -390,8 +393,7 @@ void Check_RTC(void)
 		{
 			//RTCSetFlag/bool_rtcValid: never log against an unset or untrustworthy clock
 			#if (BUILD_MINMAX_LOG || BUILD_MEAN24_LOG)
-			if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG)
-				&& RTCSetFlag && bool_rtcValid)
+			if(RTCSetFlag && bool_rtcValid)
 			{
 				#if BUILD_MINMAX_LOG
 				//Store Last Day Epoch with less than 2 minutes
@@ -3450,11 +3452,11 @@ void CheckUpDnKey(void)
 {
 	uint8_t i=0;
 	
-	if((gu16_parameterWord & ENABLE_M3LOG) && !PARA_SELECT_KEY && !PROG_ENT_KEY)
+	#if BUILD_MINMAX_LOG
+	if(!PARA_SELECT_KEY && !PROG_ENT_KEY)
 	{
 		//Gate the BODY, not the branch: an #if around the `if` would leave the
 		//`else if` below it dangling.
-		#if BUILD_MINMAX_LOG
 		if(mode==NORMAL_MODE)
 		{
 			MinMaxMeanModeTimer++;
@@ -3471,9 +3473,10 @@ void CheckUpDnKey(void)
 				else dispMinMaxMeanLogInd=TOTAL_MIN_MAX_MEAN_LOG-1;
 			}
 		}
-		#endif	// BUILD_MINMAX_LOG
 	}
-	else if(!PARA_SELECT_KEY && !UP_KEY)
+	else 
+	#endif	// BUILD_MINMAX_LOG
+	if(!PARA_SELECT_KEY && !UP_KEY)
 	{
 		#if BUILD_MEAN24_LOG
 		if(mode==NORMAL_MODE)
@@ -4351,10 +4354,13 @@ void keyboard(void)
 									if(AckPwd[dummy1-1]==dummy)
 									{
 										AlarmAckTimer=(unsigned long)AckTimer * 60;
-										
+										#if BUILD_REGULAR_LOG
 										LogReading(ALM_ACK_LOG,dummy1,AckPwd[dummy1-1]);
-										FillRamBuffer(ALM_ACK_LOG,dummy1,AckPwd[dummy1-1]);
+										#endif	// BUILD_REGULAR_LOG
 										
+										#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
+										FillRamBuffer(ALM_ACK_LOG,dummy1,AckPwd[dummy1-1]);
+										#endif
 										dummy1=0;
 									}
 								}
@@ -4364,9 +4370,13 @@ void keyboard(void)
 								if(dummy==FACT_ACK_PWD)
 								{
 									AlarmAckTimer=(unsigned long)AckTimer * 60;
-									
+									#if BUILD_REGULAR_LOG
 									LogReading(ALM_ACK_LOG,0,FACT_ACK_PWD);
+									#endif	// BUILD_REGULAR_LOG
+									
+									#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 									FillRamBuffer(ALM_ACK_LOG,0,FACT_ACK_PWD);
+									#endif
 								}
 							}
 							
@@ -5067,10 +5077,10 @@ void SaveCurrentLog24Ind(void)
 	#endif
 }
 
+#if BUILD_REGULAR_LOG
 //Wipe the stored pointer and restart from the first slot
 void ResetCurrentLogInd(void)
 {
-	#if BUILD_REGULAR_LOG
 	CurrentLogInd = 0;
 
 	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
@@ -5080,12 +5090,12 @@ void ResetCurrentLogInd(void)
 	WriteEEPROMData(CURR_LOG_IND_RDLC,(uint8_t*)&CurrentLogIndReadLoc,sizeof(CurrentLogIndReadLoc));
 	SaveCurrentLogInd();
 	#endif
-	#endif	// BUILD_REGULAR_LOG
 }
+#endif	// BUILD_REGULAR_LOG
 
+#if BUILD_LOG24_LOG
 void ResetCurrentLog24Ind(void)
 {
-	#if BUILD_LOG24_LOG
 	CurrentLog24Ind = 0;
 
 	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
@@ -5095,13 +5105,13 @@ void ResetCurrentLog24Ind(void)
 	WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
 	SaveCurrentLog24Ind();
 	#endif
-	#endif	// BUILD_LOG24_LOG
 }
+#endif	// BUILD_LOG24_LOG
 
+#if BUILD_REGULAR_LOG
 //Recover the newest pointer at boot
 void LoadCurrentLogInd(void)
 {
-#if BUILD_REGULAR_LOG
 	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
 	CurrentLogInd = (uint32_t)XM25_PtrLoad(XM25_PTR_LOG);
 	#else
@@ -5119,14 +5129,12 @@ void LoadCurrentLogInd(void)
 		CurrentLogInd = 0;
 		SaveCurrentLogInd();
 	}
-#else
-	//regular log not built - nothing to recover
-#endif	// BUILD_REGULAR_LOG
 }
+#endif	// BUILD_REGULAR_LOG
 
+#if BUILD_LOG24_LOG
 void LoadCurrentLog24Ind(void)
 {
-#if BUILD_LOG24_LOG
 	#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
 	CurrentLog24Ind = (uint16_t)XM25_PtrLoad(XM25_PTR_LOG24);
 	#else
@@ -5144,27 +5152,26 @@ void LoadCurrentLog24Ind(void)
 		CurrentLog24Ind = 0;
 		SaveCurrentLog24Ind();
 	}
-#else
-	//24 hour log not built - nothing to recover
-#endif	// BUILD_LOG24_LOG
 }
+#endif	// BUILD_LOG24_LOG
 
 void EraseWholeFlash(void)
 {
 	#if BUILD_MINMAX_LOG
-	if(gu16_parameterWord & ENABLE_M3LOG)
-	{
-		MinMaxMeanDayLogInd=0;
-		WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
-	}
+	MinMaxMeanDayLogInd=0;
+	WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
 	#endif
 	
+	#if BUILD_REGULAR_LOG
 	//Reset Data Logging Parameter -------------------------------------------
 	FlashOVFByte=0;
 	WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
-	
 	ResetCurrentLogInd();
+	#endif	// BUILD_REGULAR_LOG
+	
+	#if BUILD_LOG24_LOG
 	ResetCurrentLog24Ind();
+	#endif	// BUILD_LOG24_LOG
 	
 	bool_DPLog[DP1]=0;
 	LastDP_Alrm_ON[DP1]=0;
@@ -5239,11 +5246,11 @@ void EraseWholeFlash(void)
 	#endif
 }
 
-void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
-{
+#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 //The record it builds feeds the RAM reads and the 24 hour ring; with neither built
 //there is nothing to fill.
-#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
+void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
+{
 	if((gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag && bool_rtcValid	
 		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 		&& !TMRH_StartUpTimer	
@@ -5454,39 +5461,34 @@ void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password)
 		//Only the flash write is gated: RAMBuffer itself still backs the RAM_ALL_ID /
 		//RAM_IND_ID reads, which do not depend on the 24 hour ring.
 		#if BUILD_LOG24_LOG
-		if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG))
+		WriteLog(LAST_LOG24_ADDR_OFFSET,CurrentLog24Ind,&RAMBuffer[i],LOG_SIZE);
+		
+		//cli();
+		CurrentLog24Ind++;
+		if(CurrentLog24Ind>=LAST_LOG24_ADDR)
 		{
-			WriteLog(LAST_LOG24_ADDR_OFFSET,CurrentLog24Ind,&RAMBuffer[i],LOG_SIZE);
+			CurrentLog24Ind=0;
 			
-			//cli();
-			CurrentLog24Ind++;
-			if(CurrentLog24Ind>=LAST_LOG24_ADDR)
+			#if (DATAFLASH_PART == DATAFLASH_AT45DB321D)
+			CurrentLog24IndReadLoc++;
+			if(CurrentLog24IndReadLoc>=100)
 			{
-				CurrentLog24Ind=0;
-				
-				#if (DATAFLASH_PART == DATAFLASH_AT45DB321D)
-				CurrentLog24IndReadLoc++;
-				if(CurrentLog24IndReadLoc>=100)
-				{
-					CurrentLog24IndReadLoc=0;
-				}
-				WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
-				#endif
+				CurrentLog24IndReadLoc=0;
 			}
-			SaveCurrentLog24Ind();
-			//sei();
+			WriteEEPROMData(CURR_LOG24_IND_RDLC,&CurrentLog24IndReadLoc,sizeof(CurrentLog24IndReadLoc));
+			#endif
 		}
+		SaveCurrentLog24Ind();
+		//sei();
 		#endif	// BUILD_LOG24_LOG
 	}
-#else
-	(void)logtype;	(void)userID;	(void)password;
-#endif	// (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 }
+#endif	// (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 
+#if BUILD_REGULAR_LOG
 void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 {
-#if BUILD_REGULAR_LOG
-	if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG) && (gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag && bool_rtcValid
+	if((gu16_parameterWord & ENABLE_RTC) && !DP_StartUpTimer && RTCSetFlag && bool_rtcValid
 		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 		&& !TMRH_StartUpTimer
 		#endif
@@ -5704,13 +5706,8 @@ void LogReading(uint8_t logtype,uint8_t userID,uint16_t password)
 
 		//sei();
 	}
-#else
-	//regular log not built
-	(void)logtype;
-	(void)userID;
-	(void)password;
-#endif	// BUILD_REGULAR_LOG
 }
+#endif	// BUILD_REGULAR_LOG
 
 void AutoSendDataResponse(uint8_t SrcPort)
 {
@@ -6808,7 +6805,8 @@ void ServePCMsg(void)
 				}
 			break;
 			#endif
-				
+			
+			#if BUILD_REGULAR_LOG				
 			case LOGINTVAL_ID:		
 				if((tempshort>=MIN_LOG_INTERVAL) && (tempshort<=MAX_LOG_INTERVAL))
 				{
@@ -6819,6 +6817,8 @@ void ServePCMsg(void)
 					WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));	
 				}
 			break;
+			#endif	// BUILD_REGULAR_LOG
+				
 			case DVCID_ID:			
 				gu8_deviceIDChangeTryTimer = 10;
 				gu8_deviceIDChangeTry++;
@@ -7492,10 +7492,14 @@ void ServePCMsg(void)
 					if(AckPwd[a1]==tempshort)
 					{
 						AlarmAckTimer=(unsigned long)AckTimer * 60;
-							
-						LogReading(ALM_ACK_LOG,RxBuffer[4],AckPwd[a1]);
-						FillRamBuffer(ALM_ACK_LOG,RxBuffer[4],AckPwd[a1]);
 						
+						#if BUILD_REGULAR_LOG						
+						LogReading(ALM_ACK_LOG,RxBuffer[4],AckPwd[a1]);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
+						FillRamBuffer(ALM_ACK_LOG,RxBuffer[4],AckPwd[a1]);
+						#endif
 						break;
 					}
 				}
@@ -7504,9 +7508,13 @@ void ServePCMsg(void)
 					if(tempshort==FACT_ACK_PWD) 
 					{
 						AlarmAckTimer=(unsigned long)AckTimer * 60;	
-						
+						#if BUILD_REGULAR_LOG
 						LogReading(ALM_ACK_LOG,0,FACT_ACK_PWD);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(ALM_ACK_LOG,0,FACT_ACK_PWD);
+						#endif
 					}
 				}
 			break;
@@ -7601,7 +7609,9 @@ void ServePCMsg(void)
 			case RHLAOFF_ID:	tempshort = RH_Lower_Alm_OFF*10;		break;
 			#endif
 			
+			#if BUILD_REGULAR_LOG
 			case LOGINTVAL_ID:	tempshort = LogInterval;				break;
+			#endif	// BUILD_REGULAR_LOG
 			case DVCID_ID:		tempshort = DeviceID;					break;
 			case BZRON_ID:		tempshort = Buzzer_ON_Time;				break;
 			case BZROFF_ID:		tempshort = Buzzer_OFF_Time;			break;
@@ -8008,7 +8018,7 @@ void ServePCMsg(void)
 		}
 		#endif	// BUILD_LOG24_LOG
 		#if BUILD_MINMAX_LOG
-		else if((gu16_parameterWord & ENABLE_M3LOG) && (RxBuffer[3]==MINMAXMEAN_IND_ID))
+		else if(RxBuffer[3]==MINMAXMEAN_IND_ID)
 		{
 			flash24_StartInd=0;
 			
@@ -8042,7 +8052,7 @@ void ServePCMsg(void)
 		}
 		#endif	// BUILD_MINMAX_LOG
 		#if BUILD_MEAN24_LOG
-		else if((gu16_parameterWord & ENABLE_M3LOG) && (RxBuffer[3]==MEAN_HR_ID))
+		else if(RxBuffer[3]==MEAN_HR_ID)
 		{
 			flash24_StartInd=0;
 			
@@ -9095,8 +9105,9 @@ void ReadDiffPressure(uint8_t SensNo)
 						LastDP_Alrm_ON[SensNo]=DP_Alrm_ON[SensNo];
 						WriteEEPROMData(LAST_DP1_ALRM_STAT+SensNo,&LastDP_Alrm_ON[SensNo],sizeof(LastDP_Alrm_ON[SensNo]));
 					
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(DP1_ALM_OCCURE_LOG,0,0xFFFF);
-					
+						#endif
 						bool_autoSendResponse = true;
 
 						bool_DPLog[SensNo]=1;
@@ -9105,8 +9116,9 @@ void ReadDiffPressure(uint8_t SensNo)
 					{
 						if(LastDP_Alrm_ON[SensNo]!=DP_Alrm_ON[SensNo])
 						{
+							#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 							FillRamBuffer(DP1_ALM_RESTORE_LOG,0,0xFFFF);
-						
+							#endif
 							LastDP_Alrm_ON[SensNo]=NO_ALARM;
 							WriteEEPROMData(LAST_DP1_ALRM_STAT+SensNo,&LastDP_Alrm_ON[SensNo],sizeof(LastDP_Alrm_ON[SensNo]));
 						
@@ -9130,8 +9142,9 @@ void ReadDiffPressure(uint8_t SensNo)
 						LastDP_Alrm_ON[SensNo]=DP_Alrm_ON[SensNo];
 						WriteEEPROMData(LAST_DP1_ALRM_STAT+SensNo,&LastDP_Alrm_ON[SensNo],sizeof(LastDP_Alrm_ON[SensNo]));
 						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(DP1_ALM_OCCURE_LOG,0,0xFFFF);
-
+						#endif
 						bool_autoSendResponse = true;
 						
 						bool_DPLog[SensNo]=1;
@@ -9140,8 +9153,9 @@ void ReadDiffPressure(uint8_t SensNo)
 					{
 						if(LastDP_Alrm_ON[SensNo]!=DP_Alrm_ON[SensNo])
 						{
+							#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 							FillRamBuffer(DP1_ALM_RESTORE_LOG,0,0xFFFF);
-							
+							#endif
 							LastDP_Alrm_ON[SensNo]=NO_ALARM;
 							WriteEEPROMData(LAST_DP1_ALRM_STAT+SensNo,&LastDP_Alrm_ON[SensNo],sizeof(LastDP_Alrm_ON[SensNo]));
 							
@@ -9158,8 +9172,9 @@ void ReadDiffPressure(uint8_t SensNo)
 				
 				if(bool_DPLog[SensNo]==1)
 				{
+					#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 					FillRamBuffer(DP1_ALM_RESTORE_LOG,0,0xFFFF);
-					
+					#endif
 					bool_DPLog[SensNo]=0;
 					
 					LastDP_Alrm_ON[SensNo]=DP_Alrm_ON[SensNo];
@@ -9508,7 +9523,7 @@ void SecondTick(void)
 		)
 		{
 			buzzerWant = BUZZER_SRC_NEAR;
-			printf("BUZZER_SRC_NEAR\n");
+			DBG_PRINTF("BUZZER_SRC_NEAR\n");
 		}
 		
 		if(buzzerWant != BUZZER_SRC_NONE)
@@ -10012,8 +10027,9 @@ void Read_SHT25(void)
 						LastTM_Alrm_ON=TM_Alrm_ON;
 						WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
 						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(TM_ALM_OCCURE_LOG,0,0xFFFF);
-						
+						#endif
 						bool_autoSendResponse = true;
 						bool_TMLog=1;
 					}
@@ -10021,8 +10037,9 @@ void Read_SHT25(void)
 					{
 						if(LastTM_Alrm_ON!=TM_Alrm_ON)
 						{
+							#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 							FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
-							
+							#endif
 							LastTM_Alrm_ON=NO_ALARM;
 							WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
 							
@@ -10039,8 +10056,9 @@ void Read_SHT25(void)
 						LastTM_Alrm_ON=TM_Alrm_ON;
 						WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
 						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(TM_ALM_OCCURE_LOG,0,0xFFFF);
-						
+						#endif
 						bool_autoSendResponse = true;
 						bool_TMLog=1;
 					}
@@ -10048,8 +10066,9 @@ void Read_SHT25(void)
 					{
 						if(LastTM_Alrm_ON!=TM_Alrm_ON)
 						{
+							#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 							FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
-							
+							#endif
 							LastTM_Alrm_ON=NO_ALARM;
 							WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
 							
@@ -10063,8 +10082,9 @@ void Read_SHT25(void)
 					
 					if(bool_TMLog==1)
 					{
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
-						
+						#endif
 						bool_TMLog=0;
 						
 						LastTM_Alrm_ON=TM_Alrm_ON;
@@ -10147,8 +10167,9 @@ void Read_SHT25(void)
 						LastRH_Alrm_ON=RH_Alrm_ON;
 						WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
 						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(RH_ALM_OCCURE_LOG,0,0xFFFF);
-						
+						#endif
 						bool_autoSendResponse = true;
 						bool_RHLog=1;
 					}
@@ -10156,8 +10177,9 @@ void Read_SHT25(void)
 					{
 						if(LastRH_Alrm_ON!=RH_Alrm_ON)
 						{
+							#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 							FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
-							
+							#endif
 							LastRH_Alrm_ON=NO_ALARM;
 							WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
 							
@@ -10174,8 +10196,9 @@ void Read_SHT25(void)
 						LastRH_Alrm_ON=RH_Alrm_ON;
 						WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
 						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(RH_ALM_OCCURE_LOG,0,0xFFFF);
-						
+						#endif
 						bool_autoSendResponse = true;
 						bool_RHLog=1;
 					}
@@ -10183,8 +10206,9 @@ void Read_SHT25(void)
 					{
 						if(LastRH_Alrm_ON!=RH_Alrm_ON)
 						{
+							#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 							FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
-							
+							#endif
 							LastRH_Alrm_ON=NO_ALARM;
 							WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
 							
@@ -10198,8 +10222,9 @@ void Read_SHT25(void)
 					
 					if(bool_RHLog==1)
 					{
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
-						
+						#endif
 						bool_RHLog=0;
 						
 						LastRH_Alrm_ON=RH_Alrm_ON;
@@ -10417,7 +10442,7 @@ void whileTask(void)
 		}
 		#endif	// BUILD_LOG24_LOG
 		#if BUILD_MINMAX_LOG
-		else if((gu16_parameterWord & ENABLE_M3LOG) && (bool_MinMaxMeanLogReadCmd))
+		else if(bool_MinMaxMeanLogReadCmd)
 		{
 			//A request for nothing to send, so end the transfer rather than leave
 			//the flag set - whileTask() serves no commands at all while one is,
@@ -10496,7 +10521,7 @@ void whileTask(void)
 		}
 		#endif	// BUILD_MINMAX_LOG
 		#if BUILD_MEAN24_LOG
-		else if((gu16_parameterWord & ENABLE_M3LOG) && (bool_MeanHrLogReadCmd))
+		else if(bool_MeanHrLogReadCmd)
 		{
 			//A request for nothing to send, so end the transfer rather than leave
 			//the flag set - whileTask() serves no commands at all while one is,
@@ -10856,9 +10881,9 @@ void boot_data(void)
 	{
 		FirstTimeCheck=0xA1;
 	#else
-	if(FirstTimeCheck != 0xB3)
+	if(FirstTimeCheck != 0xB4)
 	{
-		FirstTimeCheck=0xB3;
+		FirstTimeCheck=0xB4;
 	#endif
 		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 		
@@ -10872,61 +10897,65 @@ void boot_data(void)
 		WriteEEPROMData(DEVICE_SR_NO,(uint8_t*)&gu8ar_SrNumber[0],sizeof(gu8ar_SrNumber));
 		gu32_SrNumber = ascii2hex(&gu8ar_SrNumber[8],8);
 
-		
-		if(gu16_parameterWord & ENABLE_DATAFLASH)
-		{
-			//Reset Data Logging Parameter -------------------------------------------
-			FlashOVFByte=0;
-			WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
-			
-			ResetMinMax();	
-			
-			ResetCurrentLogInd();
-			ResetCurrentLog24Ind();
-			
-			#if BUILD_MINMAX_LOG
-			MinMaxMeanDayLogInd=0;
-			WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
-			#endif
-			
-			//Clear all Hour mean value.  Buffer1 is the scratch area here - this used to
-			//borrow the 2 KB RAMBuffer, which tied a 96-byte clear to a buffer that only
-			//exists when the RAM read feature is built.
-			memset(&Buffer1[0],0,sizeof(Buffer1));
-			#if BUILD_MEAN24_LOG
-			WriteLog(DP1_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
-			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-			WriteLog(DP2_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
-			WriteLog(DP3_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
-			#else
-			WriteLog(TM_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
-			WriteLog(RH_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
-			#endif
-			#endif	// BUILD_MEAN24_LOG
-			
-			//Clear all Min Max Mean Logs.  A whole channel is MIN_MAX_MEAN_LOG_SPACE
-			//(240) bytes, more than Buffer1 holds, so clear it one record at a time.
-			#if BUILD_MINMAX_LOG
-			{
-				uint8_t clr;
-				for(clr=0; clr<TOTAL_MIN_MAX_MEAN_LOG; clr++)
-				{
-					WriteLog(LAST_DP1_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
-					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-					WriteLog(LAST_DP2_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
-					WriteLog(LAST_DP3_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
-					#else
-					WriteLog(LAST_TM_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
-					WriteLog(LAST_RH_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
-					#endif
+		ResetMinMax();	
 
-					//A first boot on a NOR part can spend a while in here
-					IWDG_ReloadCounter();
-				}
-			}
-			#endif	// BUILD_MINMAX_LOG
-		}
+		#if BUILD_REGULAR_LOG
+		//Data Logging Parameter -------------------------------------------
+		LogInterval=DEFAULT_LOG_INTERVAL;
+		WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
 		
+		//Reset Data Logging Parameter -------------------------------------------
+		FlashOVFByte=0;
+		WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
+		ResetCurrentLogInd();
+		#endif	// BUILD_REGULAR_LOG
+		
+		#if BUILD_LOG24_LOG
+		ResetCurrentLog24Ind();
+		#endif	// BUILD_LOG24_LOG
+		
+		#if BUILD_MINMAX_LOG
+		MinMaxMeanDayLogInd=0;
+		WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
+		#endif
+		
+		//Clear all Hour mean value.  Buffer1 is the scratch area here - this used to
+		//borrow the 2 KB RAMBuffer, which tied a 96-byte clear to a buffer that only
+		//exists when the RAM read feature is built.
+		memset(&Buffer1[0],0,sizeof(Buffer1));
+		#if BUILD_MEAN24_LOG
+		WriteLog(DP1_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		WriteLog(DP2_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+		WriteLog(DP3_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+		#else
+		WriteLog(TM_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+		WriteLog(RH_CURR_24HR_MEAN_OFFSET,0,&Buffer1[0],HOUR_MEAN_VALUE_SPACE);
+		#endif
+		#endif	// BUILD_MEAN24_LOG
+		
+		//Clear all Min Max Mean Logs.  A whole channel is MIN_MAX_MEAN_LOG_SPACE
+		//(240) bytes, more than Buffer1 holds, so clear it one record at a time.
+		#if BUILD_MINMAX_LOG
+		{
+			uint8_t clr;
+			for(clr=0; clr<TOTAL_MIN_MAX_MEAN_LOG; clr++)
+			{
+				WriteLog(LAST_DP1_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				WriteLog(LAST_DP2_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
+				WriteLog(LAST_DP3_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
+				#else
+				WriteLog(LAST_TM_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
+				WriteLog(LAST_RH_MIN_MAX_OFFSET,clr,&Buffer1[0],MIN_MAX_MEAN_LOG_SIZE);
+				#endif
+
+				//A first boot on a NOR part can spend a while in here
+				IWDG_ReloadCounter();
+			}
+		}
+		#endif	// BUILD_MINMAX_LOG
+
 		RTCSetFlag=0;
 		WriteEEPROMData(RTC_SET_FLAG_ADDR,&RTCSetFlag,sizeof(RTCSetFlag));
 		
@@ -11169,13 +11198,6 @@ void boot_data(void)
 		Buzzer_OFF_Time=DEFAULT_BUZZER_OFF_TIME;
 		WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 		
-		if(gu16_parameterWord & ENABLE_LOG)
-		{
-			//Data Logging Parameter -------------------------------------------
-			LogInterval=DEFAULT_LOG_INTERVAL;
-			WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
-		}
-		
 		//UART Parameter -------------------------------------------
 		UART_BaudRate=DEFAULT_UART_BAUDRATE;	//57600
 		WriteEEPROMData(UART_BAUDRATE,&UART_BaudRate,sizeof(UART_BaudRate));
@@ -11311,14 +11333,11 @@ void boot_data(void)
 		ReadEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,sizeof(gu16_parameterWord));
 		
 		#if BUILD_MINMAX_LOG
-		if(gu16_parameterWord & ENABLE_M3LOG)
+		ReadEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
+		if(MinMaxMeanDayLogInd>=TOTAL_MIN_MAX_MEAN_LOG)
 		{
-			ReadEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
-			if(MinMaxMeanDayLogInd>=TOTAL_MIN_MAX_MEAN_LOG)
-			{
-				MinMaxMeanDayLogInd=0;
-				WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
-			}
+			MinMaxMeanDayLogInd=0;
+			WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
 		}
 		#endif	// BUILD_MINMAX_LOG
 
@@ -11959,28 +11978,28 @@ void boot_data(void)
 			}
 		}
 		
-		//Data Logging Parameter -------------------------------------------	
-		
-		if(gu16_parameterWord & ENABLE_LOG)
+		#if BUILD_REGULAR_LOG
+		//Data Logging Parameter -------------------------------------------
+		ReadEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
+		if((LogInterval<MIN_LOG_INTERVAL) || (LogInterval>MAX_LOG_INTERVAL))
 		{
-			//Data Logging Parameter -------------------------------------------
-			ReadEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
-			if((LogInterval<MIN_LOG_INTERVAL) || (LogInterval>MAX_LOG_INTERVAL))
-			{
-				LogInterval=DEFAULT_LOG_INTERVAL;
-				WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
-			}
-		
-			ReadEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
-			if(FlashOVFByte>1)
-			{
-				FlashOVFByte=0;
-				WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
-			}
-			
-			LoadCurrentLogInd();
-			LoadCurrentLog24Ind();
+			LogInterval=DEFAULT_LOG_INTERVAL;
+			WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
 		}
+		
+		ReadEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
+		if(FlashOVFByte>1)
+		{
+			FlashOVFByte=0;
+			WriteEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
+		}
+		
+		LoadCurrentLogInd();
+		#endif	// BUILD_REGULAR_LOG
+		
+		#if BUILD_LOG24_LOG
+		LoadCurrentLog24Ind();
+		#endif	// BUILD_LOG24_LOG
 	}
 	
 	if(gu8_rly_stat & 0x01) RELAY1_ON;	else 	RELAY1_OFF;	
@@ -12011,7 +12030,10 @@ void Init_variables(void)
 	//gu8_AutoSentTimer=gu8_AutoSentInterval;
 	gu8_groupID = ((DeviceID - 1)/gu8_DeviceInGroup)+1;
 	
+	#if BUILD_REGULAR_LOG
 	logTimer = LogInterval;
+	#endif	// BUILD_REGULAR_LOG
+	
 	bool_brodcastEnb=0;	
 	gu16_logtransfer=0;
 	bool_logtransferStart=0;
@@ -12048,13 +12070,17 @@ void Init_variables(void)
 	//POWER ON LOG
 	//-------------------------------------------------------
 	us1=CurrentLog24Ind;
+	#if BUILD_REGULAR_LOG
 	LogReading(POWER_UP_LOG,0,0xFFFF);
-	FillRamBuffer(POWER_UP_LOG,0,0xFFFF);
+	#endif	// BUILD_REGULAR_LOG
 	
+	#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
+	FillRamBuffer(POWER_UP_LOG,0,0xFFFF);
+	#endif
 	//-------------------------------------------------------
 	//Check MinMax Day change occur
 	//-------------------------------------------------------
-	if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_LOG) && (gu16_parameterWord & ENABLE_RTC))
+	if(gu16_parameterWord & ENABLE_RTC)
 	{
 		if(RTCSetFlag && ((!FlashOVFByte && CurrentLogInd) || (FlashOVFByte && !CurrentLogInd)))
 		{
@@ -12118,8 +12144,7 @@ void Init_variables(void)
 					bool_resetMinMax=1;
 				
 					#if (BUILD_MINMAX_LOG || BUILD_MEAN24_LOG)
-					if((gu16_parameterWord & ENABLE_DATAFLASH) && (gu16_parameterWord & ENABLE_M3LOG))
-					{
+
 						#if BUILD_MINMAX_LOG
 						memcpy(&MinMaxMeanDayLogArr[0],(unsigned char*)&ep1.currentEpochTime,4);
 				
@@ -12294,7 +12319,7 @@ void Init_variables(void)
 						if(MinMaxMeanDayLogInd>=TOTAL_MIN_MAX_MEAN_LOG) MinMaxMeanDayLogInd=0;
 						WriteEEPROMData(MIN_MAX_LOG_IND_ADDR,&MinMaxMeanDayLogInd,sizeof(MinMaxMeanDayLogInd));
 						#endif	// BUILD_MINMAX_LOG
-					}
+
 					#endif	// (BUILD_MINMAX_LOG || BUILD_MEAN24_LOG)
 				}
 			
@@ -12307,9 +12332,13 @@ void Init_variables(void)
 			
 					if(LastDP_Alrm_ON[DP1])
 					{
+						#if BUILD_REGULAR_LOG
 						LogReading(DP1_ALM_RESTORE_LOG,0,0xFFFF);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(DP1_ALM_RESTORE_LOG,0,0xFFFF);
-				
+						#endif
 						LastDP_Alrm_ON[DP1]=NO_ALARM;
 						WriteEEPROMData(LAST_DP1_ALRM_STAT,&LastDP_Alrm_ON[DP1],sizeof(LastDP_Alrm_ON[DP1]));
 					}
@@ -12322,9 +12351,13 @@ void Init_variables(void)
 			
 					if(LastDP_Alrm_ON[DP2])
 					{
+						#if BUILD_REGULAR_LOG
 						LogReading(DP2_ALM_RESTORE_LOG,0,0xFFFF);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(DP2_ALM_RESTORE_LOG,0,0xFFFF);
-				
+						#endif
 						LastDP_Alrm_ON[DP2]=NO_ALARM;
 						WriteEEPROMData(LAST_DP2_ALRM_STAT,&LastDP_Alrm_ON[DP2],sizeof(LastDP_Alrm_ON[DP2]));
 					}
@@ -12337,9 +12370,13 @@ void Init_variables(void)
 			
 					if(LastDP_Alrm_ON[DP3])
 					{
+						#if BUILD_REGULAR_LOG
 						LogReading(DP3_ALM_RESTORE_LOG,0,0xFFFF);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(DP3_ALM_RESTORE_LOG,0,0xFFFF);
-				
+						#endif
 						LastDP_Alrm_ON[DP3]=NO_ALARM;
 						WriteEEPROMData(LAST_DP3_ALRM_STAT,&LastDP_Alrm_ON[DP3],sizeof(LastDP_Alrm_ON[DP3]));
 					}
@@ -12352,9 +12389,13 @@ void Init_variables(void)
 			
 					if(LastTM_Alrm_ON)
 					{
+						#if BUILD_REGULAR_LOG
 						LogReading(TM_ALM_RESTORE_LOG,0,0xFFFF);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(TM_ALM_RESTORE_LOG,0,0xFFFF);
-				
+						#endif
 						LastTM_Alrm_ON=NO_ALARM;
 						WriteEEPROMData(LAST_TM_ALRM_STAT,&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
 					}
@@ -12367,9 +12408,13 @@ void Init_variables(void)
 			
 					if(LastRH_Alrm_ON)
 					{
+						#if BUILD_REGULAR_LOG
 						LogReading(RH_ALM_RESTORE_LOG,0,0xFFFF);
+						#endif	// BUILD_REGULAR_LOG
+						
+						#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 						FillRamBuffer(RH_ALM_RESTORE_LOG,0,0xFFFF);
-				
+						#endif
 						LastRH_Alrm_ON=NO_ALARM;
 						WriteEEPROMData(LAST_RH_ALRM_STAT,&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
 					}
@@ -12421,7 +12466,7 @@ int main(void)
 	//Initialize UART
 	//-------------------------------------------------------
 	UART_Configure(UART_BaudRate);
-	printf("Powered ON\n");
+	DBG_PRINTF("Powered ON\n");
 	
 	//boot_data() seeds and range-checks the real-time parameters, which on a NOR
 	//part land in the RAM mirror rather than in flash.  Commit them now: a fresh

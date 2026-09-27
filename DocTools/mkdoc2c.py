@@ -159,9 +159,108 @@ P('Firmware before 1.0.4 sent nothing at all for a locked calibration read — t
   'branch built a reply and never transmitted it, leaving the host to time out. Fixed '
   'in 1.0.4.', colour=GREY)
 
-H('10.6  Displayed-parameter word  (0x4E)', 2)
-MONO('  request   FF  ID  11  4E  PPPP  BBBBB  CRC  FE')
-P('Four digits of factory password followed by five digits of bit pattern.')
+H('10.6  Feature word  (0x4E)', 2)
+MONO('  read      FF  ID  10  4E  PPPP  CRC  FE\n'
+     '  write     FF  ID  11  4E  PPPP  BBBBB  CRC  FE')
+P('Four digits of factory password, and for a write five more holding the bit pattern '
+  'in decimal. The device saves it and restarts a few seconds later, so a host has to '
+  'wait for it to come back before reading anything else. On the bench it answered '
+  'again about two seconds after the write.')
+P('Which parameters the instrument runs:')
+TABLE(['Bit', 'Meaning', 'Build'],
+      [['0x0001', 'DP1 channel', 'both'],
+       ['0x0002', 'Clock', 'both'],
+       ['0x0004', 'Alerts', 'both'],
+       ['0x0008', 'DP2 channel', 'DP1+DP2+DP3 only'],
+       ['0x0010', 'DP3 channel', 'DP1+DP2+DP3 only'],
+       ['0x0020', 'Humidity', 'DP1+Temp+RH only'],
+       ['0x0040', 'Temperature', 'DP1+Temp+RH only']],
+      [0.9, 2.6, 2.3])
+P('The upper four bits do not mean the same thing in both builds, so a host has to '
+  'know which one it is talking to before interpreting them - the temperature-unit '
+  'probe in section 10.3 settles that. Reading 0x0040 as "DP3" on a Temp+RH unit is '
+  'the mistake this invites.', bold=True)
+P('The clock bit is the one to be careful with. Every log refuses to write without it, '
+  'so clearing it stops all logging while leaving the instrument otherwise healthy.')
+P('Logging itself is no longer switched here. It is now settled when the firmware is '
+  'built, by the BUILD_REGULAR_LOG, BUILD_LOG24_LOG, BUILD_MINMAX_LOG, BUILD_MEAN24_LOG '
+  'and BUILD_RAM_BUFFER macros, and a unit that should not log needs a different build '
+  'rather than a different setting.', colour=GREY)
+
+H('10.7  Reading the logs', 2)
+
+P('Five logs, all written only while the clock has been set AND is trusted - checked '
+  'when each record is written, not merely at start-up. A clock that reads plausibly '
+  'is not enough: it has to have been set deliberately, which is what raises the flag '
+  'the writers look for. After a first-time initialisation the instrument will run '
+  'happily and record nothing until its clock is set.', bold=True)
+
+TABLE(['Log', 'Command', 'Reply frame', 'Holds'],
+      [['Regular log', '0x49 RDLG_DT', '70 bytes', '60000 records'],
+       ['24 hour ring', '0x47 FLASH24_IND', '72 bytes', '1440 records'],
+       ['15 day min/max/mean', '0x53 MINMAXMEAN_IND', '25 bytes', '15 days per channel'],
+       ['24 hourly means', '0x54 MEAN_HR', '13 bytes', '24 values per channel'],
+       ['RAM buffer', '0x45 RAM_ALL', '1507 bytes', 'last 30 readings'],
+       ['RAM buffer, one', '0x46 RAM_IND', '71 bytes', 'one record']],
+      [1.7, 1.9, 1.2, 1.8])
+
+P('Four of the five are STREAMED', bold=True)
+P('The request arms a transfer and the device then pushes one frame per pass of its '
+  'main loop until the count is used up. So a read is one request followed by however '
+  'many frames arrive, not a request and a single reply. RAM_ALL is the exception: one '
+  'reply carrying all thirty records.')
+P('While a transfer is running the device serves no other command, and it releases by '
+  'itself when the count reaches zero.')
+
+P('Requests', bold=True)
+MONO('  0x49  FF ID 10 49  dd mm yy hh mi ss  dd mm yy hh mi ss  CRC FE\n'
+     '                     \\___ start ____/  \\____ end ____/   raw bytes\n'
+     '\n'
+     '  0x47  FF ID 10 47  SSSS CCCC  CRC FE      start and count, 4 ASCII digits each\n'
+     '  0x53  FF ID 10 53  c NN       CRC FE      channel 0-2, count as 2 ASCII digits\n'
+     '  0x54  FF ID 10 54  c          CRC FE      channel 0-2; the count is fixed at 24\n'
+     '  0x46  FF ID 10 46  ii nn      CRC FE      index and count, raw bytes')
+
+P('A regular-log transfer leads with a short frame giving how many records fall in the '
+  'window, as a uint32 - not the ASCII the ordinary replies use.', bold=True)
+
+P('Where the record sits in the frame', bold=True)
+P('This differs between them, and a wrong offset still parses and yields plausible '
+  'nonsense rather than failing:')
+TABLE(['Command', 'Record at', 'Why'],
+      [['0x49 regular log', 'byte 5', 'nothing between the header and the record'],
+       ['0x47 24 hour ring', 'byte 7', 'a 2 byte index first, big endian'],
+       ['0x46 RAM buffer', 'byte 6', 'a 1 byte index first'],
+       ['0x45 RAM_ALL', 'byte 5 + n*50', 'thirty records end to end'],
+       ['0x53 min/max/mean', 'byte 7', '16 byte record'],
+       ['0x54 hourly mean', 'byte 7', 'a single float']],
+      [1.8, 1.5, 3.3])
+
+P('The 50 byte reading record', bold=True)
+P('The regular log, the 24 hour ring and the RAM buffer all share one layout:')
+MONO('  [0..3]   epoch seconds, uint32 little endian\n'
+     '  [4]      log type\n'
+     '  [5]      user id\n'
+     '  [7..8]   password\n'
+     '  [9]      sensor fault flags, same bits as the status byte\n'
+     '  [10..13] DP1                        float\n'
+     '  [14..17] DP2 or temperature         float\n'
+     '  [18..21] DP3 or humidity            float\n'
+     '  [22..29] DP1 minimum, maximum       float, float\n'
+     '  [30..37] DP2 / temperature min, max\n'
+     '  [38..45] DP3 / humidity min, max\n'
+     '  [46..48] the three alarm states, 0 none 1 high 2 low')
+P('Temperature in a record is always Celsius, whatever the display was set to. Bit 7 '
+  'of [47] records the unit that was on the display, but the value is not converted.')
+
+P('The 16 byte day record  (0x53)', bold=True)
+MONO('  [0..3]   epoch of the day\n'
+     '  [4..7]   minimum     float\n'
+     '  [8..11]  maximum     float\n'
+     '  [12..15] mean        float')
+P('Slots that have never been written read back as erased flash, which decodes to '
+  'timestamps in the 1970s and values with twenty digits. A host should reject anything '
+  'whose epoch predates the product rather than display it.')
 
 # ================================================================== gotchas
 H('11.  Things that will catch a host out', 1)
@@ -185,6 +284,12 @@ BULLET('Reading a parameter that belongs to the other build returns INVALID_PARA
        'silence. Silence means the request was lost; see section 7.')
 BULLET('Every value is parsed into a signed 16 bit integer. Do not send anything '
        'outside −32768 to 32767.')
+BULLET('A log transfer takes over the link. While one is running the device serves '
+       'no other command, so a host must read the stream out before asking for '
+       'anything else.')
+BULLET('Records cannot be found by scanning for the 0xFC terminator. The floats inside '
+       'them contain that byte regularly, so frames have to be taken by their fixed '
+       'length.')
 BULLET('Temperature is not carried in one consistent unit. The live frame and the logs '
        'are always Celsius; the recorded extremes and the alarm setpoints follow the '
        'displayed unit. See 10.5.1 before writing any conversion.')

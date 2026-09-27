@@ -116,7 +116,9 @@
 #if (BUILD_LOG24_LOG && !BUILD_RAM_BUFFER)
 	#if (RAM_BUF_SIZE < (RAM_FILL_START + LOG_SIZE))
 		#error "RAM_BUF_SIZE must hold one whole log record - update it to match LOG_SIZE"
+	#else
+		#error "For BUILD_LOG24_LOG, BUILD_RAM_BUFFER must be enabled"
 	#endif
 #endif
-
+	
 #endif	/* DATAFLASH_H_ */

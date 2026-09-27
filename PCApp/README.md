@@ -135,35 +135,36 @@ No SDK or IDE is needed — the compiler is already on the machine:
 C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:winexe /optimize+ /out:NiyamaConfig.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs Logs.cs Report.cs
 ```
 
-`Verify.cs` runs the whole workload against a real device through the application's
-own `Link` class - the parameter sweep, the live frame and the indexed parameters -
-and reports how many requests needed a retry or went unanswered. It never sends a
-write command:
+## Tests
+
+Every test links the real `NiyamaConfig.cs`, so what they exercise is what the
+application ships. They all build the same way — only the `/main:` class changes:
 
 ```bash
-C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:exe /main:NiyamaConfig.Verify /out:Verify.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs Verify.cs
+C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:exe /main:NiyamaConfig.<Class> /out:<Class>.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs Logs.cs Report.cs <Class>.cs
 ```
 
-`WriteTest.cs` exercises the write path against a real device: each step reads the
-original value, writes a different one, reads it back, restores the original and
-confirms the restore.
+| file | what it covers | writes to the device? |
+|---|---|---|
+| `SelfTest.cs` | CRC, frame layout, value encoding, response parsing, against a transcription of the firmware's own `CalCRC()` and `findValue()` | no hardware needed |
+| `Verify.cs` | the whole parameter sweep, live frame and indexed reads, reporting retries and losses | no |
+| `MinProbe.cs` | repeated reads of one parameter, to tell a real fault from frame loss | no |
+| `EpochTest.cs` | the device's epoch against its own RTC fields | no |
+| `MinMax.cs` | watches the DP extremes, flags any stranded outside the clamp | no |
+| `ReportTest.cs` | reads all five logs and writes a report and CSV | no |
+| `WriteTest.cs` | the write path: read, write, verify, restore | yes, restores |
+| `PaTest.cs` | the Pa-scaled clamp and slot offsets | yes, restores |
+| `NewFeat.cs` | serial number, zero offset, calibration reads | yes, restores |
+| `StrandTest.cs` | proves a stranded DP extreme recovers | yes, restores |
+| `TempCalTest.cs` | customer temperature calibration in Fahrenheit | yes, restores |
+| `FactCalTest.cs` | factory temperature calibration in Fahrenheit | yes, restores |
+| `PersistTest.cs` | a calibration across a power cycle; `arm` then `check` | yes, restores |
+| `ParamWordTest.cs` | the parameter word: write, restart, read back, restore | yes, restores |
 
-```bash
-C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:exe /main:NiyamaConfig.WriteTest /out:WriteTest.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs WriteTest.cs
-```
+The ones that write refuse to run if real work is already stored - a calibration test
+will not overwrite an existing calibration - and each puts back what it changed,
+including on failure.
 
-`NewFeat.cs` tests the serial number (read, write, restore), the Pa-scaled zero
-offset and the calibration reads against a real device. It performs no calibration
-write:
+Two of them need you: `PersistTest` wants a power cycle between `arm` and `check`, and
+`ParamWordTest` restarts the device twice of its own accord.
 
-```bash
-C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:exe /main:NiyamaConfig.NewFeat /out:NewFeat.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs NewFeat.cs
-```
-
-`SelfTest.cs` checks the protocol layer — CRC, frame layout, value-field encoding and
-response parsing — against a transcription of the firmware's own `CalCRC()` and
-`findValue()`. It links the real `NiyamaConfig.cs`, so it exercises shipping code:
-
-```bash
-C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:exe /main:NiyamaConfig.SelfTest /out:SelfTest.exe /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Core.dll NiyamaConfig.cs SelfTest.cs
-```

@@ -100,8 +100,14 @@ void SecondTick(void);
 void boot_data(void);
 void Read_SHT25(void);
 //----------------------------------------------------------------------------------------------------------------------------
+#if BUILD_REGULAR_LOG
 void LogReading(uint8_t logtype,uint8_t userID,uint16_t password);
+#endif	// BUILD_REGULAR_LOG
+
+#if (BUILD_RAM_BUFFER || BUILD_LOG24_LOG)
 void FillRamBuffer(uint8_t logtype,uint8_t userID,uint16_t password);
+#endif
+
 void ResetMinMax(void);
 void TMUnitChange(void);
 //----------------------------------------------------------------------------------------------------------------------------

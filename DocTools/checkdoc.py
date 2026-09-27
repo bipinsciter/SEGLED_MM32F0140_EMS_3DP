@@ -106,12 +106,30 @@ for want, why in [
         ('51 bytes', 'live-value frame length'),
         ('23 bytes', 'serial number frame length'),
         ('XGZP6891D', 'pressure sensor'),
+        # the log and feature-word sections were reverse engineered off the wire and
+        # are easy to lose in a regeneration; spot-check their load-bearing facts
+        ('1507 bytes', 'RAM_ALL bulk reply'),
+        ('70 bytes', 'regular-log frame'),
+        ('72 bytes', '24 hour ring frame'),
+        ('epoch seconds, uint32 little endian', 'the shared 50 byte record'),
+        ('0x0002', 'the clock bit of the feature word'),
+        ('0x0040', 'the temperature bit of the feature word'),
         ('AT45DB321D', 'data flash'),
         ('57600', 'default baud')]:
     if want in body:
         print("  ok       %s present (%s)" % (want, why))
     else:
         print("  MISSING  %s (%s)" % (want, why))
+        fail += 1
+
+# the sections themselves, not just facts inside them
+heads = [p.text for p in doc.paragraphs
+         if p.style.name.startswith('Heading') or p.style.name == 'Title']
+for want in ('Feature word', 'Reading the logs', 'Which unit a temperature is in'):
+    if any(want in h for h in heads):
+        print("  ok       section present: %s" % want)
+    else:
+        print("  MISSING  section: %s" % want)
         fail += 1
 
 print()

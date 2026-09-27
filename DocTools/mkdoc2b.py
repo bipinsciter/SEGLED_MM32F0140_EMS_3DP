@@ -110,7 +110,8 @@ META = {
     'FLASH24_CUR_IND_ID': ('24 hour log, current index', '', 'plain'),
     'MINMAXMEAN_IND_ID': ('Min/max/mean log, one index', '', 'binary block'),
     'RDLG_DT_ID':        ('Read the log from a date', '', 'binary block'),
-    'RDLG_CNT_ID':       ('Number of stored log records', '', 'plain'),
+    'RDLG_CNT_ID':       ('Records in the regular log', '',
+                          'the write index, which is the count until the ring wraps'),
 }
 
 GROUPS = [
