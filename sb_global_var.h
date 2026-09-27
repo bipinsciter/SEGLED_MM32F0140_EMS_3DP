@@ -66,6 +66,7 @@ extern uint32_t templong;
 
 extern uint8_t gu8_IsCOMDisable,gu8_IsLCDDisable;
 extern uint8_t gu8_rxMode,RxInd,XbeeRxInd,RxTimeout;
+extern uint8_t RxLen;
 extern uint8_t crcVal;
 extern uint16_t CustPassword,FactCustPassword;
 

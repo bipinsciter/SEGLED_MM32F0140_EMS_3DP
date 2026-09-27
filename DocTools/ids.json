@@ -1,0 +1,778 @@
+[
+ {
+  "hex": "0x01",
+  "name": "DP1UAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Upper_Alm_OFF[DP1]*10",
+  "mode": null
+ },
+ {
+  "hex": "0x02",
+  "name": "DP1UAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Upper_Alm_ON[DP1]*10",
+  "mode": null
+ },
+ {
+  "hex": "0x03",
+  "name": "DP1LAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Lower_Alm_OFF[DP1]*10",
+  "mode": null
+ },
+ {
+  "hex": "0x04",
+  "name": "DP1LAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Lower_Alm_ON[DP1]*10",
+  "mode": null
+ },
+ {
+  "hex": "0x05",
+  "name": "DP2UAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Upper_Alm_OFF[DP2]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x06",
+  "name": "DP2UAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Upper_Alm_ON[DP2]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x07",
+  "name": "DP2LAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Lower_Alm_OFF[DP2]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x08",
+  "name": "DP2LAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Lower_Alm_ON[DP2]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x09",
+  "name": "TMUAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "TM_Upper_Alm_OFF*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x0A",
+  "name": "TMUAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "TM_Upper_Alm_ON*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x0B",
+  "name": "TMLAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "TM_Lower_Alm_OFF*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x0C",
+  "name": "TMLAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "TM_Lower_Alm_ON*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x0D",
+  "name": "RHUAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "RH_Upper_Alm_OFF*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x0E",
+  "name": "RHUAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "RH_Upper_Alm_ON*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x0F",
+  "name": "RHLAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "RH_Lower_Alm_OFF*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x10",
+  "name": "RHLAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "RH_Lower_Alm_ON*10",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x11",
+  "name": "HR_ID",
+  "read": true,
+  "write": false,
+  "expr": "rtc.hour",
+  "mode": null
+ },
+ {
+  "hex": "0x12",
+  "name": "MN_ID",
+  "read": true,
+  "write": false,
+  "expr": "rtc.minute",
+  "mode": null
+ },
+ {
+  "hex": "0x13",
+  "name": "SEC_ID",
+  "read": true,
+  "write": false,
+  "expr": "rtc.second",
+  "mode": null
+ },
+ {
+  "hex": "0x14",
+  "name": "YR_ID",
+  "read": true,
+  "write": false,
+  "expr": "(2000 + rtc.year)",
+  "mode": null
+ },
+ {
+  "hex": "0x15",
+  "name": "MNTH_ID",
+  "read": true,
+  "write": false,
+  "expr": "rtc.month",
+  "mode": null
+ },
+ {
+  "hex": "0x16",
+  "name": "DT_ID",
+  "read": true,
+  "write": false,
+  "expr": "rtc.day",
+  "mode": null
+ },
+ {
+  "hex": "0x19",
+  "name": "LOGINTVAL_ID",
+  "read": true,
+  "write": true,
+  "expr": "LogInterval",
+  "mode": null
+ },
+ {
+  "hex": "0x1A",
+  "name": "DVCID_ID",
+  "read": true,
+  "write": true,
+  "expr": "DeviceID",
+  "mode": null
+ },
+ {
+  "hex": "0x1C",
+  "name": "DP1MIN_ID",
+  "read": true,
+  "write": false,
+  "expr": "DP_Min[DP1]*100",
+  "mode": null
+ },
+ {
+  "hex": "0x1D",
+  "name": "DP1MAX_ID",
+  "read": true,
+  "write": false,
+  "expr": "DP_Max[DP1]*100",
+  "mode": null
+ },
+ {
+  "hex": "0x1E",
+  "name": "DP2MIN_ID",
+  "read": true,
+  "write": false,
+  "expr": "DP_Min[DP2]*100",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x1F",
+  "name": "DP2MAX_ID",
+  "read": true,
+  "write": false,
+  "expr": "DP_Max[DP2]*100",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x20",
+  "name": "TMMIN_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x21",
+  "name": "TMMAX_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x22",
+  "name": "RHMIN_ID",
+  "read": true,
+  "write": false,
+  "expr": "RH_Min*100",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x23",
+  "name": "RHMAX_ID",
+  "read": true,
+  "write": false,
+  "expr": "RH_Max*100",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x2E",
+  "name": "TMUNT_ID",
+  "read": true,
+  "write": true,
+  "expr": "TM_Unit",
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x30",
+  "name": "DP1CAL_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x31",
+  "name": "DP2CAL_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x32",
+  "name": "TMCAL_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x33",
+  "name": "RHCAL_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": "TEMPRH"
+ },
+ {
+  "hex": "0x34",
+  "name": "SFVER_ID",
+  "read": true,
+  "write": false,
+  "expr": "SOFT_VER",
+  "mode": null
+ },
+ {
+  "hex": "0x35",
+  "name": "BZRON_ID",
+  "read": true,
+  "write": true,
+  "expr": "Buzzer_ON_Time",
+  "mode": null
+ },
+ {
+  "hex": "0x36",
+  "name": "BZROFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "Buzzer_OFF_Time",
+  "mode": null
+ },
+ {
+  "hex": "0x37",
+  "name": "CAL_FPWD_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x38",
+  "name": "CAL_CPWD_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x39",
+  "name": "CPWD_ID",
+  "read": true,
+  "write": true,
+  "expr": "CustPassword",
+  "mode": null
+ },
+ {
+  "hex": "0x3A",
+  "name": "ACK_TIMER_ID",
+  "read": true,
+  "write": true,
+  "expr": "AckTimer",
+  "mode": null
+ },
+ {
+  "hex": "0x3B",
+  "name": "ACK_PW_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x3C",
+  "name": "ALM_ACK_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x3D",
+  "name": "BATPER_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x3E",
+  "name": "BRDSTP_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x3F",
+  "name": "BRDSTR_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x40",
+  "name": "SRNO_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x41",
+  "name": "UBRT_ID",
+  "read": true,
+  "write": true,
+  "expr": "UART_BaudRate",
+  "mode": null
+ },
+ {
+  "hex": "0x42",
+  "name": "UDBT_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x43",
+  "name": "UPRT_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x44",
+  "name": "USTB_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x45",
+  "name": "RAM_ALL_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x46",
+  "name": "RAM_IND_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x47",
+  "name": "FLASH24_IND_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x48",
+  "name": "REALTIME_VAL_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x49",
+  "name": "RDLG_DT_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x4A",
+  "name": "RDLG_CNT_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x4B",
+  "name": "DATETIME_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x4C",
+  "name": "FLASH24_CUR_IND_ID",
+  "read": true,
+  "write": false,
+  "expr": "CurrentLog24Ind",
+  "mode": null
+ },
+ {
+  "hex": "0x4D",
+  "name": "FCPWD_ID",
+  "read": true,
+  "write": true,
+  "expr": "FactCustPassword",
+  "mode": null
+ },
+ {
+  "hex": "0x4E",
+  "name": "SET_DPARA_PWD_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x4F",
+  "name": "SCROLL_TIME_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x50",
+  "name": "EXT_FLASH_ERASE_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x51",
+  "name": "DFLT_RTC_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x52",
+  "name": "DFLT_CAL_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x53",
+  "name": "MINMAXMEAN_IND_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x54",
+  "name": "MEAN_HR_ID",
+  "read": true,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x57",
+  "name": "BIG_FONT_LED_SET_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x58",
+  "name": "MENB_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_masterEnable",
+  "mode": null
+ },
+ {
+  "hex": "0x5A",
+  "name": "DOOR_SENSE_POLARITY_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_doorSensingPolarity",
+  "mode": null
+ },
+ {
+  "hex": "0x5B",
+  "name": "DOOR_SENSE_TIME_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_doorSensingTime",
+  "mode": null
+ },
+ {
+  "hex": "0x5C",
+  "name": "DP1_ALM_SENSE_TIME_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_DpAlarmSensingTime[DP1]",
+  "mode": null
+ },
+ {
+  "hex": "0x5D",
+  "name": "DP2_ALM_SENSE_TIME_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_DpAlarmSensingTime[DP2]",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x5E",
+  "name": "LCD_BRIGHT_CNT_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_LCDBrigthnessCnt",
+  "mode": null
+ },
+ {
+  "hex": "0x5F",
+  "name": "DP_SW_FACT_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x60",
+  "name": "RELAY_CNTL_ID",
+  "read": false,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x61",
+  "name": "DP3UAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Upper_Alm_OFF[DP3]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x62",
+  "name": "DP3UAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Upper_Alm_ON[DP3]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x63",
+  "name": "DP3LAOFF_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Lower_Alm_OFF[DP3]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x64",
+  "name": "DP3LAON_ID",
+  "read": true,
+  "write": true,
+  "expr": "DP_Lower_Alm_ON[DP3]*10",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x65",
+  "name": "DP3MIN_ID",
+  "read": true,
+  "write": false,
+  "expr": "DP_Min[DP3]*100",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x66",
+  "name": "DP3MAX_ID",
+  "read": true,
+  "write": false,
+  "expr": "DP_Max[DP3]*100",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x67",
+  "name": "DP3CAL_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x68",
+  "name": "DP3_ALM_SENSE_TIME_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_DpAlarmSensingTime[DP3]",
+  "mode": "DP3"
+ },
+ {
+  "hex": "0x69",
+  "name": "AUTO_SENT_INTERVAL_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_AutoSentInterval",
+  "mode": null
+ },
+ {
+  "hex": "0x6A",
+  "name": "XBEE_RST_INTERVAL_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu16_XbeeRstInterval",
+  "mode": null
+ },
+ {
+  "hex": "0x6B",
+  "name": "XBEE_MAC_ADDR_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x6C",
+  "name": "DEVICES_IN_GROUP_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_DeviceInGroup",
+  "mode": null
+ },
+ {
+  "hex": "0x6D",
+  "name": "XBEE_SELF_MAC_ADDR_ID",
+  "read": false,
+  "write": false,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x6E",
+  "name": "DP_LIMIT_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x6F",
+  "name": "LCD_CONTROL_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_IsLCDDisable",
+  "mode": null
+ },
+ {
+  "hex": "0x70",
+  "name": "COM_CONTROL_ID",
+  "read": true,
+  "write": true,
+  "expr": "gu8_IsCOMDisable",
+  "mode": null
+ },
+ {
+  "hex": "0x71",
+  "name": "DP_OFFSET_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ },
+ {
+  "hex": "0x72",
+  "name": "DP_SLOT_OFFSET_ID",
+  "read": true,
+  "write": true,
+  "expr": null,
+  "mode": null
+ }
+]

@@ -4,7 +4,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	4
+#define FW_PATCH	5
 
 #define ENABLE_KEY_LOGIC
 
@@ -203,8 +203,6 @@
 #define DFLT_CAL_ID			0x52
 #define MINMAXMEAN_IND_ID	0x53
 #define MEAN_HR_ID			0x54
-#define BACKLIT_ID			0x55
-#define TM_RH_SCAN_TIME_ID	0x56
 #define BIG_FONT_LED_SET_ID	0x57
 #define MENB_ID				0x58
 #define DOOR_SENSE_POLARITY_ID		0x5A

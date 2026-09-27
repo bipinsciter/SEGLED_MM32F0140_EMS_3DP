@@ -67,6 +67,9 @@ uint32_t templong=0;
 
 uint8_t gu8_IsCOMDisable=0,gu8_IsLCDDisable=0;
 uint8_t gu8_rxMode=0,RxInd=0,XbeeRxInd=0,RxTimeout=0;
+//Length of the message being served.  RxInd cannot be used for that any more:
+//the ISR is left free to collect the next frame while this one is answered.
+uint8_t RxLen=0;
 uint8_t crcVal=0;
 uint16_t CustPassword=0,FactCustPassword=0;
 
@@ -105,7 +108,7 @@ float TM_Cal_float_Value_F=0,TM_Cal_float_Value_C=0;
 float RH_Cal_float_Value_F=0,RH_Cal_float_Value_C=0;
 int16_t TM_Upper_Alm_ON=0,TM_Upper_Alm_OFF=0,TM_Lower_Alm_ON=0,TM_Lower_Alm_OFF=0;
 int16_t RH_Upper_Alm_ON=0,RH_Upper_Alm_OFF=0,RH_Lower_Alm_ON=0,RH_Lower_Alm_OFF=0;
-uint8_t TMRH_StartUpTimer=0;
+uint8_t TMRH_StartUpTimer=10;
 uint8_t TM_UserCalDateInd=0,RH_UserCalDateInd=0;
 int16_t TM_Cal_Value_F=0,RH_Cal_Value_F=0;
 int16_t TM_Cal_Value_C=0,RH_Cal_Value_C=0;

@@ -5930,9 +5930,8 @@ void ServePCMsg(void)
 		}
 		else
 		{
-			gu8_rxMode=0;
-			RxInd=0;
-			bool_msgRcvOK=0;
+			//The receive state was already cleared by the caller; clearing it here
+			//would discard a frame that has arrived since.
 			return;
 		}
 	}
@@ -5946,7 +5945,7 @@ void ServePCMsg(void)
 	
 	if(RxBuffer[2]==PARA_WITH_ALM_READ_CMD)
 	{	
-		if(RxInd==6)
+		if(RxLen==6)
 		{
 			if((RxBuffer[3]==0x00) || (RxBuffer[3]==gu8_groupID))
 			{
@@ -6461,7 +6460,7 @@ void ServePCMsg(void)
 		switch(RxBuffer[3])
 		{
 			case ACK_PW_ID:	
-			case ALM_ACK_ID:			tempshort = findValue(&RxBuffer[5],RxInd-7);	break;
+			case ALM_ACK_ID:			tempshort = findValue(&RxBuffer[5],RxLen-7);	break;
 			case SET_DPARA_PWD_ID:		break;
 			case SRNO_ID:		  		break;
 			case BRDSTR_ID:		  		break;
@@ -6503,7 +6502,7 @@ void ServePCMsg(void)
 			break;
 			
 			default: 
-				tempshort = findValue(&RxBuffer[4],RxInd-6);
+				tempshort = findValue(&RxBuffer[4],RxLen-6);
 			break;
 		}
 			
@@ -7173,13 +7172,21 @@ void ServePCMsg(void)
 					}
 					else
 					{
-						ss1 = RealtemperatureF*10.0;
-						TM_Cal_Value_F = ss1 - tempshort;
-						TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 32.0;
-						WriteEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
-
-						TM_Cal_Value_F = (TM_Cal_Value_F-320) / 1.8;
-						TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+						//The reference arrives in tenths of a degree F, so its difference from the
+						//reading is a SPAN in F.  The correction is subtracted from temperatureC, so
+						//it has to be stored in tenths of a degree C: divide by 1.8, and leave the 32
+						//degree offset alone - that belongs to absolute temperatures, not to the
+						//difference between two of them.
+						{
+							float f32_span;
+							
+							ss1 = RealtemperatureF*10.0;
+							f32_span = (float)(ss1 - tempshort) / 1.8f;
+							TM_Cal_Value_F = (int16_t)(f32_span + ((f32_span >= 0.0f) ? 0.5f : -0.5f));
+							WriteEEPROMData(TM_CAL_VAL_F_ADDR,(uint8_t*)&TM_Cal_Value_F,sizeof(TM_Cal_Value_F));
+							
+							TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
+						}
 					}
 										
 					TM_Cal_Value_C = 0;
@@ -7199,13 +7206,20 @@ void ServePCMsg(void)
 					}
 					else
 					{
-						ss1 = (RealtemperatureF - TM_Cal_float_Value_F)*10.0;
-						TM_Cal_Value_C = ss1 - tempshort;
-						TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 32.0;
-						WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
-						
-						TM_Cal_Value_C = (TM_Cal_Value_C-320) / 1.8;
-						TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+						//TM_Cal_float_Value_F is a correction in C, so it cannot be taken off
+						//RealtemperatureF, which is in F.  Remove the factory correction in C, convert
+						//that reading to F, and only then difference it against the reference - a span,
+						//so it scales by 1.8 with no offset.
+						{
+							float f32_span;
+							
+							ss1 = (((RealtemperatureC - TM_Cal_float_Value_F) * 1.8) + 32.0) * 10.0;
+							f32_span = (float)(ss1 - tempshort) / 1.8f;
+							TM_Cal_Value_C = (int16_t)(f32_span + ((f32_span >= 0.0f) ? 0.5f : -0.5f));
+							WriteEEPROMData(TM_CAL_VAL_C_ADDR,(uint8_t*)&TM_Cal_Value_C,sizeof(TM_Cal_Value_C));
+							
+							TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
+						}
 					}
 				}
 				
@@ -7481,7 +7495,7 @@ void ServePCMsg(void)
 			break;
 			case BRDSTR_ID:
 				bool_brodcastEnb=1;
-				tempshort=findValue(&RxBuffer[4],RxInd-6);
+				tempshort=findValue(&RxBuffer[4],RxLen-6);
 				StartBroadcastTimer=(unsigned long)tempshort*60; 
 				gu8_broadcast=1;
 				WriteEEPROMData(BROADCAST_ENB_ADDR,&gu8_broadcast,sizeof(gu8_broadcast));
@@ -7507,12 +7521,12 @@ void ServePCMsg(void)
 		#else
 		if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
 		#endif
-		for(j=4;j<RxInd;j++)TxBuffer[j]=RxBuffer[j-1];
+		for(j=4;j<RxLen;j++)TxBuffer[j]=RxBuffer[j-1];
 		
-		TxBuffer[RxInd-1]=CalCRC(&TxBuffer[1],RxInd-2);
-		TxBuffer[RxInd]=0xFC;
+		TxBuffer[RxLen-1]=CalCRC(&TxBuffer[1],RxLen-2);
+		TxBuffer[RxLen]=0xFC;
 		
-		SetTxmode(TxBuffer,RxInd+1);
+		SetTxmode(TxBuffer,RxLen+1);
 		
 		if(RxBuffer[3]==UBRT_ID)
 		{
@@ -8477,6 +8491,17 @@ void ServePCMsg(void)
 				
 				SetTxmode(TxBuffer,72);
 			}
+			else
+			{
+				//Calibration is locked, so there is no date history to attach - but the
+				//host still has to get an answer.  Without this the branch fell through
+				//having sent nothing at all, leaving the host to time out.  The read
+				//switch has already put 0 in tempshort for the locked case.
+				TxBuffer[10]=CalCRC(&TxBuffer[1],9);
+				TxBuffer[11]=0xFC;
+				
+				SetTxmode(TxBuffer,12);
+			}
 		}
 		else
 		{
@@ -8515,8 +8540,8 @@ void ServePCMsg(void)
 		SetTxmode(TxBuffer,6);
 	}
 
-	bool_msgRcvOK=0;
-	RxInd=0;
+	//The receiver was re-armed before this message was served, so there is nothing
+	//to clear here - and clearing it would throw away whatever arrived meanwhile.
 }
 
 void SetTxmode(uint8_t *buffer,uint16_t bytes)
@@ -8923,6 +8948,28 @@ void ReadDiffPressure(uint8_t SensNo)
 		//and they could never recover.
 		if(!DP_limit[SensNo])
 		{
+			//A recorded extreme that lies outside the configured clamp can never be
+			//superseded once the clamp is narrowed: a minimum only moves down, a maximum
+			//only moves up, and the clamp stops any reading from reaching it.  The pair
+			//would sit at values this device can no longer produce for good.  The boot
+			//check does not catch it - that one validates against the sensor rating, not
+			//against the clamp the user set.
+			//
+			//Restart from the present reading, not from the seed: the seed is +/-the
+			//sensor rating, which is itself outside a narrowed clamp and would trigger
+			//this again on every sample.
+			if((DP_Min[SensNo] < -f32_dp_limit[SensNo]) || (DP_Min[SensNo] > f32_dp_limit[SensNo]))
+			{
+				DP_Min[SensNo] = Dpressure[SensNo];
+				WriteEEPROMData(DP1_MINIMUM+(SensNo*4),(uint8_t*)&DP_Min[SensNo],sizeof(DP_Min[SensNo]));
+			}
+			
+			if((DP_Max[SensNo] < -f32_dp_limit[SensNo]) || (DP_Max[SensNo] > f32_dp_limit[SensNo]))
+			{
+				DP_Max[SensNo] = Dpressure[SensNo];
+				WriteEEPROMData(DP1_MAXIMUM+(SensNo*4),(uint8_t*)&DP_Max[SensNo],sizeof(DP_Max[SensNo]));
+			}
+			
 			if(Dpressure[SensNo] > DP_Max[SensNo])
 			{
 				DP_Max[SensNo] = Dpressure[SensNo];
@@ -9586,9 +9633,6 @@ void TMUnitChange(void)
 		TM_Upper_Alm_OFF = (TM_Upper_Alm_OFF-320) / 1.8;
 		TM_Lower_Alm_ON = (TM_Lower_Alm_ON-320) / 1.8;
 		TM_Lower_Alm_OFF = (TM_Lower_Alm_OFF-320) / 1.8;
-		
-		TM_Cal_Value_F = (TM_Cal_Value_F-320) / 1.8;
-		TM_Cal_Value_C = (TM_Cal_Value_C-320) / 1.8;
 	}
 	else
 	{
@@ -9596,10 +9640,13 @@ void TMUnitChange(void)
 		TM_Upper_Alm_OFF = (TM_Upper_Alm_OFF * 1.8) + 320;
 		TM_Lower_Alm_ON = (TM_Lower_Alm_ON * 1.8) + 320;
 		TM_Lower_Alm_OFF = (TM_Lower_Alm_OFF * 1.8) + 320;
-		
-		TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 320;
-		TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 320;
 	}
+	
+	//The calibration corrections are deliberately left alone.  A correction is a
+	//difference in tenths of a degree C, subtracted from temperatureC before the
+	//display unit is applied, so switching that unit must not change it.  The
+	//setpoints above are absolute temperatures held in the displayed unit, which is
+	//why those convert here and these do not.
 	TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
 	TM_Cal_float_Value_C = (float)TM_Cal_Value_C/10.0;
 	
@@ -9960,8 +10007,8 @@ void Read_SHT25(void)
 			temperatureC=0.0;
 			temperatureF=0.0;
 			
-			TM_Max=0.0;
-			TM_Min=0.0;
+//			TM_Max=0.0;
+//			TM_Min=0.0;
 			
 			TM_Alrm_ON=NO_ALARM;
 		}
@@ -10094,8 +10141,8 @@ void Read_SHT25(void)
 		{
 			humidityRH=0.0;
 			
-			RH_Max=0.0;
-			RH_Min=0.0;
+//			RH_Max=0.0;
+//			RH_Min=0.0;
 			
 			RH_Alrm_ON=NO_ALARM;
 		}
@@ -10130,31 +10177,40 @@ void whileTask(void)
 	// Check for any RS485 Command ================================================
 	if(bool_msgRcvOK)
 	{
-		crcVal=CalCRC(&RxBuffer1[1],RxInd-3);
-					
-		#ifdef DEBUG_RCV_CMD
-		opstr(0,"\r\nCRC:");
-		print_Hex(0,crcVal);
-		#endif
+		//Take the length, then clear the receive state BEFORE doing anything with
+		//the message.  Two reasons: every exit from here has to leave the receiver
+		//armed, or the ISR - which is wrapped in if(!bool_msgRcvOK) - stays gated
+		//for good; and serving a message takes tens of milliseconds, during which
+		//the next request would otherwise be thrown away with the host none the
+		//wiser.
+		RxLen = RxInd;
 		
 		gu8_rxMode=0;
 		RxTimeout=0;
-		if(RxBuffer1[RxInd-2]==crcVal)
+		RxInd=0;
+		bool_msgRcvOK=0;		//re-arms the ISR - RxInd is cleared first, on purpose
+		
+		//Shorter than the smallest legal frame (FF ID CMD PID CRC FE) there is
+		//nothing to check: RxLen-3 would go negative and reach CalCRC's uint16_t
+		//parameter as ~65533, reading far past a 100 byte buffer.
+		if(RxLen >= 6)
 		{
-			if(!bool_FlashReadCmd && !bool_Flash24ReadCmd && !bool_MinMaxMeanLogReadCmd && !bool_MeanHrLogReadCmd && !bool_RamReadCmd && !bool_RamAllReadCmd)
+			crcVal=CalCRC(&RxBuffer1[1],RxLen-3);
+			
+			#ifdef DEBUG_RCV_CMD
+			opstr(0,"\r\nCRC:");
+			print_Hex(0,crcVal);
+			#endif
+			
+			if(RxBuffer1[RxLen-2]==crcVal)
 			{
-				for(uint8_t m=0;m<RxInd;m++) RxBuffer[m]=RxBuffer1[m];
-				RxBuffer[1]=DeviceID;
-				ServePCMsg();
+				if(!bool_FlashReadCmd && !bool_Flash24ReadCmd && !bool_MinMaxMeanLogReadCmd && !bool_MeanHrLogReadCmd && !bool_RamReadCmd && !bool_RamAllReadCmd)
+				{
+					for(uint8_t m=0;m<RxLen;m++) RxBuffer[m]=RxBuffer1[m];
+					RxBuffer[1]=DeviceID;
+					ServePCMsg();
+				}
 			}
-			else
-			{
-				RxInd=0;
-			}
-		}
-		else
-		{
-			RxInd=0;
 		}
 	}
 	else
@@ -10510,8 +10566,8 @@ void whileTask(void)
 			
 			Dpressure[DP1]=0.0;
 
-			DP_Max[DP1]=0.0;
-			DP_Min[DP1]=0.0;
+//			DP_Max[DP1]=0.0;
+//			DP_Min[DP1]=0.0;
 
 			DP_Alrm_ON[DP1]=NO_ALARM;
 			
@@ -10674,9 +10730,9 @@ void boot_data(void)
 	{
 		FirstTimeCheck=0xA1;
 	#else
-	if(FirstTimeCheck != 0xB2)
+	if(FirstTimeCheck != 0xB3)
 	{
-		FirstTimeCheck=0xB2;
+		FirstTimeCheck=0xB3;
 	#endif
 		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 		
@@ -11570,8 +11626,10 @@ void boot_data(void)
 					WriteEEPROMData(TEMP_LO_ALM_OFF,(uint8_t*)&TM_Lower_Alm_OFF,sizeof(TM_Lower_Alm_OFF));
 				}
 				
-				TM_Cal_Value_F = ((float)TM_Cal_Value_F * 1.8) + 32.0;
-				TM_Cal_Value_C = ((float)TM_Cal_Value_C * 1.8) + 32.0;
+				//Nothing to convert: the stored corrections are already in tenths of a degree
+				//C and are subtracted from temperatureC before the display unit is applied.
+				//This used to run the absolute C-to-F formula over a difference, scaling it
+				//and shifting it by 32 on every start in Fahrenheit.
 			}
 		
 			TM_Cal_float_Value_F = (float)TM_Cal_Value_F/10.0;
@@ -11831,7 +11889,8 @@ void Init_variables(void)
 	bool_brodcastEnb=0;	
 	gu16_logtransfer=0;
 	bool_logtransferStart=0;
-	DP_StartUpTimer=5;
+	DP_StartUpTimer=10;
+	TMRH_StartUpTimer=10;
 	bool_resetDevice=0;
 	
 	bool_DPLog[DP1]=0;
