@@ -4,7 +4,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	5
+#define FW_PATCH	6
 
 #define ENABLE_KEY_LOGIC
 
@@ -22,12 +22,12 @@
 #define DATAFLASH_AT45DB321D	0
 #define DATAFLASH_XM25QH128A	1
 
-#define DATAFLASH_PART			DATAFLASH_AT45DB321D
+#define DATAFLASH_PART			DATAFLASH_XM25QH128A
 
 //Set to 1 to build XM25_SelfTest() and its diagnostics into the image.  Leave at 0
 //for production: the test costs about 600 bytes of code and erases the scratch
 //sector at boot.  Result codes are listed in Interface/XM25QH128A.h (0 = pass).
-#define XM25_ENABLE_SELFTEST	0
+#define XM25_ENABLE_SELFTEST	1
 
 //************************************************************************/
 // PRESSURE SENSOR PART SELECTION - must match the part fitted on the board
@@ -38,7 +38,7 @@
 #define PRESSURE_SENSOR_XGZP6891D	0
 #define PRESSURE_SENSOR_WF200DP		1
 
-#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_XGZP6891D
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
 
 //************************************************************************/
 // LOGGING SUBSYSTEMS (compile time)

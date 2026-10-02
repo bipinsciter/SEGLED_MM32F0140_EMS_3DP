@@ -54,6 +54,7 @@
 /* Private variables **************************************************************************************************/
 nt16 sRH;                    //variable for raw humidity ticks
 nt16 sT;                     //variable for raw temperature ticks
+uint8_t XM25Selftest=0;
 
 /* Private functions **************************************************************************************************/
 void ReadADCChannel(void)
@@ -71,7 +72,7 @@ void ReadADCChannel(void)
 	RVxVoltage[0] = ADC_GetChannelConvertedValue(ADC1, ADC_Channel_1);
 	RVxVoltage[1] = ADC_GetChannelConvertedValue(ADC1, ADC_Channel_2);
 
-	DBG_PRINTF("CH1 = %d  \tCH2 = %d\n", RVxVoltage[0], RVxVoltage[1]);
+//	DBG_PRINTF("CH1 = %d  \tCH2 = %d\n", RVxVoltage[0], RVxVoltage[1]);
 }
 
 //------------------------------------------------------------------------------
@@ -664,10 +665,39 @@ void InitLEDController(void)
 	
 	data[5] = FW_MAJOR+10;
 	data[6] = FW_MINOR;
-						
+	data[7] = FW_PATCH;
+	
+	#if ((DATAFLASH_PART == DATAFLASH_XM25QH128A) && XM25_ENABLE_SELFTEST)
+	if(XM25Selftest)
+	{
+		data[10] = E;
+		data[11] = r;
+		data[12] = r;
+	}
+	#endif
+	
 	disp_value();
 	PLATFORM_DelayMS(1000);
+}
 
+void InitDisplay(void)
+{
+	uint8_t i=0;
+	
+	TM1680Configure();
+	if(gu8_IsLCDDisable)
+	{
+		TM1680WriteCommand(SYS_DISABLE);
+		TM1680WriteCommand(LED_OFF);
+	}
+	else
+	{
+		TM1680WriteCommand(SYS_ENABLE);
+		TM1680WriteCommand(LED_ON);
+		TM1680Brighness(gu8_LCDBrigthnessCnt);
+	}
+	
+	TM1680Blink(BLINK_OFF);
 	////-------------------------------------------------------------------
 	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
 	data[2] = I;
@@ -701,13 +731,13 @@ void InitLEDController(void)
 	disp_value();
 	PLATFORM_DelayMS(1000);
 	
-//	////-------------------------------------------------------------------
-//	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-//	data[2] = 5;
-//	data[3] = r;
+	//-------------------------------------------------------------------
+	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
+	data[2] = 5;
+	data[3] = r;
 
-//	convert_float(gu32_SrNumber,&data[4],0);
-//	disp_value();
+	convert_float(gu32_SrNumber,&data[4],0);
+	disp_value();
 	PLATFORM_DelayMS(1000);
 }
 
@@ -9523,7 +9553,6 @@ void SecondTick(void)
 		)
 		{
 			buzzerWant = BUZZER_SRC_NEAR;
-			DBG_PRINTF("BUZZER_SRC_NEAR\n");
 		}
 		
 		if(buzzerWant != BUZZER_SRC_NONE)
@@ -10881,11 +10910,10 @@ void boot_data(void)
 	{
 		FirstTimeCheck=0xA1;
 	#else
-	if(FirstTimeCheck != 0xB4)
+	if(FirstTimeCheck != 0xB1)
 	{
-		FirstTimeCheck=0xB4;
+		FirstTimeCheck=0xB1;
 	#endif
-		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 		
 		gu16_parameterWord=PARAMETER_WORD;
 		WriteEEPROMData(DISP_PARA_SELECT,(uint8_t*)&gu16_parameterWord,sizeof(gu16_parameterWord));
@@ -11256,6 +11284,8 @@ void boot_data(void)
 		}
 
 		//EraseWholeFlash();
+		
+		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
 	}
 	else
 	{	
@@ -12434,8 +12464,6 @@ void Init_variables(void)
 	}
 }
 
-uint8_t test1=0;
-
 /***********************************************************************************************************************
   * @brief  This function is main entrance
   * @note   main
@@ -12457,16 +12485,24 @@ int main(void)
 	//Bring-up diagnostic - XM25_SelfTest() only exists in the XM25 build.
 	//Result codes are listed in Interface/XM25QH128A.h (0 = pass).
 	#if ((DATAFLASH_PART == DATAFLASH_XM25QH128A) && XM25_ENABLE_SELFTEST)
-	test1=XM25_SelfTest();
+	XM25Selftest=XM25_SelfTest();
 	#endif
 	
+	//-------------------------------------------------------
+	//Initialize I2C for DP1/DP2/DP3/DISPLAY/RTC
+	//-------------------------------------------------------
+	I2C1_Init();
+	I2C2_Init();
+	I2C3_Init();
+	
+	InitLEDController();
 	boot_data();	//Boot Data from Dataflash
 
 	//-------------------------------------------------------
 	//Initialize UART
 	//-------------------------------------------------------
 	UART_Configure(UART_BaudRate);
-	DBG_PRINTF("Powered ON\n");
+//	DBG_PRINTF("Powered ON\n");
 	
 	//boot_data() seeds and range-checks the real-time parameters, which on a NOR
 	//part land in the RAM mirror rather than in flash.  Commit them now: a fresh
@@ -12474,14 +12510,8 @@ int main(void)
 	//reading an erased (0xFF) record.
 	DF_RtFlush();
 
-	//-------------------------------------------------------
-	//Initialize I2C for DP1/DP2/DP3/DISPLAY/RTC
-	//-------------------------------------------------------
-	I2C1_Init();
-	I2C2_Init();
-	I2C3_Init();
 	Init_PCF8563();
-	InitLEDController();
+	InitDisplay();
 	
 	//-------------------------------------------------------
 	//Initialize Timer and Variables

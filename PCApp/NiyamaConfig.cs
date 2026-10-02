@@ -47,6 +47,7 @@ namespace NiyamaConfig
         public const byte ID_DP_LIMIT = 0x6E, ID_DP_SLOT_OFFSET = 0x72;
         public const byte ID_DP_OFFSET = 0x71, ID_CAL_CPWD = 0x38, ID_CAL_FPWD = 0x37;
         public const byte ID_PARAM_WORD = 0x4E;
+        public const byte ID_DP_SW_FACT = 0x5F;
         public const string FACTORY_PARASET_PWD = "1234";
         public const byte ID_SRNO = 0x40, ID_TMCAL = 0x32, ID_RHCAL = 0x33;
         public const byte ID_DFLT_CAL = 0x52;
@@ -459,7 +460,7 @@ namespace NiyamaConfig
         TextBox txtLog;
         CheckBox chkPoll, chkHexLog;
         ComboBox cboSlotCh, cboLimitCh, cboOffCh;
-        NumericUpDown numLimitVal, numOffVal, numCalPwd;
+        NumericUpDown numLimitVal, numOffVal, numSwVal, numCalPwd;
         TextBox txtSrNo;
         NumericUpDown numTmRef, numRhRef;
         Label lblTmCal, lblRhCal;
@@ -898,36 +899,61 @@ namespace NiyamaConfig
             };
             g2.Controls.AddRange(new Control[] { cboSlotCh, bSlotRd, bSlotWr, slotGrid });
 
-            // ---- customer calibration: zero offset
-            var g3 = new GroupBox { Text = "Zero offset   (0x71) - needs the calibration password",
-                                    Left = 6, Top = 356, Width = 580, Height = 110 };
+            // ---- customer calibration: zero offset and span factor
+            var g3 = new GroupBox { Text = "DP zero offset and span factor   (0x71 / 0x5F) - need the customer password",
+                                    Left = 6, Top = 356, Width = 580, Height = 164 };
             numCalPwd = new NumericUpDown { Location = new Point(196, 26), Width = 74,
                                             Minimum = 0, Maximum = 9999, Value = 100 };
             var bUnlock = new Button { Text = "Unlock (60 s)", Location = new Point(278, 25), Width = 94 };
             bUnlock.Click += delegate { Unlock(); };
             chkFactory = new CheckBox { Text = "factory", Location = new Point(378, 28),
                                         Width = 70, Checked = false };
+
+            //One channel selector for both rows. Two would invite reading the offset for
+            //one channel and writing the factor to another without noticing.
             cboOffCh = Combo(66); cboOffCh.Items.AddRange(new object[] { "DP1", "DP2", "DP3" });
-            cboOffCh.SelectedIndex = 0; cboOffCh.Location = new Point(14, 66);
-            //Entered in Pa.  The wire carries hundredths, and that field is an int16
-            //on the device, so +-327.67 Pa is the whole of the representable range.
-            numOffVal = new NumericUpDown { Location = new Point(92, 66), Width = 82,
+            cboOffCh.SelectedIndex = 0; cboOffCh.Location = new Point(84, 60);
+
+            //Both are entered in Pa. The wire carries hundredths, and the field is an
+            //int16 on the device, so +-327.67 Pa is the whole representable range.
+            numOffVal = new NumericUpDown { Location = new Point(150, 92), Width = 84,
                                             DecimalPlaces = 2, Increment = 0.01m,
                                             Minimum = -327.67m, Maximum = 327.67m, Value = 0 };
-            var bOffRd = new Button { Text = "Read", Location = new Point(186, 65), Width = 62 };
-            var bOffWr = new Button { Text = "Write", Location = new Point(254, 65), Width = 62 };
+            var bOffRd = new Button { Text = "Read", Location = new Point(246, 91), Width = 62 };
+            var bOffWr = new Button { Text = "Write", Location = new Point(314, 91), Width = 62 };
             bOffRd.Click += delegate { ReadOffset(); };
             bOffWr.Click += delegate { WriteOffset(); };
+
+            numSwVal = new NumericUpDown { Location = new Point(150, 124), Width = 84,
+                                           DecimalPlaces = 2, Increment = 0.01m,
+                                           Minimum = -327.67m, Maximum = 327.67m, Value = 0 };
+            var bSwRd = new Button { Text = "Read", Location = new Point(246, 123), Width = 62 };
+            var bSwWr = new Button { Text = "Write", Location = new Point(314, 123), Width = 62 };
+            bSwRd.Click += delegate { ReadSwFactor(); };
+            bSwWr.Click += delegate { WriteSwFactor(); };
+
             g3.Controls.AddRange(new Control[] {
                 new Label { Text = "Customer calibration password", AutoSize = true,
                             Location = new Point(14, 30) },
-                numCalPwd, bUnlock, chkFactory, cboOffCh, numOffVal, bOffRd, bOffWr,
-                new Label { Text = "Pa, to 0.01", AutoSize = true,
-                            Location = new Point(330, 70), ForeColor = Color.DimGray } });
+                numCalPwd, bUnlock, chkFactory,
+                new Label { Text = "Channel", AutoSize = true, Location = new Point(14, 63) },
+                cboOffCh,
+                new Label { Text = "for both rows below", AutoSize = true,
+                            Location = new Point(158, 63), ForeColor = Color.DimGray },
+                new Label { Text = "Zero offset  0x71", AutoSize = true,
+                            Location = new Point(14, 95) },
+                numOffVal, bOffRd, bOffWr,
+                new Label { Text = "Pa - added to the reading outright", AutoSize = true,
+                            Location = new Point(384, 95), ForeColor = Color.DimGray },
+                new Label { Text = "Span factor  0x5F", AutoSize = true,
+                            Location = new Point(14, 127) },
+                numSwVal, bSwRd, bSwWr,
+                new Label { Text = "Pa - eased in above 1.5 Pa", AutoSize = true,
+                            Location = new Point(384, 127), ForeColor = Color.DimGray } });
 
             // ---- temperature and humidity calibration
             var g4 = new GroupBox { Text = "Temperature and humidity calibration   (0x32 / 0x33)",
-                                    Left = 6, Top = 472, Width = 580, Height = 152 };
+                                    Left = 6, Top = 530, Width = 580, Height = 152 };
             g4.Controls.Add(new Label
             {
                 AutoSize = true, MaximumSize = new Size(548, 0), Location = new Point(14, 22),
@@ -1823,6 +1849,47 @@ namespace NiyamaConfig
                 var r = Exchange(Proto.BuildWrite(DevId, Proto.ID_DP_OFFSET, payload), 0, "Zero offset");
                 Say(Good(r) ? "Zero offset written."
                             : "Could not write the zero offset - is calibration still unlocked?");
+            });
+        }
+
+        void ReadSwFactor()
+        {
+            Serialised(delegate
+            {
+                var r = Exchange(Proto.BuildRead(DevId, Proto.ID_DP_SW_FACT,
+                                                 cboOffCh.SelectedIndex.ToString()), 0, "Span factor");
+                int v;
+                if (Good(r) && int.TryParse(r.Text, NumberStyles.Integer,
+                                            CultureInfo.InvariantCulture, out v))
+                {
+                    //Hundredths of a Pa on the wire, Pa in the box.
+                    decimal pa = v / 100m;
+                    numSwVal.Value = Math.Max(numSwVal.Minimum, Math.Min(numSwVal.Maximum, pa));
+                    Say("Span factor is " + pa.ToString("0.00", CultureInfo.InvariantCulture) + " Pa.");
+                }
+                else Say("Could not read the span factor.");
+            });
+        }
+
+        void WriteSwFactor()
+        {
+            Serialised(delegate
+            {
+                //Same shape as the zero offset: the sign goes in a byte of its own
+                //ahead of five digits, and the device only accepts it while CUSTOMER
+                //calibration is open - the factory unlock will not do.
+                int v = (int)Math.Round(numSwVal.Value * 100m);
+                if (!Proto.FitsOnWire(v))
+                { Say("That span factor is outside the range the device can hold."); return; }
+
+                string payload = cboOffCh.SelectedIndex.ToString() + Proto.SignedField5(v);
+                var r = Exchange(Proto.BuildWrite(DevId, Proto.ID_DP_SW_FACT, payload),
+                                 0, "Span factor");
+                if (!Good(r))
+                { Say("Could not write the span factor - is customer calibration still unlocked?"); return; }
+
+                Say("Span factor written. It is eased into the reading a fifteenth at a "
+                    + "time, and only above 1.5 Pa, so the value will not jump.");
             });
         }
 

@@ -89,7 +89,7 @@ TABLE(['ID', 'Layout of a write', 'Value field'],
       [['0x6E', 'FF ID 11 6E <ch> <5 chars>', 'tenths of a Pa'],
        ['0x72', 'FF ID 11 72 <ch> <slot> <5 chars>', 'tenths of a Pa'],
        ['0x71', 'FF ID 11 71 <ch> <sign> <5 digits>', 'hundredths of a Pa'],
-       ['0x5F', 'FF ID 11 5F <ch> <sign> <5 digits>', 'span factor']],
+       ['0x5F', 'FF ID 11 5F <ch> <sign> <5 digits>', 'hundredths of a Pa']],
       [0.6, 3.0, 3.0])
 P('Channel is the ASCII digit 0, 1 or 2 for DP1, DP2, DP3. Slot is 0 to 5.')
 P('0x71 and 0x5F are the odd ones out: their sign sits in a byte of its own ahead of a '
@@ -101,6 +101,18 @@ MONO('  DP1 clamp to 300.0 Pa      FF 01 11 6E 30 30 33 30 30 30 <crc> FE\n'
      '  DP1 zero offset 1.25 Pa    FF 01 11 71 30 2B 30 30 31 32 35 <crc> FE\n'
      '                                         0  +  0  0  1  2  5')
 P('A read takes the index bytes but no value: FF ID 10 72 <ch> <slot> CRC FE.')
+
+P('0x71 and 0x5F need the CUSTOMER password', bold=True)
+P('Both are accepted only while customer calibration is open. The factory password '
+  'unlocks calibration but not these two, and a write made under it is discarded in '
+  'silence - no INVALID_PARA, no error of any kind. The stored value simply does not '
+  'change, and a host that does not read back afterwards will believe it worked. Read '
+  'them back; it is the only way to know.', bold=True)
+P('The two do different things to the reading. The zero offset is added outright, so a '
+  'write shows up immediately. The span factor is eased in a fifteenth at a time and '
+  'only while the reading is above 1.5 Pa, so it trims the span without disturbing the '
+  'zero - and a fresh write will not move the value at once, which is easily mistaken '
+  'for a write that failed.')
 P('The per-slot offset is added to a reading whose magnitude falls in that slot. The '
   'bands are fixed:')
 TABLE(['Slot', 'Applies when the reading is'],
@@ -284,6 +296,9 @@ BULLET('Reading a parameter that belongs to the other build returns INVALID_PARA
        'silence. Silence means the request was lost; see section 7.')
 BULLET('Every value is parsed into a signed 16 bit integer. Do not send anything '
        'outside −32768 to 32767.')
+BULLET('The DP zero offset (0x71) and span factor (0x5F) are accepted only under the '
+       'customer password. Under the factory password the write is discarded silently, '
+       'with no error, so always read them back.')
 BULLET('A log transfer takes over the link. While one is running the device serves '
        'no other command, so a host must read the stream out before asking for '
        'anything else.')

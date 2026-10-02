@@ -28,9 +28,16 @@ cell, select the row, and press *Write selected*; the application confirms the l
 before sending anything and reads the values back afterwards.
 
 **Calibration** — the DP reading clamp, the six per-slot DP offsets, the DP zero
-offset and temperature / humidity calibration. Every pressure field on this tab is
+offset and span factor, and temperature / humidity calibration. Every pressure field on this tab is
 entered in Pa; the conversion to the tenths or hundredths the wire carries happens
 inside the application.
+
+The zero offset (0x71) and the span factor (0x5F) share one channel selector and both
+need the **customer** password specifically — a factory unlock is not enough, and the
+device ignores the write silently rather than refusing it, so it looks as though it
+worked. They differ in effect: the zero offset is added to the reading outright, while
+the span factor is eased in a fifteenth at a time and only while the reading is above
+1.5 Pa, so a fresh write will not make the value jump.
 
 Calibration must be unlocked first, with either the customer or the factory password;
 the device keeps the window open for about 60 seconds and every calibration exchange
@@ -160,6 +167,7 @@ C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe /nologo /target:exe /mai
 | `FactCalTest.cs` | factory temperature calibration in Fahrenheit | yes, restores |
 | `PersistTest.cs` | a calibration across a power cycle; `arm` then `check` | yes, restores |
 | `ParamWordTest.cs` | the parameter word: write, restart, read back, restore | yes, restores |
+| `SwFactTest.cs` | the DP span factor, including that a factory unlock is refused | yes, restores |
 
 The ones that write refuse to run if real work is already stored - a calibration test
 will not overwrite an existing calibration - and each puts back what it changed,

@@ -200,6 +200,7 @@ TABLE(['Group', 'On the wire', 'Example'],
        ['DP reading clamp (0x6E)', 'Tenths of a Pa', '3000 = 300.0 Pa'],
        ['Per-slot DP offset (0x72)', 'Tenths of a Pa', '\u22120025 = \u22122.5 Pa'],
        ['DP zero offset (0x71)', 'Hundredths of a Pa', '+00125 = 1.25 Pa'],
+       ['DP span factor (0x5F)', 'Hundredths of a Pa', '\u221200250 = \u22122.50 Pa'],
        ['Temperature / humidity calibration', 'Tenths of the unit', '00250 = 25.0'],
        ['Everything else', 'The plain number', '10 = 10 minutes']],
       [2.2, 2.6, 1.8])

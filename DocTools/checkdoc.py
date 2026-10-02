@@ -114,6 +114,7 @@ for want, why in [
         ('epoch seconds, uint32 little endian', 'the shared 50 byte record'),
         ('0x0002', 'the clock bit of the feature word'),
         ('0x0040', 'the temperature bit of the feature word'),
+        ('discarded in silence', 'the customer-password condition on 0x71 and 0x5F'),
         ('AT45DB321D', 'data flash'),
         ('57600', 'default baud')]:
     if want in body:
