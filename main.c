@@ -12520,9 +12520,7 @@ int main(void)
 	Init_variables();
 	
 	IWDG_Configure(1250);	//Initialize WDT
-	
-	//gu16_logoAckBlinkTimer = LOGO_ACK_BLINK_TICKS;
-	
+
     while (1)
     {
 		//1 Second Tick ====================================================
