@@ -144,8 +144,6 @@ void GPIO_Configure(void)
 	
     GPIO_StructInit(&GPIO_InitStruct);
 	GPIO_InitStruct.GPIO_Pin   = GPIO_Pin_0/*LED2_GREEN*/|
-								 GPIO_Pin_1/*LED3_RED*/|
-								 GPIO_Pin_2/*LED3_GREEN*/|
 								 GPIO_Pin_4/*XBEE_RST*/ |
 								 GPIO_Pin_5/*RS485_DIR*/ |
 								 GPIO_Pin_11/*BUZZER*/;
@@ -154,7 +152,10 @@ void GPIO_Configure(void)
     GPIO_Init(GPIOB, &GPIO_InitStruct);
 	
 	GPIO_StructInit(&GPIO_InitStruct);
-    GPIO_InitStruct.GPIO_Pin  = GPIO_Pin_3 | GPIO_Pin_10;
+    GPIO_InitStruct.GPIO_Pin  = GPIO_Pin_1/*RESERVE_KEY*/|
+								GPIO_Pin_2/*DP_MANIP_KEY*/|
+								GPIO_Pin_3 | 
+								GPIO_Pin_10;
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IPU;
     GPIO_Init(GPIOB, &GPIO_InitStruct);
 
@@ -163,14 +164,10 @@ void GPIO_Configure(void)
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IPU;
     GPIO_Init(GPIOD, &GPIO_InitStruct);
 	
-	
-	
-	LED1_RED_ON;
-	LED1_GREEN_ON;
-	LED2_RED_ON;
-	LED2_GREEN_ON;
-	LED3_RED_ON;
-	LED3_GREEN_ON;
+	LED1_RED_OFF;
+	LED1_GREEN_OFF;
+	LED2_RED_OFF;
+	LED2_GREEN_OFF;
 	
 	BUZZER_OFF;
 	

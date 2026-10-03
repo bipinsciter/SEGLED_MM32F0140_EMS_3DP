@@ -9121,30 +9121,33 @@ void ReadDiffPressure(uint8_t SensNo)
 	Dpressure[SensNo] += f32_dp_offset[SensNo];
 	
 	//Add manipulation offset ---------------------------------------------------
-	if(bool_dp_sw_factor_add[SensNo])
+	if(!DP_MANIP_KEY)
 	{
-		if(Dpressure[SensNo]>1.5)
+		if(bool_dp_sw_factor_add[SensNo])
 		{
-			if(gu8_dp_sw_factor_add_cnt[SensNo]<DP_SW_FACT_DIVISION)
+			if(Dpressure[SensNo]>1.5)
 			{
-				TempDpressure[SensNo] += (f32_dp_sw_factor[SensNo]/DP_SW_FACT_DIVISION);
-				gu8_dp_sw_factor_add_cnt[SensNo]++;
-				LastDpressure[SensNo] = Dpressure[SensNo];
+				if(gu8_dp_sw_factor_add_cnt[SensNo]<DP_SW_FACT_DIVISION)
+				{
+					TempDpressure[SensNo] += (f32_dp_sw_factor[SensNo]/DP_SW_FACT_DIVISION);
+					gu8_dp_sw_factor_add_cnt[SensNo]++;
+					LastDpressure[SensNo] = Dpressure[SensNo];
+				}
 			}
-		}
-		else
-		{
-			if(gu8_dp_sw_factor_add_cnt[SensNo])
+			else
 			{
-				TempDpressure[SensNo] -= (f32_dp_sw_factor[SensNo]/DP_SW_FACT_DIVISION);
-				gu8_dp_sw_factor_add_cnt[SensNo]--;
-				LastDpressure[SensNo] = Dpressure[SensNo];
+				if(gu8_dp_sw_factor_add_cnt[SensNo])
+				{
+					TempDpressure[SensNo] -= (f32_dp_sw_factor[SensNo]/DP_SW_FACT_DIVISION);
+					gu8_dp_sw_factor_add_cnt[SensNo]--;
+					LastDpressure[SensNo] = Dpressure[SensNo];
+				}
 			}
+			
+			bool_dp_sw_factor_add[SensNo] = 0;
 		}
-		
-		bool_dp_sw_factor_add[SensNo] = 0;
+		Dpressure[SensNo] += TempDpressure[SensNo];
 	}
-	Dpressure[SensNo] += TempDpressure[SensNo];
 	//------------------------------------------------------------------
 	
 	//Piecewise offset: bucket the reading by MAGNITUDE and add that slot's trim.

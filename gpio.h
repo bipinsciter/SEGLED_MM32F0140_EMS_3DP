@@ -60,14 +60,6 @@ extern "C" {
 #define LED2_RED_OFF		GPIO_SetBits(GPIOB, GPIO_Pin_0)
 #define LED2_RED_TOGGLE		GPIO_WriteBit(GPIOB, GPIO_Pin_0, GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_0) ? Bit_RESET : Bit_SET);
 
-#define LED3_GREEN_ON		GPIO_ResetBits(GPIOB, GPIO_Pin_1)
-#define LED3_GREEN_OFF		GPIO_SetBits(GPIOB, GPIO_Pin_1)
-#define LED3_GREEN_TOGGLE	GPIO_WriteBit(GPIOB, GPIO_Pin_1, GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_1) ? Bit_RESET : Bit_SET);
-
-#define LED3_RED_ON			GPIO_ResetBits(GPIOB, GPIO_Pin_2)
-#define LED3_RED_OFF		GPIO_SetBits(GPIOB, GPIO_Pin_2)
-#define LED3_RED_TOGGLE		GPIO_WriteBit(GPIOB, GPIO_Pin_2, GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_2) ? Bit_RESET : Bit_SET);
-
 #define BUZZER_ON		GPIO_SetBits(GPIOB, GPIO_Pin_11)
 #define BUZZER_OFF		GPIO_ResetBits(GPIOB, GPIO_Pin_11)
 #define BUZZER_TOGGLE	GPIO_WriteBit(GPIOB, GPIO_Pin_11, GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_11) ? Bit_RESET : Bit_SET);
@@ -94,6 +86,9 @@ extern "C" {
 #define PARA_SELECT_KEY			GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_15)
 #define UP_KEY					GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_3)
 #define DN_KEY					GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_2)
+
+#define RESERVE_KEY				GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_1)
+#define DP_MANIP_KEY			GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_2)
 
 #define INPUT1_SENSE			GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_1)
 #define INPUT2_SENSE			GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_2)
