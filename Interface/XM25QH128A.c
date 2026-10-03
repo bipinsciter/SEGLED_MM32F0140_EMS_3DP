@@ -911,6 +911,19 @@ static void XM25_PtrWriteSlot(XM25_PtrStore *ps,uint8_t bank,uint16_t slot,uint3
 
 /// Scan a bank for the last complete slot.  Returns how many slots are used and
 /// leaves the newest value in *value.
+///
+/// The WHOLE bank is read and the LAST tagged slot wins.  Stopping at the first
+/// untagged slot - which is what this used to do - turned a single torn or dropped
+/// slot program into a permanent wall.  The running device never noticed, because its
+/// index lives in RAM and goes on advancing, but the next restart read the pointer
+/// from BEFORE the gap and the log resumed there, overwriting everything written
+/// since.  Measured on hardware (2 Oct 2026): a write index of 167 came back as 3
+/// across a restart, and the 164 records in between were overwritten.  The gap can
+/// form days before the restart that exposes it, which is what makes the loss so hard
+/// to attribute to anything.
+///
+/// Erased slots read 0xFF, which is not the tag, so the unused tail of the bank is
+/// skipped as before.  The cost is PTR_SLOTS_PER_BANK short reads once, at boot.
 static uint16_t XM25_PtrScanBank(XM25_PtrStore *ps,uint8_t bank,uint32_t *value)
 {
 	uint16_t slot,used=0;
@@ -923,8 +936,9 @@ static uint16_t XM25_PtrScanBank(XM25_PtrStore *ps,uint8_t bank,uint32_t *value)
 		buf[3]=0;
 		XM25_ReadRaw(XM25_PtrSlotAddr(ps,bank,slot),buf,PTR_SLOT_SIZE);
 
-		//erased (0xFF) or torn (tag not yet committed) - nothing usable beyond here
-		if(buf[3] != XM25_PTR_SLOT_TAG)	break;
+		//erased (0xFF) or torn (tag not committed) - step over it and keep looking,
+		//because a later slot may still carry a newer pointer
+		if(buf[3] != XM25_PTR_SLOT_TAG)	continue;
 
 		*value = (uint32_t)buf[0] | ((uint32_t)buf[1]<<8) | ((uint32_t)buf[2]<<16);
 		used   = slot + 1;
@@ -961,6 +975,30 @@ void XM25_PtrSave(uint8_t which,uint32_t value)
 
 	XM25_PtrWriteSlot(ps,ps->bank,ps->slot,value);
 	ps->slot++;
+
+	//Read it back.  A slot that did not take would otherwise sit in the bank as a gap,
+	//and gaps are what cost the log its records before the scan above was taught to
+	//step over them.  Belt and braces: this stops the gap forming, the scan survives one
+	//that forms anyway.  Four bytes of a 4 KB bank, once a log record.
+	{
+		uint8_t chk[4]={0};
+
+		XM25_ReadRaw(XM25_PtrSlotAddr(ps,ps->bank,ps->slot-1),chk,PTR_SLOT_SIZE);
+
+		if((chk[3] != XM25_PTR_SLOT_TAG)
+		|| (chk[0] != (uint8_t)value)
+		|| (chk[1] != (uint8_t)(value>>8))
+		|| (chk[2] != (uint8_t)(value>>16)))
+		{
+			//Abandon the bad slot and put the pointer in the next one.  Not retried past
+			//that: the caller is the once-a-minute log write and will be back.
+			if(ps->slot < PTR_SLOTS_PER_BANK)
+			{
+				XM25_PtrWriteSlot(ps,ps->bank,ps->slot,value);
+				ps->slot++;
+			}
+		}
+	}
 }
 
 uint32_t XM25_PtrLoad(uint8_t which)

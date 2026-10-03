@@ -191,7 +191,7 @@ void Check_RTC(void)
 //	}
 
 //	//---------------------------------------------------------------	
-	
+//	static uint8_t test111=0;
 	uint8_t rtcHwFault = 0;
 	
 	RTC_data[0]=Read_byte_PCF8563(RTC_TIMESEC_REG);
@@ -257,6 +257,8 @@ void Check_RTC(void)
 		rtc1.year = rtc.year + 2000;			//Year
 
 		ep.currentEpochTime = get_epoch_time(rtc1);
+		
+//		test111++;
 	}
 	
 	current_min = rtc.minute;
@@ -266,7 +268,12 @@ void Check_RTC(void)
 	if(last_min != current_min)
 	{
 		last_min = current_min;
-		
+//	//----------------------------------------------------
+//	}
+//	if(test111>=15) 
+//	{
+//		test111=0;
+//	//----------------------------------------------------
 		#if BUILD_REGULAR_LOG
 		if(logTimer)
 		{
@@ -7977,74 +7984,146 @@ void ServePCMsg(void)
 		}
 		else if(RxBuffer[3]==RAM_IND_ID)
 		{
+			//Read RAMBuffer slots START..END inclusive, both carried in the request as
+			//raw bytes.  Four things were wrong here:
+			//
+			//  - the END index was read and then immediately overwritten, so the half of
+			//    the command that makes it anything other than RAM_ALL_ID did nothing
+			//  - the frame count was set to the END INDEX rather than to the span, so a
+			//    0..29 request sent 29 records and the last slot was never readable
+			//  - neither index was range checked.  The byte is 0..255 and the read is
+			//    RAMBuffer[RAM_FILL_START + index*LOG_SIZE], so index 255 lands 12755
+			//    bytes into a 2000-byte buffer - several kilobytes past the end of it on
+			//    a part with 8 KB of RAM altogether.  A stray index did not fail, it
+			//    streamed whatever RAM followed, which is how this command came to be
+			//    known as the one that wedges the link.
+			//  - the slot count was spelled 29 in two places instead of following
+			//    RAM_LOG_SLOTS
+			//
+			//The walk is now FORWARDS from start to end, wrapping at the top of the
+			//buffer, which is what "from start to end" means.  It used to count down.
 			flash24_StartInd = RxBuffer[4];
-			flash24_EndInd = RxBuffer[5];
-						
-			bool_RamReadCmd=1;
-			//gu16_logtransfer=flash24_StartInd;
-			bool_logtransferStart=0;
-			
-			if(RAMBufferLog)
+			flash24_EndInd   = RxBuffer[5];
+
+			if((flash24_StartInd >= RAM_LOG_SLOTS) || (flash24_EndInd >= RAM_LOG_SLOTS))
 			{
-				flash24_StartInd=RAMBufferLog-1;
+				//Say so rather than stay silent.  Arming nothing and sending nothing
+				//leaves the host waiting out a timeout with no idea why.
+				bool_paraIdNotValid=1;
+				bool_RamReadCmd=0;
+				NoOf24Log=0;
+
+				TxBuffer[0]=0xFD;
+				TxBuffer[1]=RxBuffer[1];
+				TxBuffer[2]=RxBuffer[2];
+				TxBuffer[3]=INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
+				TxBuffer[4]=RxBuffer[3];
+				TxBuffer[5]=CalCRC(&TxBuffer[1],4);
+				TxBuffer[6]=0xFC;
+
+				SetTxmode(TxBuffer,7);
 			}
 			else
 			{
-				flash24_StartInd=29;
-			}
-			
-			NoOf24Log=flash24_EndInd;
-				
-			/*
-			TxBuffer[0]=0xFD;
-			TxBuffer[1]=RxBuffer[1];
-			TxBuffer[2]=RxBuffer[2];
-			TxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
-			if(b.DP_NC) 			TxBuffer[3] |= DP_FAULTY;
-			if(bool_DP_NC[DP3]) 		TxBuffer[3] |= DP3_FAULTY;
-			TxBuffer[4]=RxBuffer[3];
-			TxBuffer[5]=RxBuffer[4];
+				bool_RamReadCmd=1;
+				bool_logtransferStart=0;
 
-			tempshort = (RxBuffer[4] * LOG_SIZE) + RAM_FILL_START;
-			memcpy(&TxBuffer[6],&RAMBuffer[tempshort],LOG_SIZE);
-			
-			TxBuffer[56]=CalCRC(&TxBuffer[1],55);
-			TxBuffer[57]=0xFC;
-			
-			SendToUART(&TxBuffer[0],58);
-			*/
+				//Inclusive at both ends, and the ring may wrap between them.
+				if(flash24_StartInd <= flash24_EndInd)
+				{
+					NoOf24Log = (flash24_EndInd - flash24_StartInd) + 1;
+				}
+				else
+				{
+					NoOf24Log = (RAM_LOG_SLOTS - flash24_StartInd) + flash24_EndInd + 1;
+				}
+			}
 		}
 		#endif	// BUILD_RAM_BUFFER
 		#if BUILD_LOG24_LOG
 		else if(RxBuffer[3]==FLASH24_IND_ID)
 		{
-			flash24_StartInd=0;
-			us1 = RxBuffer[4]-'0';		us1 *= 1000;			flash24_StartInd += us1;		us1 = 0;
-			us1 = RxBuffer[5]-'0';		us1 *= 100;				flash24_StartInd += us1;		us1 = 0;
-			us1 = RxBuffer[6]-'0';		us1 *= 10;				flash24_StartInd += us1;		us1 = 0;
-			us1 = RxBuffer[7]-'0';								flash24_StartInd += us1;		us1 = 0;
-			
-			flash24_EndInd=0;
-			us1 = RxBuffer[8]-'0';		us1 *= 1000;			flash24_EndInd += us1;		us1 = 0;
-			us1 = RxBuffer[9]-'0';		us1 *= 100;				flash24_EndInd += us1;		us1 = 0;
-			us1 = RxBuffer[10]-'0';		us1 *= 10;				flash24_EndInd += us1;		us1 = 0;
-			us1 = RxBuffer[11]-'0';								flash24_EndInd += us1;		us1 = 0;
-			
-			bool_Flash24ReadCmd=1;
-			//gu16_logtransfer=flash24_StartInd;
-			bool_logtransferStart=0;	
-			
-			if(CurrentLog24Ind)
+			//Ring slots START..END inclusive, each a four-digit ASCII index.
+			//
+			//Three things were wrong, and they are the same three that were wrong in
+			//RAM_IND_ID:
+			//
+			//  - the START index was parsed and then thrown away, overwritten with the
+			//    newest slot.  The command could only ever mean "newest, going back",
+			//    whatever the host asked for.
+			//  - NoOf24Log was set to the END INDEX, so the second field was really
+			//    behaving as a COUNT.  The two readings agree only when start is 0,
+			//    which is why "0000nnnn" appeared to work.
+			//  - neither field was range checked.  Four ASCII digits reach 9999 against
+			//    a 1440-slot ring, so a plausible-looking request could stream the whole
+			//    ring seven times over - eighteen minutes of traffic during which the
+			//    device serves no other command.  A non-digit byte was worse: the
+			//    subtraction underflows a uint16 and the count becomes arbitrary.
+			//
+			//Now both indices mean what they say, the span is inclusive at both ends,
+			//and the walk runs FORWARDS so records arrive in the order they were
+			//recorded.  It used to count down.
+			bool_logtransferStart=0;
+
+			//Every index digit must be a digit; otherwise the arithmetic below is
+			//meaningless and the count that comes out of it is arbitrary.
+			tempchar=0;
+			for(us1=4; us1<12; us1++)
 			{
-				flash24_StartInd=CurrentLog24Ind-1;	
+				if((RxBuffer[us1] < '0') || (RxBuffer[us1] > '9'))	tempchar=1;
+			}
+
+			flash24_StartInd=0;
+			flash24_EndInd=0;
+
+			if(!tempchar)
+			{
+				flash24_StartInd  = (uint16_t)(RxBuffer[4]-'0') * 1000;
+				flash24_StartInd += (uint16_t)(RxBuffer[5]-'0') * 100;
+				flash24_StartInd += (uint16_t)(RxBuffer[6]-'0') * 10;
+				flash24_StartInd += (uint16_t)(RxBuffer[7]-'0');
+
+				flash24_EndInd  = (uint16_t)(RxBuffer[8]-'0') * 1000;
+				flash24_EndInd += (uint16_t)(RxBuffer[9]-'0') * 100;
+				flash24_EndInd += (uint16_t)(RxBuffer[10]-'0') * 10;
+				flash24_EndInd += (uint16_t)(RxBuffer[11]-'0');
+			}
+
+			if(tempchar || (flash24_StartInd >= LAST_LOG24_ADDR)
+			            || (flash24_EndInd >= LAST_LOG24_ADDR))
+			{
+				//Answer rather than stay silent, so the host learns why instead of
+				//waiting out a timeout.
+				bool_paraIdNotValid=1;
+				bool_Flash24ReadCmd=0;
+				NoOf24Log=0;
+
+				TxBuffer[0]=0xFD;
+				TxBuffer[1]=RxBuffer[1];
+				TxBuffer[2]=RxBuffer[2];
+				TxBuffer[3]=INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
+				TxBuffer[4]=RxBuffer[3];
+				TxBuffer[5]=CalCRC(&TxBuffer[1],4);
+				TxBuffer[6]=0xFC;
+
+				SetTxmode(TxBuffer,7);
 			}
 			else
 			{
-				flash24_StartInd=LAST_LOG24_ADDR-1;
+				bool_Flash24ReadCmd=1;
+
+				//Inclusive at both ends, and the ring may wrap between them.
+				if(flash24_StartInd <= flash24_EndInd)
+				{
+					NoOf24Log = (flash24_EndInd - flash24_StartInd) + 1;
+				}
+				else
+				{
+					NoOf24Log = (LAST_LOG24_ADDR - flash24_StartInd) + flash24_EndInd + 1;
+				}
 			}
-			
-			NoOf24Log=flash24_EndInd;		
 		}
 		#endif	// BUILD_LOG24_LOG
 		#if BUILD_MINMAX_LOG
@@ -8343,7 +8422,34 @@ void ServePCMsg(void)
 				opstr("\r\n");
 			#endif
 
-			if(FlashOVFByte || CurrentLogInd)
+			//A window whose end precedes its start is not a window.  It slipped past both
+			//of the rejections below, because neither of them compares the two requested
+			//times against EACH OTHER - only against what the log holds.  The two
+			//searches then returned indices in descending order, which the span
+			//arithmetic further down reads as a wrap, and the device streamed very nearly
+			//the whole 60000-record ring: about an hour and fifty minutes, serving no
+			//other command for any of it.  Easy to ask for by accident - it is just a
+			//"from" date later than the "to" date.
+			if(EndEpochTime < StartEpochTime)
+			{
+				bool_paraIdNotValid=1;
+				bool_FlashReadCmd=0;
+				bool_logtransferStart=0;
+				TotalLog=0;
+				templong=0;
+
+				TxBuffer[0]=0xFD;
+				TxBuffer[1]=RxBuffer[1];
+				TxBuffer[2]=RxBuffer[2];
+				TxBuffer[3]=INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
+				TxBuffer[4]=RxBuffer[3];
+				TxBuffer[5]=CalCRC(&TxBuffer[1],4);
+				TxBuffer[6]=0xFC;
+
+				SetTxmode(TxBuffer,7);
+			}
+			else if(FlashOVFByte || CurrentLogInd)
 			{
 				if(!FlashOVFByte)
 				{
@@ -8455,17 +8561,35 @@ void ServePCMsg(void)
 					}
 					else
 					{
+						//Both ends are inclusive - the StartLogInd==EndLogInd case above answers 1,
+						//not 0 - so the span is the difference PLUS ONE.  Without it the newest
+						//record in the window was never sent: a log holding 165 records announced
+						//164 and delivered 164.
 						if(StartLogInd < EndLogInd)
 						{
-							TotalLog = EndLogInd-StartLogInd;
+							TotalLog = (EndLogInd-StartLogInd) + 1;
 						}
 						else
 						{
-							TotalLog = (TOTAL_REGULAR_LOG - StartLogInd) + EndLogInd;
+							//Wrapped.  With the whole ring in range this reaches exactly
+							//TOTAL_REGULAR_LOG, which is every record and the right answer.
+							TotalLog = (TOTAL_REGULAR_LOG - StartLogInd) + EndLogInd + 1;
 						}
 					}
 				}
-				
+
+				//Nothing can be longer than the log itself.  Belt and braces: whatever the
+				//two searches hand back, the transfer cannot be made to run past the
+				//number of records actually stored.
+				if(FlashOVFByte)
+				{
+					if(TotalLog > TOTAL_REGULAR_LOG)	TotalLog = TOTAL_REGULAR_LOG;
+				}
+				else if(TotalLog > CurrentLogInd)
+				{
+					TotalLog = CurrentLogInd;
+				}
+
 				TxBuffer[0]=0xFD;
 				TxBuffer[1]=RxBuffer[1];
 				TxBuffer[2]=RxBuffer[2];
@@ -8479,7 +8603,7 @@ void ServePCMsg(void)
 				#else
 				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
 				#endif
-				
+
 				TxBuffer[4]=0xA9;
 				memcpy(&TxBuffer[5],(uint8_t*)&TotalLog,4);
 				TxBuffer[9]=CalCRC(&TxBuffer[1],8);
@@ -8501,12 +8625,29 @@ void ServePCMsg(void)
 			}
 			else
 			{
+				//The log is empty.  This used to send nothing whatsoever, so a host asking
+				//a fresh unit for its records waited out a timeout and could not tell "no
+				//records" apart from "no reply".  Answer with a count of zero, which is
+				//the same frame every other request gets.
 				TotalLog = 0;
 				templong=0;
 				bool_FlashReadCmd=0;
 				bool_logtransferStart=0;
+
+				TxBuffer[0]=0xFD;
+				TxBuffer[1]=RxBuffer[1];
+				TxBuffer[2]=RxBuffer[2];
+				TxBuffer[3]=0x00;
+				if(bool_paraIdNotValid) 	TxBuffer[3] |= INVALID_PARA;
+				if(!bool_rtcValid)			TxBuffer[3] |= RTC_INVALID;
+				TxBuffer[4]=0xA9;
+				memcpy(&TxBuffer[5],(uint8_t*)&TotalLog,4);
+				TxBuffer[9]=CalCRC(&TxBuffer[1],8);
+				TxBuffer[10]=0xFC;
+
+				SendToUART(&TxBuffer[0],11);
 			}
-			
+
 			#ifdef DEBUG_RCV_CMD
 				opstr("Total Log:");
 				print_short(TotalLog,test,10);		opstr("\r\n");
@@ -9805,6 +9946,8 @@ void SendToUART(uint8_t *str,uint16_t NoOfBytes)
 		str++;
 		NoOfBytes--;
 	}
+	
+	gu16_logoAckBlinkTimer = LOGO_ACK_BLINK_TICKS;
 
 	RS485_RX_ENB;
 }
@@ -10436,15 +10579,15 @@ void whileTask(void)
 				TxBuffer[70]=CalCRC(&TxBuffer[1],69);
 				TxBuffer[71]=0xFC;
 				
-				if(flash24_StartInd)
+				//Forwards from start to end, wrapping at the top of the ring, so records
+				//arrive oldest first within the window asked for.  NoOf24Log decides
+				//when to stop; the wrap only has to keep the index inside the ring.
+				flash24_StartInd++;
+				if(flash24_StartInd >= LAST_LOG24_ADDR)
 				{
-					flash24_StartInd--;	
+					flash24_StartInd=0;
 				}
-				else
-				{
-					flash24_StartInd=LAST_LOG24_ADDR-1;
-				}
-				
+
 				//Released, not latched: the next pass sends the next record.  Latching it
 				//here stalled the transfer after one record and, because the command gate
 				//in whileTask() ignores all traffic while a transfer is armed, left the
@@ -10644,23 +10787,26 @@ void whileTask(void)
 				if(bool_RH_TEMP_NC) 			TxBuffer[3] |= RH_TEMP_FAULTY;
 				#endif
 				TxBuffer[4]=RxBuffer[3];
-				TxBuffer[5]=RxBuffer[4];
+				//The slot THIS frame carries, not the one that was asked for.  It used
+				//to echo RxBuffer[4] on every frame, so the host was told the same index
+				//thirty times over and could not place any record.
+				TxBuffer[5]=flash24_StartInd;
 
 				tempshort = (flash24_StartInd * LOG_SIZE) + RAM_FILL_START;
 				memcpy(&TxBuffer[6],&RAMBuffer[tempshort],LOG_SIZE);
-				
+
 				TxBuffer[69]=CalCRC(&TxBuffer[1],68);
 				TxBuffer[70]=0xFC;
 
-				if(flash24_StartInd)
+				//Forwards from start to end, wrapping at the top of the buffer.  The
+				//count in NoOf24Log decides when to stop, so the wrap only has to keep
+				//the index inside RAMBuffer.
+				flash24_StartInd++;
+				if(flash24_StartInd >= RAM_LOG_SLOTS)
 				{
-					flash24_StartInd--;
+					flash24_StartInd=0;
 				}
-				else
-				{
-					flash24_StartInd=29;
-				}
-				
+
 				//Released, not latched: the next pass sends the next record.  Latching it
 				//here stalled the transfer after one record and, because the command gate
 				//in whileTask() ignores all traffic while a transfer is armed, left the

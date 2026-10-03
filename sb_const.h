@@ -4,7 +4,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	6
+#define FW_PATCH	7
 
 #define ENABLE_KEY_LOGIC
 
