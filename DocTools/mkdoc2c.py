@@ -213,7 +213,7 @@ TABLE(['Log', 'Command', 'Reply frame', 'Holds'],
        ['15 day min/max/mean', '0x53 MINMAXMEAN_IND', '25 bytes', '15 days per channel'],
        ['24 hourly means', '0x54 MEAN_HR', '13 bytes', '24 values per channel'],
        ['RAM buffer', '0x45 RAM_ALL', '1507 bytes', 'last 30 readings'],
-       ['RAM buffer, one', '0x46 RAM_IND', '71 bytes', 'one record']],
+       ['RAM buffer, by slot', '0x46 RAM_IND', '71 bytes', 'a range of the 30']],
       [1.7, 1.9, 1.2, 1.8])
 
 P('Four of the five are STREAMED', bold=True)
@@ -228,13 +228,34 @@ P('Requests', bold=True)
 MONO('  0x49  FF ID 10 49  dd mm yy hh mi ss  dd mm yy hh mi ss  CRC FE\n'
      '                     \\___ start ____/  \\____ end ____/   raw bytes\n'
      '\n'
-     '  0x47  FF ID 10 47  SSSS CCCC  CRC FE      start and count, 4 ASCII digits each\n'
+     '  0x47  FF ID 10 47  SSSS EEEE  CRC FE      start and END slot, 4 ASCII digits each\n'
      '  0x53  FF ID 10 53  c NN       CRC FE      channel 0-2, count as 2 ASCII digits\n'
      '  0x54  FF ID 10 54  c          CRC FE      channel 0-2; the count is fixed at 24\n'
-     '  0x46  FF ID 10 46  ii nn      CRC FE      index and count, raw bytes')
+     '  0x46  FF ID 10 46  ss ee      CRC FE      start and END slot, raw bytes')
+
+P('0x47 and 0x46 take a RANGE, not a count', bold=True)
+P('Both indices are slot numbers and both ends are included, so start 0 end 9 returns '
+  'ten records. The walk runs forwards and wraps round the end of the store, so a start '
+  'above the end is a window that spans the wrap rather than an error. Records therefore '
+  'arrive oldest first within the window.')
+P('An index outside the store - past 1439 on the ring, past 29 in the RAM buffer, or any '
+  'non-digit in the four ASCII characters 0x47 expects - is answered with INVALID_PARA '
+  'and no data. Earlier firmware checked neither: four ASCII digits reach 9999 against a '
+  '1440 slot ring, and on 0x46 the index became a byte offset into a 2000 byte buffer, so '
+  'a stray value streamed whatever memory followed it.')
+P('Up to and including V1.0.8 each of these parsed one of its two indices and then '
+  'discarded it, using the other as a COUNT: 0x47 forced the start to the newest record '
+  'and read the second field as how many to send, and 0x46 did the same the other way '
+  'about. A host that sent start 0 appeared to work and was not doing what it looked '
+  'like. There is no "newest N records" command - work the range out from the ring '
+  'index, 0x4C, which is where the NEXT record will go.', bold=True)
 
 P('A regular-log transfer leads with a short frame giving how many records fall in the '
   'window, as a uint32 - not the ASCII the ordinary replies use.', bold=True)
+P('That count includes BOTH ends of the window. Up to V1.0.8 it was the difference between the two indices and so was one short, and the record it left out was always the newest one in the range.')
+P('An empty log is answered with that same frame carrying zero. Earlier firmware sent nothing at all, so a host asking a fresh unit could not tell "no records" from "no reply" and simply waited out its timeout.')
+P('A window whose END precedes its START is refused with INVALID_PARA', bold=True)
+P('The two dates used to be compared only against what the log held, never against each other. A reversed window passed both of those tests, the two index searches then came back in descending order, and the span arithmetic read that as a wrap round the ring - so the device streamed very nearly all 60000 records, about an hour and fifty minutes, serving no other command for any of it. The host cannot call a transfer off once it is running.')
 
 P('Where the record sits in the frame', bold=True)
 P('This differs between them, and a wrong offset still parses and yields plausible '
@@ -251,8 +272,9 @@ TABLE(['Command', 'Record at', 'Why'],
 P('The 50 byte reading record', bold=True)
 P('The regular log, the 24 hour ring and the RAM buffer all share one layout:')
 MONO('  [0..3]   epoch seconds, uint32 little endian\n'
-     '  [4]      log type\n'
-     '  [5]      user id\n'
+     '  [4]      device id\n'
+     '  [5]      log type\n'
+     '  [6]      user id\n'
      '  [7..8]   password\n'
      '  [9]      sensor fault flags, same bits as the status byte\n'
      '  [10..13] DP1                        float\n'
@@ -277,6 +299,8 @@ P('Slots that have never been written read back as erased flash, which decodes t
 # ================================================================== gotchas
 H('11.  Things that will catch a host out', 1)
 
+BULLET('The two index reads, 0x47 and 0x46, take a start and an END slot, both ends included, and refuse an index outside the store with INVALID_PARA. Firmware up to V1.0.8 read the second field as a count instead, so a host written against that behaviour will ask for the wrong records rather than fail.')
+BULLET('Ask 0x49 for a window the right way round. An end earlier than the start is refused now, but older firmware answered it by streaming the whole log.')
 BULLET('A write reply confirms the frame, not the value. A value outside the '
        'parameter’s range is discarded without any error, so read it back.')
 BULLET('Check the parameter identifier in byte 4 of every reply. If a reply is ever '

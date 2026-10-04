@@ -13,7 +13,7 @@ uint8_t DeviceID=0;
 uint32_t gu32_SrNumber=0;
 uint8_t RTC_data[7]={0};
 uint8_t mode=NORMAL_MODE;
-uint8_t Normal_para_cnt=0,autoCal_para_cnt=0,para_cnt1=0;
+uint8_t Normal_para_cnt=0,autoCal_para_cnt=0,gu8_scroll_disp_para=0;
 uint8_t gu8_SetACKPwd=0,gu8_deviceIDChangeTry=0;
 int16_t dummy=0,dummy1=0;
 uint8_t last_sec=0,last_min=0,last_hr=0,current_sec=0,current_min=0,current_hr=0;
@@ -165,6 +165,10 @@ uint8_t Temp_RTC_ARR[5]={0};
 
 uint8_t gu8_masterEnable=0,gu8_rly_stat=0;
 
+#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+uint8_t ParaScrollTime=0;
+#endif
+
 uint8_t RTCSetFlag=0;
 uint16_t logtransfer=0;
 
@@ -226,6 +230,8 @@ uint16_t gu16_logoAckBlinkTimer=0;
 
 struct lcdbits
 {
+	#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
+	
 	uint8_t Sym_LOGO : 1;	
 	
 	uint8_t Sym_DOOR : 1;	
@@ -265,7 +271,36 @@ struct lcdbits
 	uint8_t reserver1 : 1;
 	uint8_t reserver2 : 1;
 	
-}lcd={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	#else
+	
+	uint8_t Sym_LOGO : 1;	
+	
+	uint8_t Sym_DOOR : 1;	
+	uint8_t Sym_DOOR_ALM : 1;	
+	
+	uint8_t Sym_WiFi_CON : 1;	
+	uint8_t Sym_WiFi_NCON : 1;
+	
+	uint8_t Sym_RTC_AM : 1;	
+	uint8_t Sym_RTC_PM : 1;		
+	uint8_t Sym_RTC_COL : 1;	
+	
+	uint8_t Sym_DP_LOGO : 1;
+	uint8_t Sym_DP_UNIT_Pa : 1;
+	uint8_t Sym_DP_UNIT_mmH2O : 1;
+	uint8_t Sym_DP1_ON : 1;
+	uint8_t Sym_DP2_ON : 1;
+	uint8_t Sym_DP3_ON : 1;
+	
+	uint8_t Sym_RH_LOGO : 1;
+	uint8_t Sym_RH_UNIT : 1;
+	
+	uint8_t Sym_TM_LOGO : 1;
+	uint8_t Sym_TM_UNIT_C : 1;
+	
+	#endif
+	
+}lcd={0};
 
 typedef enum
 {
@@ -314,7 +349,7 @@ typedef enum
 
 enum_ProgPara emProgpara,emLastProgpara;
 
-uint8_t final_buffer[32];
+uint8_t final_buffer[TM_BUFF_SIZE];
 uint8_t disp_buffer[NO_DIGIT];
 uint8_t data[NO_DIGIT];
 	

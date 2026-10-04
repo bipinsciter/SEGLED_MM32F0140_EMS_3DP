@@ -622,7 +622,7 @@ static uint8_t changeNibbles(uint8_t byte)
 
 void AllSegment(uint8_t state)
 {
-	uint8_t disp[32];
+	uint8_t disp[TM_BUFF_SIZE];
 	
 	if(state == ON)
 	{
@@ -633,7 +633,7 @@ void AllSegment(uint8_t state)
 		memset(disp,0x00,sizeof(disp));
 	}
 
-	TM1680WritePage(0, disp, 32);
+	TM1680WritePage(0, disp, TM_BUFF_SIZE);
 }
 
 void InitLEDController(void)
@@ -656,8 +656,6 @@ void InitLEDController(void)
 	//----------------------------
 	AllSegment(1);
 	
-	//while(1);
-	
 	TM1680Blink(BLINK_1SEC);
 	
 	PLATFORM_DelayMS(2000);
@@ -670,21 +668,24 @@ void InitLEDController(void)
 	data[2] = E;
 	data[3] = r;
 	
-	data[5] = FW_MAJOR+10;
-	data[6] = FW_MINOR;
-	data[7] = FW_PATCH;
+	data[4] = FW_MAJOR;
+	data[5] = FW_MINOR;
+	data[6] = FW_PATCH;
+	disp_value();
 	
 	#if ((DATAFLASH_PART == DATAFLASH_XM25QH128A) && XM25_ENABLE_SELFTEST)
 	if(XM25Selftest)
 	{
-		data[10] = E;
-		data[11] = r;
-		data[12] = r;
+		PLATFORM_DelayMS(2000);
+		for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
+		data[4] = E;
+		data[5] = r;
+		data[6] = r;
+		disp_value();
 	}
 	#endif
 	
-	disp_value();
-	PLATFORM_DelayMS(1000);
+	PLATFORM_DelayMS(2000);
 }
 
 void InitDisplay(void)
@@ -714,38 +715,38 @@ void InitDisplay(void)
 	PLATFORM_DelayMS(1000);
 	
 	//-------------------------------------------------------------------
-	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-	
-	data[1] = B;
-	data[2] = r;
-	data[3] = t;
-	
-	switch(UART_BaudRate)
-	{
-		case BAUD_1200:		convert_char(1200,&data[4],4);		break;
-		case BAUD_2400:		convert_char(2400,&data[4],4);		break;
-		case BAUD_4800:		convert_char(4800,&data[4],4);		break;
-		case BAUD_9600:		convert_char(9600,&data[4],4);		break;
-		case BAUD_14400:	convert_char(14400,&data[4],5);		break;
-		case BAUD_19200:	convert_char(19200,&data[4],5);		break;
-		case BAUD_28800:	convert_char(28800,&data[4],5);		break;
-		case BAUD_38400:	convert_char(38400,&data[4],5);		break;
-		case BAUD_57600:	convert_char(57600,&data[4],5);		break;
-		case BAUD_115200:	convert_float(115200,&data[4],0);	break;
-		default:			convert_char(9600,&data[4],4);		break; 
-	}
+//	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
+//	
+//	data[1] = B;
+//	data[2] = r;
+//	data[3] = t;
+//	
+//	switch(UART_BaudRate)
+//	{
+//		case BAUD_1200:		convert_char(1200,&data[4],4);		break;
+//		case BAUD_2400:		convert_char(2400,&data[4],4);		break;
+//		case BAUD_4800:		convert_char(4800,&data[4],4);		break;
+//		case BAUD_9600:		convert_char(9600,&data[4],4);		break;
+//		case BAUD_14400:	convert_char(14400,&data[4],5);		break;
+//		case BAUD_19200:	convert_char(19200,&data[4],5);		break;
+//		case BAUD_28800:	convert_char(28800,&data[4],5);		break;
+//		case BAUD_38400:	convert_char(38400,&data[4],5);		break;
+//		case BAUD_57600:	convert_char(57600,&data[4],5);		break;
+//		case BAUD_115200:	convert_float(115200,&data[4],0);	break;
+//		default:			convert_char(9600,&data[4],4);		break; 
+//	}
 
-	disp_value();
-	PLATFORM_DelayMS(1000);
+//	disp_value();
+//	PLATFORM_DelayMS(1000);
 	
 	//-------------------------------------------------------------------
-	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-	data[2] = 5;
-	data[3] = r;
+//	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
+//	data[2] = 5;
+//	data[3] = r;
 
-	convert_float(gu32_SrNumber,&data[4],0);
-	disp_value();
-	PLATFORM_DelayMS(1000);
+//	convert_float(gu32_SrNumber,&data[4],0);
+//	disp_value();
+//	PLATFORM_DelayMS(1000);
 }
 
 //The digits show HI / LO the instant a reading is clamped to the sensor's range limit
@@ -794,7 +795,7 @@ static uint8_t DpDisplayAlarm(uint8_t SensNo)
 //
 //A real alarm renders steadily, exactly as before.  An early warning renders THE
 //SAME WAY - same bit plane, same alarm symbols - but only on alternate 500 ms
-//phases of bool_mec500_blink_flag, which the TIM1 ISR already toggles.  On the
+//phases of BLINK_500MS_ON(), taken from the free-running 50 ms tick.  On the
 //other phase it falls back to the normal rendering, so the reading itself stays
 //on screen and legible the whole time and it is the alarm STYLING that flashes.
 //
@@ -814,10 +815,12 @@ static uint8_t DpDisplayState(uint8_t SensNo)
 	return AlarmDisplayState(DpDisplayAlarm(SensNo),gu8_DP_NearAlrm[SensNo]);
 }
 
+#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
+
 void disp_value(void)
 {
 	for(uint8_t i=1;i<NO_DIGIT;i++) disp_buffer[i]=seg_code[data[i]];
-	for(uint8_t i=0;i<32;i++) final_buffer[i]=0;
+	for(uint8_t i=0;i<sizeof(final_buffer);i++) final_buffer[i]=0;
 	
 	if(lcd.Sym_RTC_AM) RTC_AM_on;
 	if(lcd.Sym_RTC_PM) RTC_PM_on;
@@ -1467,8 +1470,8 @@ void disp_value(void)
 	if(lcd.Sym_ID) ID_on;
 	if(lcd.Sym_ACK) ACK_on;
 	
-	for(uint8_t i=0;i<32;i++) final_buffer[i] = changeNibbles(final_buffer[i]);
-	TM1680WritePage(0x00, final_buffer, sizeof(final_buffer));	
+	for(uint8_t i=0;i<sizeof(final_buffer);i++) final_buffer[i] = changeNibbles(final_buffer[i]);
+	TM1680WritePage(0, final_buffer, sizeof(final_buffer));	
 }
 
 void conv_value(void)
@@ -1511,7 +1514,7 @@ void conv_value(void)
 	
 	//Steady on normally; blinks for LOGO_ACK_BLINK_MS after each valid message
 	//served by ServePCMsg(), so UART activity is visible from the front.
-	lcd.Sym_LOGO = gu16_logoAckBlinkTimer ? bool_mec500_blink_flag : 1;
+	lcd.Sym_LOGO = gu16_logoAckBlinkTimer ? BLINK_500MS_ON() : 1;
 	
 	#ifndef DISABLE_DOOR_SENSING
 	lcd.Sym_DOOR_SYM = 1;
@@ -1533,7 +1536,7 @@ void conv_value(void)
 			{
 				if(!RTCSetFlag || !bool_rtcValid)	//unset OR untrustworthy clock blinks the time
 				{
-					if(bool_mec500_blink_flag) 
+					if(BLINK_500MS_ON()) 
 					{
 						lcd.Sym_RTC_COL = 1;
 						
@@ -3405,6 +3408,817 @@ void conv_value(void)
 	}
 }
 
+#else
+
+void disp_value(void)
+{
+	static uint8_t alarmType=0;
+	
+	for(uint8_t i=0;i<NO_DIGIT;i++) disp_buffer[i]=seg_code[data[i]];
+	for(uint8_t i=0;i<sizeof(final_buffer);i++) final_buffer[i]=0;
+	
+	if(lcd.Sym_DOOR) DOOR_on;
+	if(lcd.Sym_LOGO) LOGO_on;
+	
+	if(lcd.Sym_RTC_AM) RTC_AM_on;
+	if(lcd.Sym_RTC_PM) RTC_PM_on;
+	if(lcd.Sym_RTC_COL) RTC_COL_on;
+	
+	if(disp_buffer[0] & 0x01) final_buffer[16] |= BIT3;//RTC_A1_on;
+	if(disp_buffer[0] & 0x02) final_buffer[17] |= BIT3;//RTC_B1_on;
+	if(disp_buffer[0] & 0x04) final_buffer[18] |= BIT3;//RTC_C1_on;
+	if(disp_buffer[0] & 0x08) final_buffer[19] |= BIT3;//RTC_D1_on;
+	if(disp_buffer[0] & 0x10) final_buffer[20] |= BIT3;//RTC_E1_on;
+	if(disp_buffer[0] & 0x20) final_buffer[21] |= BIT3;//RTC_F1_on;
+	if(disp_buffer[0] & 0x40) final_buffer[22] |= BIT3;//RTC_G1_on;
+	
+	if(disp_buffer[1] & 0x01) final_buffer[16] |= BIT2;//RTC_A2_on;
+	if(disp_buffer[1] & 0x02) final_buffer[17] |= BIT2;//RTC_B2_on;
+	if(disp_buffer[1] & 0x04) final_buffer[18] |= BIT2;//RTC_C2_on;
+	if(disp_buffer[1] & 0x08) final_buffer[19] |= BIT2;//RTC_D2_on;
+	if(disp_buffer[1] & 0x10) final_buffer[20] |= BIT2;//RTC_E2_on;
+	if(disp_buffer[1] & 0x20) final_buffer[21] |= BIT2;//RTC_F2_on;
+	if(disp_buffer[1] & 0x40) final_buffer[22] |= BIT2;//RTC_G2_on;
+
+	if(disp_buffer[2] & 0x01) final_buffer[16] |= BIT1;//RTC_A3_on;
+	if(disp_buffer[2] & 0x02) final_buffer[17] |= BIT1;//RTC_B3_on;
+	if(disp_buffer[2] & 0x04) final_buffer[18] |= BIT1;//RTC_C3_on;
+	if(disp_buffer[2] & 0x08) final_buffer[19] |= BIT1;//RTC_D3_on;
+	if(disp_buffer[2] & 0x10) final_buffer[20] |= BIT1;//RTC_E3_on;
+	if(disp_buffer[2] & 0x20) final_buffer[21] |= BIT1;//RTC_F3_on;
+	if(disp_buffer[2] & 0x40) final_buffer[22] |= BIT1;//RTC_G3_on;
+
+	if(disp_buffer[3] & 0x01) final_buffer[16] |= BIT0;//RTC_A4_on;
+	if(disp_buffer[3] & 0x02) final_buffer[17] |= BIT0;//RTC_B4_on;
+	if(disp_buffer[3] & 0x04) final_buffer[18] |= BIT0;//RTC_C4_on;
+	if(disp_buffer[3] & 0x08) final_buffer[19] |= BIT0;//RTC_D4_on;
+	if(disp_buffer[3] & 0x10) final_buffer[20] |= BIT0;//RTC_E4_on;
+	if(disp_buffer[3] & 0x20) final_buffer[21] |= BIT0;//RTC_F4_on;
+	if(disp_buffer[3] & 0x40) final_buffer[22] |= BIT0;//RTC_G4_on;
+
+//	WiFi_CON_on;
+//	WiFi_NCON_on;
+
+//	DOOR_ALM_on;
+//	
+//	TM_LOGO_on
+//	TM_LOGO_ALM_on;
+//	
+//	TM_UNIT_C_on;
+//	TM_UNIT_C_ALM_on;
+//	
+//	RH_UNIT_on;
+//	RH_UNIT_ALM_on;
+//	
+//	RH_LOGO_on;
+//	RH_LOGO_ALM_on;
+	
+	//-------------------------------------------------------------------
+	switch(gu8_scroll_disp_para)
+	{
+		case DP1_DISPLAY:
+			
+			if(lcd.Sym_DP_UNIT_Pa) DP_UNIT_Pa_on; 
+			if(lcd.Sym_DP_UNIT_mmH2O) DP_UNIT_mmH2O_on;
+			if(lcd.Sym_DP_LOGO) DP_LOGO_on;
+			if(lcd.Sym_DP1_ON) DP1_on;
+		
+			if(DpDisplayState(DP1)==NO_ALARM)
+			{
+				alarmType = NO_ALARM;
+			}
+			else if(DpDisplayState(DP1)==LOWER_ALARM)
+			{
+				alarmType = LOWER_ALARM;
+			}
+			else
+			{
+				alarmType = UPPER_ALARM;
+			}
+	
+		break;
+		
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		case DP2_DISPLAY:
+			
+			if(lcd.Sym_DP_UNIT_Pa) DP_UNIT_Pa_on; 
+			if(lcd.Sym_DP_UNIT_mmH2O) DP_UNIT_mmH2O_on;
+			if(lcd.Sym_DP_LOGO) DP_LOGO_on;
+			if(lcd.Sym_DP2_ON) DP2_on;
+			
+			if(DpDisplayState(DP2)==NO_ALARM)
+			{
+				alarmType = NO_ALARM;
+			}
+			else if(DpDisplayState(DP2)==LOWER_ALARM)
+			{
+				alarmType = LOWER_ALARM;
+			}
+			else
+			{
+				alarmType = UPPER_ALARM;
+			}
+		break;
+		
+		case DP3_DISPLAY:
+		
+			if(lcd.Sym_DP_UNIT_Pa) DP_UNIT_Pa_on;
+			if(lcd.Sym_DP_UNIT_mmH2O) DP_UNIT_mmH2O_on;
+			if(lcd.Sym_DP_LOGO) DP_LOGO_on;
+			if(lcd.Sym_DP3_ON) DP3_on;
+			
+			if(DpDisplayState(DP3)==NO_ALARM)
+			{
+				alarmType = NO_ALARM;
+			}
+			else if(DpDisplayState(DP3)==LOWER_ALARM)
+			{
+				alarmType = LOWER_ALARM;
+			}
+			else
+			{
+				alarmType = UPPER_ALARM;
+			}
+		break;
+		#else
+		case TEMP_DISPLAY:
+			
+			if(lcd.Sym_TM_LOGO) TM_LOGO_on;
+			if(lcd.Sym_TM_UNIT_C) TM_UNIT_C_on;
+
+			if(AlarmDisplayState(TM_Alrm_ON,gu8_TM_NearAlrm)==NO_ALARM)
+			{
+				alarmType = NO_ALARM;
+			}
+			else if(AlarmDisplayState(TM_Alrm_ON,gu8_TM_NearAlrm)==UPPER_ALARM)
+			{
+				alarmType = LOWER_ALARM;
+			}
+			else
+			{
+				alarmType = UPPER_ALARM;
+			}
+		break;
+		
+		case RH_DISPLAY:
+			
+			if(lcd.Sym_RH_LOGO) RH_LOGO_on;
+			if(lcd.Sym_RH_UNIT) RH_UNIT_on;
+			if(AlarmDisplayState(RH_Alrm_ON,gu8_RH_NearAlrm)==NO_ALARM)
+			{
+				alarmType = NO_ALARM;
+			}
+			else if(AlarmDisplayState(RH_Alrm_ON,gu8_RH_NearAlrm)==UPPER_ALARM)
+			{
+				alarmType = LOWER_ALARM;
+			}
+			else
+			{
+				alarmType = UPPER_ALARM;
+			}
+		break;
+		#endif
+		
+		default:
+			
+		break;
+	}
+	
+	//alarmType=LOWER_ALARM;
+	
+	if(alarmType==NO_ALARM)
+	{
+		if(disp_buffer[4] & 0x01) {final_buffer[0] |= BIT1;final_buffer[1] |= BIT1;}//DP_A1_on;
+		if(disp_buffer[4] & 0x02) {final_buffer[2] |= BIT1;final_buffer[3] |= BIT1;}//DP_B1_on;
+		if(disp_buffer[4] & 0x04) {final_buffer[4] |= BIT1;final_buffer[5] |= BIT1;}//DP_C1_on;
+		if(disp_buffer[4] & 0x08) {final_buffer[6] |= BIT1;final_buffer[7] |= BIT1;}//DP_D1_on;
+		if(disp_buffer[4] & 0x10) {final_buffer[8] |= BIT1;final_buffer[9] |= BIT1;}//DP_E1_on;
+		if(disp_buffer[4] & 0x20) {final_buffer[10] |= BIT1;final_buffer[11] |= BIT1;}//DP_F1_on;
+		if(disp_buffer[4] & 0x40) {final_buffer[12] |= BIT1;final_buffer[13] |= BIT1;}//DP_G1_on;
+
+		if(disp_buffer[5] & 0x01) {final_buffer[0] |= BIT3;final_buffer[1] |= BIT3;}//DP_A2_on;
+		if(disp_buffer[5] & 0x02) {final_buffer[2] |= BIT3;final_buffer[3] |= BIT3;}//DP_B2_on;
+		if(disp_buffer[5] & 0x04) {final_buffer[4] |= BIT3;final_buffer[5] |= BIT3;}//DP_C2_on;
+		if(disp_buffer[5] & 0x08) {final_buffer[6] |= BIT3;final_buffer[7] |= BIT3;}//DP_D2_on;
+		if(disp_buffer[5] & 0x10) {final_buffer[8] |= BIT3;final_buffer[9] |= BIT3;}//DP_E2_on;
+		if(disp_buffer[5] & 0x20) {final_buffer[10] |= BIT3;final_buffer[11] |= BIT3;}//DP_F2_on;
+		if(disp_buffer[5] & 0x40) {final_buffer[12] |= BIT3;final_buffer[13] |= BIT3;}//DP_G2_on;
+		if(disp_buffer[5] & 0x80) final_buffer[14] |= BIT3;//DP_H2_on;
+
+		if(disp_buffer[6] & 0x01) {final_buffer[0] |= BIT5;final_buffer[1] |= BIT5;}//DP_A3_on;
+		if(disp_buffer[6] & 0x02) {final_buffer[2] |= BIT5;final_buffer[3] |= BIT5;}//DP_B3_on;
+		if(disp_buffer[6] & 0x04) {final_buffer[4] |= BIT5;final_buffer[5] |= BIT5;}//DP_C3_on;
+		if(disp_buffer[6] & 0x08) {final_buffer[6] |= BIT5;final_buffer[7] |= BIT5;}//DP_D3_on;
+		if(disp_buffer[6] & 0x10) {final_buffer[8] |= BIT5;final_buffer[9] |= BIT5;}//DP_E3_on;
+		if(disp_buffer[6] & 0x20) {final_buffer[10] |= BIT5;final_buffer[11] |= BIT5;}//DP_F3_on;
+		if(disp_buffer[6] & 0x40) {final_buffer[12] |= BIT5;final_buffer[13] |= BIT5;}//DP_G3_on;
+	}
+	else if(alarmType==LOWER_ALARM)
+	{
+		if(disp_buffer[4] & 0x01) {final_buffer[0] |= BIT0;final_buffer[1] |= BIT0;}//DP_A1_on;
+		if(disp_buffer[4] & 0x02) {final_buffer[2] |= BIT0;final_buffer[3] |= BIT0;}//DP_B1_on;
+		if(disp_buffer[4] & 0x04) {final_buffer[4] |= BIT0;final_buffer[5] |= BIT0;}//DP_C1_on;
+		if(disp_buffer[4] & 0x08) {final_buffer[6] |= BIT0;final_buffer[7] |= BIT0;}//DP_D1_on;
+		if(disp_buffer[4] & 0x10) {final_buffer[8] |= BIT0;final_buffer[9] |= BIT0;}//DP_E1_on;
+		if(disp_buffer[4] & 0x20) {final_buffer[10] |= BIT0;final_buffer[11] |= BIT0;}//DP_F1_on;
+		if(disp_buffer[4] & 0x40) {final_buffer[12] |= BIT0;final_buffer[13] |= BIT0;}//DP_G1_on;
+
+		if(disp_buffer[5] & 0x01) {final_buffer[0] |= BIT2;final_buffer[1] |= BIT2;}//DP_A2_on;
+		if(disp_buffer[5] & 0x02) {final_buffer[2] |= BIT2;final_buffer[3] |= BIT2;}//DP_B2_on;
+		if(disp_buffer[5] & 0x04) {final_buffer[4] |= BIT2;final_buffer[5] |= BIT2;}//DP_C2_on;
+		if(disp_buffer[5] & 0x08) {final_buffer[6] |= BIT2;final_buffer[7] |= BIT2;}//DP_D2_on;
+		if(disp_buffer[5] & 0x10) {final_buffer[8] |= BIT2;final_buffer[9] |= BIT2;}//DP_E2_on;
+		if(disp_buffer[5] & 0x20) {final_buffer[10] |= BIT2;final_buffer[11] |= BIT2;}//DP_F2_on;
+		if(disp_buffer[5] & 0x40) {final_buffer[12] |= BIT2;final_buffer[13] |= BIT2;}//DP_G2_on;
+		if(disp_buffer[5] & 0x80) final_buffer[14] |= BIT2;//DP_H2_on;
+
+		if(disp_buffer[6] & 0x01) {final_buffer[0] |= BIT4;final_buffer[1] |= BIT4;}//DP_A3_on;
+		if(disp_buffer[6] & 0x02) {final_buffer[2] |= BIT4;final_buffer[3] |= BIT4;}//DP_B3_on;
+		if(disp_buffer[6] & 0x04) {final_buffer[4] |= BIT4;final_buffer[5] |= BIT4;}//DP_C3_on;
+		if(disp_buffer[6] & 0x08) {final_buffer[6] |= BIT4;final_buffer[7] |= BIT4;}//DP_D3_on;
+		if(disp_buffer[6] & 0x10) {final_buffer[8] |= BIT4;final_buffer[9] |= BIT4;}//DP_E3_on;
+		if(disp_buffer[6] & 0x20) {final_buffer[10] |= BIT4;final_buffer[11] |= BIT4;}//DP_F3_on;
+		if(disp_buffer[6] & 0x40) {final_buffer[12] |= BIT4;final_buffer[13] |= BIT4;}//DP_G3_on;
+	}
+	else
+	{
+		if(disp_buffer[4] & 0x01) {final_buffer[0] |= BIT1;final_buffer[1] |= BIT1;}//DP_A1_on;
+		if(disp_buffer[4] & 0x02) {final_buffer[2] |= BIT1;final_buffer[3] |= BIT1;}//DP_B1_on;
+		if(disp_buffer[4] & 0x04) {final_buffer[4] |= BIT1;final_buffer[5] |= BIT1;}//DP_C1_on;
+		if(disp_buffer[4] & 0x08) {final_buffer[6] |= BIT1;final_buffer[7] |= BIT1;}//DP_D1_on;
+		if(disp_buffer[4] & 0x10) {final_buffer[8] |= BIT1;final_buffer[9] |= BIT1;}//DP_E1_on;
+		if(disp_buffer[4] & 0x20) {final_buffer[10] |= BIT1;final_buffer[11] |= BIT1;}//DP_F1_on;
+		if(disp_buffer[4] & 0x40) {final_buffer[12] |= BIT1;final_buffer[13] |= BIT1;}//DP_G1_on;
+
+		if(disp_buffer[5] & 0x01) {final_buffer[0] |= BIT3;final_buffer[1] |= BIT3;}//DP_A2_on;
+		if(disp_buffer[5] & 0x02) {final_buffer[2] |= BIT3;final_buffer[3] |= BIT3;}//DP_B2_on;
+		if(disp_buffer[5] & 0x04) {final_buffer[4] |= BIT3;final_buffer[5] |= BIT3;}//DP_C2_on;
+		if(disp_buffer[5] & 0x08) {final_buffer[6] |= BIT3;final_buffer[7] |= BIT3;}//DP_D2_on;
+		if(disp_buffer[5] & 0x10) {final_buffer[8] |= BIT3;final_buffer[9] |= BIT3;}//DP_E2_on;
+		if(disp_buffer[5] & 0x20) {final_buffer[10] |= BIT3;final_buffer[11] |= BIT3;}//DP_F2_on;
+		if(disp_buffer[5] & 0x40) {final_buffer[12] |= BIT3;final_buffer[13] |= BIT3;}//DP_G2_on;
+		if(disp_buffer[5] & 0x80) final_buffer[14] |= BIT3;//DP_H2_on;
+
+		if(disp_buffer[6] & 0x01) {final_buffer[0] |= BIT5;final_buffer[1] |= BIT5;}//DP_A3_on;
+		if(disp_buffer[6] & 0x02) {final_buffer[2] |= BIT5;final_buffer[3] |= BIT5;}//DP_B3_on;
+		if(disp_buffer[6] & 0x04) {final_buffer[4] |= BIT5;final_buffer[5] |= BIT5;}//DP_C3_on;
+		if(disp_buffer[6] & 0x08) {final_buffer[6] |= BIT5;final_buffer[7] |= BIT5;}//DP_D3_on;
+		if(disp_buffer[6] & 0x10) {final_buffer[8] |= BIT5;final_buffer[9] |= BIT5;}//DP_E3_on;
+		if(disp_buffer[6] & 0x20) {final_buffer[10] |= BIT5;final_buffer[11] |= BIT5;}//DP_F3_on;
+		if(disp_buffer[6] & 0x40) {final_buffer[12] |= BIT5;final_buffer[13] |= BIT5;}//DP_G3_on;
+		
+		if(disp_buffer[4] & 0x01) {final_buffer[0] |= BIT0;final_buffer[1] |= BIT0;}//DP_A1_on;
+		if(disp_buffer[4] & 0x02) {final_buffer[2] |= BIT0;final_buffer[3] |= BIT0;}//DP_B1_on;
+		if(disp_buffer[4] & 0x04) {final_buffer[4] |= BIT0;final_buffer[5] |= BIT0;}//DP_C1_on;
+		if(disp_buffer[4] & 0x08) {final_buffer[6] |= BIT0;final_buffer[7] |= BIT0;}//DP_D1_on;
+		if(disp_buffer[4] & 0x10) {final_buffer[8] |= BIT0;final_buffer[9] |= BIT0;}//DP_E1_on;
+		if(disp_buffer[4] & 0x20) {final_buffer[10] |= BIT0;final_buffer[11] |= BIT0;}//DP_F1_on;
+		if(disp_buffer[4] & 0x40) {final_buffer[12] |= BIT0;final_buffer[13] |= BIT0;}//DP_G1_on;
+
+		if(disp_buffer[5] & 0x01) {final_buffer[0] |= BIT2;final_buffer[1] |= BIT2;}//DP_A2_on;
+		if(disp_buffer[5] & 0x02) {final_buffer[2] |= BIT2;final_buffer[3] |= BIT2;}//DP_B2_on;
+		if(disp_buffer[5] & 0x04) {final_buffer[4] |= BIT2;final_buffer[5] |= BIT2;}//DP_C2_on;
+		if(disp_buffer[5] & 0x08) {final_buffer[6] |= BIT2;final_buffer[7] |= BIT2;}//DP_D2_on;
+		if(disp_buffer[5] & 0x10) {final_buffer[8] |= BIT2;final_buffer[9] |= BIT2;}//DP_E2_on;
+		if(disp_buffer[5] & 0x20) {final_buffer[10] |= BIT2;final_buffer[11] |= BIT2;}//DP_F2_on;
+		if(disp_buffer[5] & 0x40) {final_buffer[12] |= BIT2;final_buffer[13] |= BIT2;}//DP_G2_on;
+		if(disp_buffer[5] & 0x80) final_buffer[14] |= BIT2;//DP_H2_on;
+
+		if(disp_buffer[6] & 0x01) {final_buffer[0] |= BIT4;final_buffer[1] |= BIT4;}//DP_A3_on;
+		if(disp_buffer[6] & 0x02) {final_buffer[2] |= BIT4;final_buffer[3] |= BIT4;}//DP_B3_on;
+		if(disp_buffer[6] & 0x04) {final_buffer[4] |= BIT4;final_buffer[5] |= BIT4;}//DP_C3_on;
+		if(disp_buffer[6] & 0x08) {final_buffer[6] |= BIT4;final_buffer[7] |= BIT4;}//DP_D3_on;
+		if(disp_buffer[6] & 0x10) {final_buffer[8] |= BIT4;final_buffer[9] |= BIT4;}//DP_E3_on;
+		if(disp_buffer[6] & 0x20) {final_buffer[10] |= BIT4;final_buffer[11] |= BIT4;}//DP_F3_on;
+		if(disp_buffer[6] & 0x40) {final_buffer[12] |= BIT4;final_buffer[13] |= BIT4;}//DP_G3_on;
+	}
+	
+	for(uint8_t i=0;i<sizeof(final_buffer);i++) final_buffer[i] = changeNibbles(final_buffer[i]);
+	TM1680WritePage(0, final_buffer, sizeof(final_buffer));	
+}
+
+void conv_value(void)
+{
+	for(uint8_t i=0;i<NO_DIGIT;i++) data[i] = BLANK;
+	
+	lcd.Sym_DOOR = 0;
+	lcd.Sym_DOOR_ALM = 0;
+	lcd.Sym_LOGO = 0;
+	
+	lcd.Sym_RTC_AM = 0;
+	lcd.Sym_RTC_PM = 0;
+	lcd.Sym_RTC_COL = 0;
+
+	lcd.Sym_DP_LOGO = 0;
+	lcd.Sym_DP_UNIT_Pa = 0;
+	lcd.Sym_DP_UNIT_mmH2O = 0;
+	
+	lcd.Sym_RH_LOGO = 0;
+	lcd.Sym_RH_UNIT = 0;
+	
+	lcd.Sym_TM_LOGO = 0;
+	lcd.Sym_TM_UNIT_C = 0;
+
+	//Steady on normally; blinks for LOGO_ACK_BLINK_MS after each valid message
+	//served by ServePCMsg(), so UART activity is visible from the front.
+	lcd.Sym_LOGO = gu16_logoAckBlinkTimer ? BLINK_500MS_ON() : 1;
+	
+	#ifndef DISABLE_DOOR_SENSING
+	if(bool_doorStatus==OPEN)
+	{
+		lcd.Sym_DOOR_ALM = 1;
+	}
+	else
+	{
+		lcd.Sym_DOOR = 1;
+	}
+	#endif
+	
+	switch(mode)
+	{
+		case NORMAL_MODE:
+		
+			switch(Normal_para_cnt)
+			{
+				case 0:
+				
+					if(gu16_parameterWord & ENABLE_RTC)
+					{
+						if(!RTCSetFlag || !bool_rtcValid)	//unset OR untrustworthy clock blinks the time
+						{
+							if(BLINK_500MS_ON()) 
+							{
+								lcd.Sym_RTC_COL = 1;
+								
+								convert_char(rtc.minute,&data[2],2);
+
+								if(bool_AM_PM_Flag)
+								{
+									lcd.Sym_RTC_AM = 1;
+									
+									convert_char(rtc.hour,&data[0],2);
+								}
+								else
+								{
+									lcd.Sym_RTC_PM = 1;
+								
+									if(rtc.hour>12)
+										convert_char(rtc.hour-12,&data[0],2);
+									else
+										convert_char(rtc.hour,&data[0],2);
+								}
+							}
+						}
+						else
+						{
+							convert_char(rtc.minute,&data[2],2);
+						
+							if(bool_AM_PM_Flag)
+							{
+								lcd.Sym_RTC_AM = 1;
+								
+								convert_char(rtc.hour,&data[0],2);
+							}
+							else
+							{
+								lcd.Sym_RTC_PM = 1;
+							
+								if(rtc.hour>12)
+									convert_char(rtc.hour-12,&data[0],2);
+								else
+									convert_char(rtc.hour,&data[0],2);
+							}
+						
+							if(bool_Sec_blink_flag) lcd.Sym_RTC_COL = 1;
+						}
+					}
+					
+					switch(gu8_scroll_disp_para)
+					{
+						case DP1_DISPLAY:
+			
+							if(gu16_parameterWord & ENABLE_DP1)
+							{
+								if(bool_DP_NC[DP1])
+								{
+									data[4]=E;
+									data[5]=r;
+									data[6]=r;
+								}
+								else
+								{
+									//----------------------------------------------------
+									tempfloat = DpDisplayValue(DP1);
+								
+									if(!DP_limit[DP1])
+									{
+										if(tempfloat<0.0)
+										{
+											tempfloat *= (-1.0);
+											
+											data[4] = DASH;
+											
+											if(tempfloat < 10.0)
+											{
+												convert_float(tempfloat,&data[6],0);
+											}
+											else if(tempfloat < 100.0)
+											{
+												convert_float(tempfloat,&data[5],0);
+											}
+											else
+											{
+												convert_float(99.9, &data[5],0);
+											}
+										}
+										else
+										{
+											if(tempfloat < 10.0)
+											{
+												convert_float(tempfloat,&data[5],1);
+											}
+											else if(tempfloat < 100.0)
+											{
+												convert_float(tempfloat,&data[4],1);
+											}
+											else
+											{
+												convert_float(tempfloat,&data[4],0);
+											}
+										}
+										//----------------------------------------------------
+									}
+									else if(DP_limit[DP1]==1)
+									{
+										data[5]=H;
+										data[6]=I;
+									}
+									else if(DP_limit[DP1]==2)
+									{
+										data[5]=L;
+										data[6]=0;
+									}
+
+									//----------------------------------------------------
+								}
+								lcd.Sym_DP_UNIT_Pa = 1;
+								lcd.Sym_DP_LOGO = 1;
+								lcd.Sym_DP1_ON = 1;
+							}
+							
+						break;
+					
+						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+						
+						case DP2_DISPLAY:	
+							
+							if(gu16_parameterWord & ENABLE_DP2)
+							{
+								if(bool_DP_NC[DP2])
+								{
+									data[4]=E;
+									data[5]=r;
+									data[6]=r;
+								}
+								else
+								{
+									//----------------------------------------------------
+									tempfloat = DpDisplayValue(DP2);
+								
+									if(!DP_limit[DP2])
+									{
+										if(tempfloat<0.0)
+										{
+											tempfloat *= (-1.0);
+											
+											data[4] = DASH;
+											
+											if(tempfloat < 10.0)
+											{
+												convert_float(tempfloat,&data[6],0);
+											}
+											else if(tempfloat < 100.0)
+											{
+												convert_float(tempfloat,&data[5],0);
+											}
+											else
+											{
+												convert_float(99.9, &data[5],0);
+											}
+										}
+										else
+										{
+											if(tempfloat < 10.0)
+											{
+												convert_float(tempfloat,&data[5],1);
+											}
+											else if(tempfloat < 100.0)
+											{
+												convert_float(tempfloat,&data[4],1);
+											}
+											else
+											{
+												convert_float(tempfloat,&data[4],0);
+											}
+										}
+										//----------------------------------------------------
+									}
+									else if(DP_limit[DP2]==1)
+									{
+										data[5]=H;
+										data[6]=I;
+									}
+									else if(DP_limit[DP2]==2)
+									{
+										data[5]=L;
+										data[6]=0;
+									}
+
+									//----------------------------------------------------
+								}
+								lcd.Sym_DP_UNIT_Pa = 1;
+								lcd.Sym_DP_LOGO = 1;
+								lcd.Sym_DP2_ON = 1;
+							}
+							
+						break;
+						
+						case DP3_DISPLAY:
+							
+							if(gu16_parameterWord & ENABLE_DP3)
+							{
+								if(bool_DP_NC[DP3])
+								{
+									data[4]=E;
+									data[5]=r;
+									data[6]=r;
+								}
+								else
+								{
+									//----------------------------------------------------
+									tempfloat = DpDisplayValue(DP3);
+								
+									if(!DP_limit[DP3])
+									{
+										if(tempfloat<0.0)
+										{
+											tempfloat *= (-1.0);
+											
+											data[4] = DASH;
+											
+											if(tempfloat < 10.0)
+											{
+												convert_float(tempfloat,&data[6],0);
+											}
+											else if(tempfloat < 100.0)
+											{
+												convert_float(tempfloat,&data[5],0);
+											}
+											else
+											{
+												convert_float(99.9, &data[5],0);
+											}
+										}
+										else
+										{
+											if(tempfloat < 10.0)
+											{
+												convert_float(tempfloat,&data[5],1);
+											}
+											else if(tempfloat < 100.0)
+											{
+												convert_float(tempfloat,&data[4],1);
+											}
+											else
+											{
+												convert_float(tempfloat,&data[4],0);
+											}
+										}
+										//----------------------------------------------------
+									}
+									else if(DP_limit[DP3]==1)
+									{
+										data[5]=H;
+										data[6]=I;
+									}
+									else if(DP_limit[DP3]==2)
+									{
+										data[5]=L;
+										data[6]=0;
+									}
+
+									//----------------------------------------------------
+								}
+								lcd.Sym_DP_UNIT_Pa = 1;
+								lcd.Sym_DP_LOGO = 1;
+								lcd.Sym_DP3_ON = 1;
+							}
+							
+						break;
+							
+						#else
+						
+						case TEMP_DISPLAY:
+							
+							if(gu16_parameterWord & ENABLE_TEMP)
+							{
+								if(bool_RH_TEMP_NC)
+								{
+									data[4]=E;
+									data[5]=r;
+									data[6]=r;
+								}
+								else
+								{
+									//----------------------------------------------------
+									if(!TM_Unit)
+									{
+										tempfloat = temperatureC;
+									}
+									else
+									{
+										tempfloat = temperatureF;
+									}
+								
+									if(tempfloat<0.0)
+									{
+										tempfloat *= (-1.0);
+										
+										data[4] = DASH;
+										
+										if(tempfloat < 10.0)
+										{
+											convert_float(tempfloat,&data[6],0);
+										}
+										else if(tempfloat < 100.0)
+										{
+											convert_float(tempfloat,&data[5],0);
+										}
+										else
+										{
+											convert_float(99.9, &data[5],0);
+										}
+									}
+									else
+									{
+										if(tempfloat < 10.0)
+										{
+											convert_float(tempfloat,&data[5],1);
+										}
+										else if(tempfloat < 100.0)
+										{
+											convert_float(tempfloat,&data[4],1);
+										}
+										else
+										{
+											convert_float(tempfloat,&data[4],0);
+										}
+									}
+									//----------------------------------------------------
+								}
+								lcd.Sym_TM_LOGO = 1;
+							}
+							
+						break;
+
+						case RH_DISPLAY:
+							
+							if(gu16_parameterWord & ENABLE_RH)
+							{
+								if(bool_RH_TEMP_NC)
+								{
+									data[4]=E;
+									data[5]=r;
+									data[6]=r;
+								}
+								else
+								{
+									//----------------------------------------------------
+									tempfloat = humidityRH;
+								
+									if(tempfloat<0.0)
+									{
+										tempfloat *= (-1.0);
+										
+										data[4] = DASH;
+										
+										if(tempfloat < 10.0)
+										{
+											convert_float(tempfloat,&data[6],0);
+										}
+										else if(tempfloat < 100.0)
+										{
+											convert_float(tempfloat,&data[5],0);
+										}
+										else
+										{
+											convert_float(99.9, &data[5],0);
+										}
+									}
+									else
+									{
+										if(tempfloat < 10.0)
+										{
+											convert_float(tempfloat,&data[5],1);
+										}
+										else if(tempfloat < 100.0)
+										{
+											convert_float(tempfloat,&data[4],1);
+										}
+										else
+										{
+											convert_float(tempfloat,&data[4],0);
+										}
+									}
+									//----------------------------------------------------
+								}
+								
+								lcd.Sym_RH_LOGO = 1;
+								lcd.Sym_RH_UNIT = 1;
+							}
+						
+						break;
+						#endif
+							
+					}
+			
+				break;
+				
+				case 1:
+				
+					data[1] = D;
+					data[2] = V;
+					data[3] = C;
+					convert_char(DeviceID,&data[4],3);
+				
+				break;
+
+				case 2:
+					
+					//ACK_on;
+					convert_char(dummy1,&data[0],2);
+					if(gu8_SetACKPwd==2)
+					{
+						convert_char(dummy,&data[4],3);
+					}
+				
+					//if(gu8_SetACKPwd)SET_on;
+				
+				break;
+			}
+			
+		break;	
+		
+		case DP_AUTO_CAL_MODE:
+		
+			data[1] = A;
+			data[2] = U;
+			data[3] = t;
+			
+			data[4] = C;
+			data[5] = A;
+			data[6] = L;
+
+			lcd.Sym_DP_LOGO = 1;
+			
+		break;
+
+		case PROG_MODE:
+		
+			switch(emProgpara)
+			{
+				case PROG_PAGE_DISP:
+				
+					data[4] = P;
+					data[5] = r;
+					data[6] = 9;
+				
+				break;
+				
+				case DEVICE_ID_DISP:
+				
+					data[4] = D;
+					data[5] = V;
+					data[6] = C;
+				
+					data[2] = 1;
+					data[3] = D;
+				
+					convert_char(dummy,&data[7],3);
+				
+				break;
+				
+				default:
+					
+				break;
+			}
+			
+		break;
+	}
+}
+
+#endif
+
 #ifdef ENABLE_KEY_LOGIC
 	
 void check_key(void)
@@ -3454,12 +4268,15 @@ void check_key(void)
 //being entered.
 static uint8_t KeyInNavMode(void)
 {
+	#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 	#if BUILD_MINMAX_LOG
 	if(mode==MIN_MAX_MEAN_MODE)									return 1;
 	#endif
 	#if BUILD_MEAN24_LOG
 	if(mode==MEAN_HOUR_MODE)									return 1;
 	#endif
+	#endif
+	
 	if((mode==NORMAL_MODE) && !gu8_SetACKPwd)					return 1;
 	if((mode==PROG_MODE) && !PARA_SELECT_KEY)					return 1;
 
@@ -3489,7 +4306,7 @@ void CheckUpDnKey(void)
 {
 	uint8_t i=0;
 	
-	#if BUILD_MINMAX_LOG
+	#if BUILD_MINMAX_LOG && (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 	if(!PARA_SELECT_KEY && !PROG_ENT_KEY)
 	{
 		//Gate the BODY, not the branch: an #if around the `if` would leave the
@@ -3515,7 +4332,7 @@ void CheckUpDnKey(void)
 	#endif	// BUILD_MINMAX_LOG
 	if(!PARA_SELECT_KEY && !UP_KEY)
 	{
-		#if BUILD_MEAN24_LOG
+		#if BUILD_MEAN24_LOG && (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 		if(mode==NORMAL_MODE)
 		{
 			MeanHrModeTimer++;
@@ -3543,8 +4360,14 @@ void CheckUpDnKey(void)
 				ResetMinMax();
 				
 				for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
+				
+				#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 				lcd.Sym_MIN = 1;
 				lcd.Sym_MAX = 1;
+				#else
+
+				#endif
+				
 				data[4] = C;
 				data[5] = L;
 				data[6] = r;
@@ -3729,7 +4552,11 @@ void CheckUpDnKey(void)
 				{
 					Normal_para_cnt++;
 
+					#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 					if(Normal_para_cnt==5)
+					#else
+					if(Normal_para_cnt==2)
+					#endif
 					{
 						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 						if((DP_Alrm_ON[DP1]) || (DP_Alrm_ON[DP2]) || (DP_Alrm_ON[DP3]))
@@ -3748,7 +4575,11 @@ void CheckUpDnKey(void)
 						}
 					}
 					
+					#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 					if(Normal_para_cnt>5)
+					#else
+					if(Normal_para_cnt>2)
+					#endif
 					{
 						Normal_para_cnt=0;
 						progTimeout=0;
@@ -3775,7 +4606,7 @@ void CheckUpDnKey(void)
 				
 			break;
 			
-			#if BUILD_MINMAX_LOG
+			#if BUILD_MINMAX_LOG && (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 			case MIN_MAX_MEAN_MODE:
 			
 				progTimeout=60;
@@ -3887,7 +4718,7 @@ void CheckUpDnKey(void)
 			break;
 			
 			#endif	// BUILD_MINMAX_LOG
-			#if BUILD_MEAN24_LOG
+			#if BUILD_MEAN24_LOG && (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 			case MEAN_HOUR_MODE:
 			
 				progTimeout=60;
@@ -3945,8 +4776,10 @@ void CheckUpDnKey(void)
 				if(!PARA_SELECT_KEY)
 				{
 					//opstr("\r\nProg Mode + Up Key + Para_Select key pressed\r\n");
+					
 					emProgpara++;
 					
+					#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)					
 					if((emProgpara==DP1_ALM_UP_ON_DISP) && !(gu16_parameterWord & ENABLE_DP1))
 					{
 						#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
@@ -3980,6 +4813,13 @@ void CheckUpDnKey(void)
 					{
 						emProgpara=DEVICE_ID_DISP;
 					}
+					#else
+					if(emProgpara>DEVICE_ID_DISP)
+					{
+						emProgpara=DEVICE_ID_DISP;
+					}
+					
+					#endif
 					
 					dummy=0;
 					
@@ -4137,13 +4977,13 @@ void CheckUpDnKey(void)
 				
 			break;
 			
-			#if BUILD_MINMAX_LOG
+			#if BUILD_MINMAX_LOG && (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 			case MIN_MAX_MEAN_MODE:
 						
 			break;
 			
 			#endif	// BUILD_MINMAX_LOG
-			#if BUILD_MEAN24_LOG
+			#if BUILD_MEAN24_LOG && (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 			case MEAN_HOUR_MODE:
 			
 			break;
@@ -4356,7 +5196,11 @@ void keyboard(void)
 			{
 				case NORMAL_MODE:
 				
+					#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 					if(Normal_para_cnt==5)
+					#else
+					if(Normal_para_cnt==2)
+					#endif
 					{
 						if(!gu8_SetACKPwd)
 						{
@@ -5233,12 +6077,8 @@ void EraseWholeFlash(void)
 	#ifdef ENABLE_PRINTF
 	opstr("Flash Erase\r\n");
 	#endif
-	
-	/*
-	DP1_RED_ON;
-	AT45D_ChipErase();
-	DP1_RED_OFF;
-	*/
+
+	#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 
 	data[1] = BLANK;
 	data[2] = BLANK;
@@ -5256,6 +6096,19 @@ void EraseWholeFlash(void)
 	data[11] = r;
 	data[12] = 5;
 	
+	#else
+
+	data[0] = E;
+	data[1] = E;
+	data[2] = P;
+	data[3] = r;
+	
+	data[4] = E;
+	data[5] = r;
+	data[6] = 5;
+	
+	#endif
+
 	disp_value();
 	
 	//Erase whole Flash
@@ -6894,6 +7747,24 @@ void ServePCMsg(void)
 				Buzzer_OFF_Time=tempshort;
 				WriteEEPROMData(BUZZER_OFF_TIME,(uint8_t*)&Buzzer_OFF_Time,sizeof(Buzzer_OFF_Time));
 			break;
+			#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+			case SCROLL_TIME_ID:
+				//Range checked like the log interval beside it.  Unchecked, the cast to
+				//uint8_t quietly folded anything above 255 (300 became 44), zero made the
+				//panel step on every tick, and a value between 61 and 255 was accepted
+				//here and then thrown away by the bounds check at the next boot - so the
+				//setting read back correctly until the unit was power cycled.
+				if((tempshort>=MIN_PARA_SCROLL_TIME) && (tempshort<=MAX_PARA_SCROLL_TIME))
+				{
+					ParaScrollTime=(uint8_t)tempshort;
+					WriteEEPROMData(PARA_SCROLL_TIME,&ParaScrollTime,sizeof(ParaScrollTime));
+				}
+				else
+				{
+					bool_paraIdNotValid=1;
+				}
+			break;
+			#endif
 			
 			case EXT_FLASH_ERASE_ID:
 			
@@ -7652,6 +8523,9 @@ void ServePCMsg(void)
 			case DVCID_ID:		tempshort = DeviceID;					break;
 			case BZRON_ID:		tempshort = Buzzer_ON_Time;				break;
 			case BZROFF_ID:		tempshort = Buzzer_OFF_Time;			break;
+			#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+			case SCROLL_TIME_ID:		tempshort = ParaScrollTime;		break;
+			#endif
 			case DP1MIN_ID:		tempshort = DP_Min[DP1]*100;				break;
 			case DP1MAX_ID:		tempshort = DP_Max[DP1]*100;				break;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
@@ -9610,6 +10484,60 @@ void SecondTick(void)
 		}
 	}	
 	#endif
+	
+	#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+
+	//====================================================
+	static unsigned char scrollTimer=0;
+
+	scrollTimer++;
+	if(scrollTimer >= ParaScrollTime)
+	{
+		scrollTimer=0;
+		
+		if((!(gu16_parameterWord & ENABLE_DP1)) 
+			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+			&& (!(gu16_parameterWord & ENABLE_DP2)) && (!(gu16_parameterWord & ENABLE_DP3)) 
+			#else
+			&& (!(gu16_parameterWord & ENABLE_TEMP)) && (!(gu16_parameterWord & ENABLE_RH))
+			#endif
+		)
+		{
+			gu8_scroll_disp_para=NO_DISPLAY;
+		}
+		else
+		{
+			//Step to the next slot, then keep stepping while it is switched off.
+			//
+			//This was a fixed sequence of three ifs with the wrap AFTER them, and that
+			//had two holes.  The wrap turned slot 3 back into slot 0 once every check
+			//had already run, so DP1 was never tested when it was reached that way - a
+			//unit with DP1 off blanked the panel for one whole scroll period on every
+			//lap.  And because the ifs ran in a fixed order rather than looping, one
+			//pass could land on a disabled slot whose own check had already gone by.
+			//
+			//Walking round the ring instead settles on the next enabled slot whatever
+			//it started from.  The counter bounds it: the all-disabled case is handled
+			//above, so this cannot spin.
+			for(uint8_t i=0; i<DISPLAY_SLOTS; i++)
+			{
+				gu8_scroll_disp_para++;
+				if(gu8_scroll_disp_para >= DISPLAY_SLOTS) gu8_scroll_disp_para=0;
+
+				#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+				if((gu8_scroll_disp_para==DP1_DISPLAY) && (gu16_parameterWord & ENABLE_DP1))	break;
+				if((gu8_scroll_disp_para==DP2_DISPLAY) && (gu16_parameterWord & ENABLE_DP2))	break;
+				if((gu8_scroll_disp_para==DP3_DISPLAY) && (gu16_parameterWord & ENABLE_DP3))	break;
+				#else
+				if((gu8_scroll_disp_para==DP1_DISPLAY) && (gu16_parameterWord & ENABLE_DP1))	break;
+				if((gu8_scroll_disp_para==TEMP_DISPLAY) && (gu16_parameterWord & ENABLE_TEMP))	break;
+				if((gu8_scroll_disp_para==RH_DISPLAY) && (gu16_parameterWord & ENABLE_RH))		break;
+				#endif
+			}
+		}
+	}
+	
+	#endif
 	//====================================================
 	//How long each parameter has been CONTINUOUSLY in near alarm.  Per parameter, not
 	//one shared timer: a channel that keeps dropping in and out is not the sustained
@@ -11015,8 +11943,8 @@ void whileTask(void)
 			}
 			
 			//Run down the UART-acknowledge logo blink.  Only the hold-off is counted
-			//here; the 500 ms phase comes from bool_mec500_blink_flag, which the TIM1
-			//ISR toggles every 10 of these ticks.
+			//here; the 500 ms phase comes from BLINK_500MS_ON(), which derives it from the
+			//free-running tick, so it does not depend on how long a pass takes.
 			if(gu16_logoAckBlinkTimer) gu16_logoAckBlinkTimer--;
 		}
 	}
@@ -11431,7 +12359,11 @@ void boot_data(void)
 			memset(&gu8arr_XbeeMac[i][0],'0',XBEE_MAC_SIZE);
 			WriteEEPROMData((XBEE_MAC_ADDR+(i*XBEE_MAC_SIZE)),(uint8_t*)&gu8arr_XbeeMac[i][0],XBEE_MAC_SIZE);
 		}
-
+		
+		#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+		ParaScrollTime=DEFAULT_PARA_SCROLL_TIME;
+		WriteEEPROMData(PARA_SCROLL_TIME,&ParaScrollTime,sizeof(ParaScrollTime)); 
+		#endif
 		//EraseWholeFlash();
 		
 		WriteEEPROMData(FIRST_BOOT_CHECK,&FirstTimeCheck,sizeof(FirstTimeCheck)); 
@@ -12166,6 +13098,20 @@ void boot_data(void)
 			WriteEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
 		}
 		
+		#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+		//Zero has to be rejected as well as too-large.  scrollTimer >= 0 is always true,
+		//so a stored zero steps the panel on every tick instead of every few seconds -
+		//and a blank EEPROM cell reads 0xFF, which the upper bound catches, but a cell
+		//written as 0 over the UART does not.  The same (!x || x > max) shape is used
+		//for the auto-send interval a few lines down.
+		ReadEEPROMData(PARA_SCROLL_TIME,&ParaScrollTime,sizeof(ParaScrollTime));
+		if((!ParaScrollTime) || (ParaScrollTime>MAX_PARA_SCROLL_TIME))
+		{
+			ParaScrollTime=DEFAULT_PARA_SCROLL_TIME;
+			WriteEEPROMData(PARA_SCROLL_TIME,&ParaScrollTime,sizeof(ParaScrollTime));
+		}
+		#endif
+		
 		ReadEEPROMData(FLSH_OVF_IND,&FlashOVFByte,sizeof(FlashOVFByte));
 		if(FlashOVFByte>1)
 		{
@@ -12217,7 +13163,9 @@ void Init_variables(void)
 	gu16_logtransfer=0;
 	bool_logtransferStart=0;
 	DP_StartUpTimer=10;
+	#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
 	TMRH_StartUpTimer=10;
+	#endif
 	bool_resetDevice=0;
 	
 	bool_DPLog[DP1]=0;
@@ -12670,8 +13618,32 @@ int main(void)
 	
 	IWDG_Configure(1250);	//Initialize WDT
 
+	#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+	//Start on a slot that is actually switched on ------------------------------------------
+	//
+	//Same walk as the scroll itself, and for the same reason: a fixed run of three ifs
+	//could land on a disabled slot whose own check had already gone past.  Starting from
+	//DP1 with DP1 and TEMP both off used to settle on TEMP, so the panel came up blank
+	//until the first scroll tick moved it along.
+	for(uint8_t i=0; i<DISPLAY_SLOTS; i++)
+	{
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		if((gu8_scroll_disp_para==DP1_DISPLAY) && (gu16_parameterWord & ENABLE_DP1))	break;
+		if((gu8_scroll_disp_para==DP2_DISPLAY) && (gu16_parameterWord & ENABLE_DP2))	break;
+		if((gu8_scroll_disp_para==DP3_DISPLAY) && (gu16_parameterWord & ENABLE_DP3))	break;
+		#else
+		if((gu8_scroll_disp_para==DP1_DISPLAY) && (gu16_parameterWord & ENABLE_DP1))	break;
+		if((gu8_scroll_disp_para==TEMP_DISPLAY) && (gu16_parameterWord & ENABLE_TEMP))	break;
+		if((gu8_scroll_disp_para==RH_DISPLAY) && (gu16_parameterWord & ENABLE_RH))		break;
+		#endif
+
+		gu8_scroll_disp_para++;
+		if(gu8_scroll_disp_para >= DISPLAY_SLOTS) gu8_scroll_disp_para=0;
+	}
+	#endif
+	
     while (1)
-    {
+    {	
 		//1 Second Tick ====================================================
 		if(bool_sec_flag)
 		{

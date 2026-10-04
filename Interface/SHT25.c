@@ -79,9 +79,20 @@ unsigned char SHT2x_MeasureHM(unsigned char eSHT2xMeasureType, nt16 *pMeasurand)
 
 	//-- write I2C sensor address and command --
 	I2C3_Start();
-	error |= Write_Byte_I2C3 (SHT25_I2C_WRITE); // I2C Adr
+	error = Write_Byte_I2C3 (SHT25_I2C_WRITE); // I2C Adr
+
+	//Same guard as SHT2x_MeasurePoll(): no acknowledgement means no sensor, so skip the
+	//hold-master wait below rather than spinning it out on an empty bus.  Read_SHT25()
+	//does not call this one today, but it would fall into the same trap if it ever did.
+	if(error)
+	{
+		I2C3_Stop();
+		pMeasurand->u16 = 0xFFFF;
+		return (error | TIME_OUT_ERROR);
+	}
+
 	switch(eSHT2xMeasureType)
-	{ 
+	{
 		case HUMIDITY: error |= Write_Byte_I2C3 (TRIG_RH_MEASUREMENT_HM); break;
 		case TEMP    : error |= Write_Byte_I2C3 (TRIG_T_MEASUREMENT_HM);  break;
 		//default: assert(0);
@@ -91,7 +102,7 @@ unsigned char SHT2x_MeasureHM(unsigned char eSHT2xMeasureType, nt16 *pMeasurand)
 	I2C3_Start();//SHT25_I2CStartCondition();
 	error |= Write_Byte_I2C3 (SHT25_I2C_READ);
 	SCL3_DIR_IN;                     // set SCL I/O port as input
-	for(i=0; i<1000; i++)         // wait until master hold is released or
+	for(i=0; i<100; i++)         // wait until master hold is released or
 	{ 
 		PLATFORM_DelayMS(1);    // a timeout (~1s) is reached
 		
@@ -125,22 +136,41 @@ unsigned char SHT2x_MeasurePoll(unsigned char eSHT2xMeasureType, nt16 *pMeasuran
 
 	//-- write I2C sensor address and command --
 	I2C3_Start();
-	error |= Write_Byte_I2C3 (SHT25_I2C_WRITE); // I2C Adr
+	error = Write_Byte_I2C3 (SHT25_I2C_WRITE); // I2C Adr
+
+	//Nothing acknowledged the address, so there is no sensor on the bus and nothing to
+	//wait for.  Without this the function went on to poll anyway - 40 tries, 10 ms
+	//apart - and since Read_SHT25() measures humidity AND temperature that is 800 ms
+	//of PLATFORM_DelayMS() burnt every 250 ms tick, on a board where the part is simply
+	//not fitted.  whileTask() refreshes the display once per pass, so the whole panel
+	//updated less than twice a second and the clock was unreadable.  Only the TEMP/RH
+	//build calls this, which is why the three-DP build was unaffected.
+	//
+	//0xFFFF is what the bus reads back when it floats, and is already what Read_SHT25()
+	//treats as "not connected" - so returning it here keeps bool_RH_TEMP_NC working
+	//exactly as before, just without the wait.
+	if(error)
+	{
+		I2C3_Stop();
+		pMeasurand->u16 = 0xFFFF;
+		return (error | TIME_OUT_ERROR);
+	}
+
 	switch(eSHT2xMeasureType)
-	{ 
+	{
 		case HUMIDITY: error |= Write_Byte_I2C3 (TRIG_RH_MEASUREMENT_POLL); break;
 		case TEMP    : error |= Write_Byte_I2C3 (TRIG_T_MEASUREMENT_POLL);  break;
 		//default: assert(0);
 	}
-	//-- poll every 10ms for measurement ready. Timeout after 20 retries (200ms)--
+	//-- poll every 10ms for measurement ready. Timeout after 40 retries (400ms)--
 	do
-	{ 
+	{
 		I2C3_Start();
 		PLATFORM_DelayMS(10);  //delay 10ms
-		
+
 		if(i++ >= 40) break;
 	} while(Write_Byte_I2C3 (SHT25_I2C_READ) == ACK_ERROR);
-	
+
 	if (i>=40) error |= TIME_OUT_ERROR;
 
 	//-- read two data bytes and one checksum byte --
@@ -192,7 +222,7 @@ float SHT2x_CalcTemperatureC(unsigned short u16sT)
 
 	u16sT &= ~0x0003;           // clear bits [1..0] (status bits)
 
-	//-- calculate temperature [°C] --
+	//-- calculate temperature [ï¿½C] --
 	temperatureC= -46.85 + 175.72/65536 *(float)u16sT; //T= -46.85 + 175.72 * ST/2^16
 	return temperatureC;
 }

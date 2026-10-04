@@ -115,6 +115,10 @@ for want, why in [
         ('0x0002', 'the clock bit of the feature word'),
         ('0x0040', 'the temperature bit of the feature word'),
         ('discarded in silence', 'the customer-password condition on 0x71 and 0x5F'),
+        ('Parameter scroll time', 'the one-line panel scroll time, 0x4F'),
+        ('start and END slot', 'that 0x47 and 0x46 take a range, not a count'),
+        ('END precedes its START', 'the reversed-window rejection on 0x49'),
+        ('[4]      device id', 'byte 4 of the reading record'),
         ('AT45DB321D', 'data flash'),
         ('57600', 'default baud')]:
     if want in body:

@@ -4,7 +4,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	0
-#define FW_PATCH	7
+#define FW_PATCH	8
 
 #define ENABLE_KEY_LOGIC
 
@@ -22,7 +22,7 @@
 #define DATAFLASH_AT45DB321D	0
 #define DATAFLASH_XM25QH128A	1
 
-#define DATAFLASH_PART			DATAFLASH_XM25QH128A
+#define DATAFLASH_PART			DATAFLASH_AT45DB321D
 
 //Set to 1 to build XM25_SelfTest() and its diagnostics into the image.  Leave at 0
 //for production: the test costs about 600 bytes of code and erases the scratch
@@ -38,7 +38,25 @@
 #define PRESSURE_SENSOR_XGZP6891D	0
 #define PRESSURE_SENSOR_WF200DP		1
 
-#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_XGZP6891D
+
+//------------------------------------------------------------------------
+#define THREE_LINE_DISPLAY		0
+#define ONE_LINE_DISPLAY		1
+#define DISPLAY_TYPE			ONE_LINE_DISPLAY
+
+
+#define DP1_DISPLAY				0
+#define DP2_DISPLAY				1
+#define DP3_DISPLAY				2
+#define TEMP_DISPLAY			1
+#define RH_DISPLAY				2
+#define NO_DISPLAY				3
+
+//How many slots the one-line panel scrolls through.  The two device modes use the
+//same three values - DP1/DP2/DP3 and DP1/TEMP/RH - so this is the ring size for both.
+//It used to be written as a bare "> 2" at the one place that wrapped the counter.
+#define DISPLAY_SLOTS			3
 
 //************************************************************************/
 // LOGGING SUBSYSTEMS (compile time)
@@ -94,14 +112,30 @@
 	#define ENABLE_DP2			0x0008
 	#define ENABLE_DP3			0x0010
 	#define PARAMETER_WORD	(ENABLE_DP1 | ENABLE_DP2 | ENABLE_DP3 | ENABLE_RTC | ENABLE_ALERT)
-
+	#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
+		#define NO_DIGIT		13
+		#define TM_BUFF_SIZE	32
+	#else
+		#define NO_DIGIT		7
+		#define TM_BUFF_SIZE	24
+	#endif
+	
 #else
 
 	#define ENABLE_RH			0x0020
 	#define ENABLE_TEMP			0x0040
 	#define PARAMETER_WORD	(ENABLE_DP1 | ENABLE_RH | ENABLE_TEMP | ENABLE_RTC | ENABLE_ALERT)
-
+	#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
+		#define NO_DIGIT		13
+		#define TM_BUFF_SIZE	32
+	#else
+		#define NO_DIGIT		7
+		#define TM_BUFF_SIZE	24
+	#endif
+	
 #endif
+
+
 
 
 #define DP_SW_FACT_DIVISION			 15
@@ -284,7 +318,8 @@
 #define DEVICE_ID				(TEMP_UNIT+1)
 #define BUZZER_ON_TIME			(DEVICE_ID+1)
 #define BUZZER_OFF_TIME			(BUZZER_ON_TIME+2)
-#define LOG_INTERVAL			(BUZZER_OFF_TIME+2)
+#define PARA_SCROLL_TIME		(BUZZER_OFF_TIME+2)
+#define LOG_INTERVAL			(PARA_SCROLL_TIME+1)
 #define UART_BAUDRATE			(LOG_INTERVAL+2)
 
 //Min/max slots.  On the AT45 they live here; on the XM25 they move to the
@@ -453,6 +488,25 @@
 //the 50 ms tick, so the two stay in step.
 #define LOGO_ACK_BLINK_MS		5000
 #define LOGO_ACK_BLINK_TICKS	(LOGO_ACK_BLINK_MS/50)
+
+//The 500 ms blink PHASE, worked out from the free-running 50 ms tick rather than read
+//out of bool_mec500_blink_flag.
+//
+//The ISR toggles that flag every ten ticks, which is correct.  The problem is at the
+//other end: the display looks at it once per pass of whileTask(), so what it sees
+//depends on how long a pass takes.  In DP1_TEMP_RH_MODE a pass includes Read_SHT25(),
+//whose two hold-master waits each spin up to a full second in 1 ms steps, so a pass can
+//run a whole number of 500 ms periods.  Sample a square wave at a multiple of its own
+//period and it reads the same value every single time - the flag toggles perfectly in
+//the ISR while the display sees it frozen, so the "clock not set" blink never draws and
+//the time looks blank.  DP1_DP2_DP3_MODE makes no such call, its passes are about
+//85 ms, and there it blinks.
+//
+//gu16_tick50 is free-running and never reset, so this follows elapsed time instead of
+//how often somebody looks - which is exactly why that counter exists; see the note
+//beside its declaration.  It is a uint16_t, so the phase takes one short step when it
+//wraps, about every 55 minutes.
+#define BLINK_500MS_ON()		(((gu16_tick50 / 10u) & 1u) != 0u)
 
 #define MIN_LOG_INTERVAL		1
 #define MAX_LOG_INTERVAL		1440
@@ -675,6 +729,11 @@
 #define DEFAULT_UART_BAUDRATE		8		//57600
 #define DEFAULT_CUSTOMER_PWD		100
 #define DEFAULT_FACTORY_PWD			4321
+#define DEFAULT_PARA_SCROLL_TIME	5
+//Seconds each parameter is held on the one-line panel.  Zero is not a valid setting -
+//the scroll compares with >=, so zero steps on every tick.
+#define MIN_PARA_SCROLL_TIME		1
+#define MAX_PARA_SCROLL_TIME		60
 //-------------------------------------------------
 #define FACTORY_PARASET_PWD		1234
 #define FACTORY_PASSWORD		1000
@@ -707,8 +766,10 @@
 #define NORMAL_MODE			0
 #define PROG_MODE			1
 #define DP_AUTO_CAL_MODE	2
+#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 #define MIN_MAX_MEAN_MODE	3
 #define MEAN_HOUR_MODE		4
+#endif
 
 #define PROG_ENT				0x01
 #define PARA_SELECT				0x02
@@ -1021,47 +1082,85 @@
 #define BAUD_57600		8
 #define BAUD_115200		9
 
-#define NO_DIGIT	13
+#if (DISPLAY_TYPE==THREE_LINE_DISPLAY)
 
-#define RH_MIN_on			final_buffer[7] |= BIT0
-#define RH_MIN_ALM_on		final_buffer[7] |= BIT1
-#define RH_UNIT_on 			final_buffer[7] |= BIT6
-#define RH_LOGO_ALM_on 		{final_buffer[28] |= BIT2;final_buffer[29] |= BIT2;final_buffer[30] |= BIT2;final_buffer[31] |= BIT2;}
-#define RH_LOGO_on 			{final_buffer[28] |= BIT3;final_buffer[29] |= BIT3;final_buffer[30] |= BIT3;final_buffer[31] |= BIT3;}
+	#define RH_MIN_on			final_buffer[7] |= BIT0
+	#define RH_MIN_ALM_on		final_buffer[7] |= BIT1
+	#define RH_UNIT_on 			final_buffer[7] |= BIT6
+	#define RH_LOGO_ALM_on 		{final_buffer[28] |= BIT2;final_buffer[29] |= BIT2;final_buffer[30] |= BIT2;final_buffer[31] |= BIT2;}
+	#define RH_LOGO_on 			{final_buffer[28] |= BIT3;final_buffer[29] |= BIT3;final_buffer[30] |= BIT3;final_buffer[31] |= BIT3;}
 
-//-------------------------------------------------
-#define TM_MIN_on			final_buffer[15] |= BIT2
-#define TM_MIN_ALM_on		final_buffer[15] |= BIT3
-#define TM_UNIT_C_on 		final_buffer[27] |= BIT1
-#define TM_UNIT_F_on 		final_buffer[28] |= BIT1
-#define TM_LOGO_ALM_on 			{final_buffer[23] |= BIT2;final_buffer[24] |= BIT2;final_buffer[25] |= BIT2;final_buffer[26] |= BIT2;final_buffer[27] |= BIT2;}
-#define TM_LOGO_on 		{final_buffer[23] |= BIT3;final_buffer[24] |= BIT3;final_buffer[25] |= BIT3;final_buffer[26] |= BIT3;final_buffer[27] |= BIT3;}
+	//-------------------------------------------------
+	#define TM_MIN_on			final_buffer[15] |= BIT2
+	#define TM_MIN_ALM_on		final_buffer[15] |= BIT3
+	#define TM_UNIT_C_on 		final_buffer[27] |= BIT1
+	#define TM_UNIT_F_on 		final_buffer[28] |= BIT1
+	#define TM_LOGO_ALM_on 			{final_buffer[23] |= BIT2;final_buffer[24] |= BIT2;final_buffer[25] |= BIT2;final_buffer[26] |= BIT2;final_buffer[27] |= BIT2;}
+	#define TM_LOGO_on 		{final_buffer[23] |= BIT3;final_buffer[24] |= BIT3;final_buffer[25] |= BIT3;final_buffer[26] |= BIT3;final_buffer[27] |= BIT3;}
 
-//-------------------------------------------------
-#define DP_UNIT_on 			{final_buffer[20] |= BIT6;final_buffer[21] |= BIT6;}
-#define DP_MIN_on			final_buffer[31] |= BIT4
-#define DP_MIN_ALM_on		final_buffer[31] |= BIT5
-#define DP_LOGO_ALM_on 		{final_buffer[16] |= BIT6;final_buffer[17] |= BIT6;final_buffer[18] |= BIT6;final_buffer[19] |= BIT6;}
-#define DP_LOGO_on 			{final_buffer[16] |= BIT7;final_buffer[17] |= BIT7;final_buffer[18] |= BIT7;final_buffer[19] |= BIT7;}
+	//-------------------------------------------------
+	#define DP_UNIT_on 			{final_buffer[20] |= BIT6;final_buffer[21] |= BIT6;}
+	#define DP_MIN_on			final_buffer[31] |= BIT4
+	#define DP_MIN_ALM_on		final_buffer[31] |= BIT5
+	#define DP_LOGO_ALM_on 		{final_buffer[16] |= BIT6;final_buffer[17] |= BIT6;final_buffer[18] |= BIT6;final_buffer[19] |= BIT6;}
+	#define DP_LOGO_on 			{final_buffer[16] |= BIT7;final_buffer[17] |= BIT7;final_buffer[18] |= BIT7;final_buffer[19] |= BIT7;}
+		
+	//-------------------------------------------------
+	#define RTC_BC1_on 			{final_buffer[23] |= BIT1; final_buffer[24] |= BIT1;}
+	#define RTC_COL_on			final_buffer[23] |= BIT0
+	#define RTC_AM_on 			final_buffer[25] |= BIT1
+	#define RTC_PM_on 			final_buffer[26] |= BIT1
+
+	//-------------------------------------------------
+	#define MIN_on 				final_buffer[4] |= BIT6
+	#define MAX_on 				final_buffer[9] |= BIT6
+	#define MEAN_on 			final_buffer[10] |= BIT6
+	#define SET_on 				final_buffer[6] |= BIT6
+	#define ID_on 				final_buffer[5] |= BIT6
+	#define ACK_on 				final_buffer[8] |= BIT6
+	#define LOGO_on 			{final_buffer[0] |= BIT6;final_buffer[1] |= BIT6;final_buffer[2] |= BIT6;final_buffer[3] |= BIT6;}
+
+	#define DOOR_on 			{final_buffer[22] |= BIT6; final_buffer[23] |= BIT6;}
+	#define DOOR_SYM_on 		{final_buffer[29] |= BIT1; final_buffer[30] |= BIT1;}
+	#define DOOR_ALM_on 		{final_buffer[22] |= BIT7; final_buffer[23] |= BIT7;}
+
+#else
+
+	#define RH_UNIT_on 			final_buffer[8] |= BIT6
+	#define RH_UNIT_ALM_on 		final_buffer[9] |= BIT6
+	#define RH_LOGO_on 			final_buffer[7] |= BIT6
+	#define RH_LOGO_ALM_on 		final_buffer[6] |= BIT6
 	
-//-------------------------------------------------
-#define RTC_BC1_on 			{final_buffer[23] |= BIT1; final_buffer[24] |= BIT1;}
-#define RTC_COL_on			final_buffer[23] |= BIT0
-#define RTC_AM_on 			final_buffer[25] |= BIT1
-#define RTC_PM_on 			final_buffer[26] |= BIT1
+	//-------------------------------------------------
+	#define TM_UNIT_C_on 		final_buffer[5] |= BIT6
+	#define TM_UNIT_C_ALM_on 	final_buffer[4] |= BIT6
+	#define TM_LOGO_on 			{final_buffer[0] |= BIT6;final_buffer[2] |= BIT6;}
+	#define TM_LOGO_ALM_on 		{final_buffer[1] |= BIT6;final_buffer[3] |= BIT6;}
+	
+	//-------------------------------------------------
+	#define DP_UNIT_Pa_on 		{final_buffer[4] |= BIT7;final_buffer[5] |= BIT7;}
+	#define DP_UNIT_mmH2O_on 	{final_buffer[6] |= BIT7;final_buffer[7] |= BIT7;final_buffer[8] |= BIT7;}
+	#define DP_LOGO_on 			{final_buffer[16] |= BIT4;final_buffer[17] |= BIT4;final_buffer[18] |= BIT4;final_buffer[19] |= BIT4;}
+	#define DP1_on 				final_buffer[20] |= BIT4
+	#define DP2_on 				final_buffer[21] |= BIT4
+	#define DP3_on 				final_buffer[22] |= BIT4
+	
+	//-------------------------------------------------
+	#define RTC_COL_on			final_buffer[23] |= BIT2
+	#define RTC_AM_on 			final_buffer[23] |= BIT3
+	#define RTC_PM_on 			final_buffer[23] |= BIT4
 
-//-------------------------------------------------
-#define MIN_on 				final_buffer[4] |= BIT6
-#define MAX_on 				final_buffer[9] |= BIT6
-#define MEAN_on 			final_buffer[10] |= BIT6
-#define SET_on 				final_buffer[6] |= BIT6
-#define ID_on 				final_buffer[5] |= BIT6
-#define ACK_on 				final_buffer[8] |= BIT6
-#define LOGO_on 			{final_buffer[0] |= BIT6;final_buffer[1] |= BIT6;final_buffer[2] |= BIT6;final_buffer[3] |= BIT6;}
+	//-------------------------------------------------
+	#define LOGO_on 			{final_buffer[9] |= BIT7;final_buffer[10] |= BIT7;final_buffer[11] |= BIT7;final_buffer[12] |= BIT7;final_buffer[13] |= BIT7;final_buffer[14] |= BIT7;final_buffer[15] |= BIT7;}
 
-#define DOOR_on 			{final_buffer[22] |= BIT6; final_buffer[23] |= BIT6;}
-#define DOOR_SYM_on 		{final_buffer[29] |= BIT1; final_buffer[30] |= BIT1;}
-#define DOOR_ALM_on 		{final_buffer[22] |= BIT7; final_buffer[23] |= BIT7;}
+	#define DOOR_on 			{final_buffer[11] |= BIT6; final_buffer[13] |= BIT6; final_buffer[14] |= BIT6;}
+	#define DOOR_ALM_on 		{final_buffer[10] |= BIT6; final_buffer[12] |= BIT6; final_buffer[15] |= BIT6;}
+
+	//-------------------------------------------------
+	#define WiFi_CON_on 		{final_buffer[1] |= BIT7; final_buffer[2] |= BIT7;}
+	#define WiFi_NCON_on 		{final_buffer[0] |= BIT7; final_buffer[3] |= BIT7;}
+	
+#endif
 
 
 #define BLANK	20

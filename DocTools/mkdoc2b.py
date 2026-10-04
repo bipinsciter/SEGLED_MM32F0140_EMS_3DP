@@ -52,6 +52,8 @@ META = {
     'RHMAX_ID':  ('Humidity recorded maximum', '%RH', 'hundredths'),
 
     'LOGINTVAL_ID': ('Log interval', 'min', 'plain, 1 to 1440; see section 11'),
+    'SCROLL_TIME_ID': ('Parameter scroll time', 's',
+                       'plain, 1 to 60; ONE-LINE panels only - a three-line build answers INVALID_PARA'),
     'DVCID_ID':     ('Device address', '',
                      'plain; must be written twice, see section 10'),
     'TMUNT_ID':     ('Temperature unit', '', '0 Celsius, 1 Fahrenheit'),
@@ -136,7 +138,8 @@ GROUPS = [
                             'DOOR_SENSE_POLARITY_ID']),
     ('8.7  Display and communications', ['LCD_BRIGHT_CNT_ID', 'LCD_CONTROL_ID',
                                          'COM_CONTROL_ID', 'AUTO_SENT_INTERVAL_ID',
-                                         'XBEE_RST_INTERVAL_ID', 'DEVICES_IN_GROUP_ID']),
+                                         'XBEE_RST_INTERVAL_ID', 'DEVICES_IN_GROUP_ID',
+                                         'SCROLL_TIME_ID']),
     ('8.8  Calibration', ['CAL_FPWD_ID', 'CAL_CPWD_ID', 'CPWD_ID', 'FCPWD_ID',
                           'DP1CAL_ID', 'DP2CAL_ID', 'DP3CAL_ID', 'TMCAL_ID', 'RHCAL_ID',
                           'DP_OFFSET_ID', 'DP_SW_FACT_ID', 'DP_LIMIT_ID',

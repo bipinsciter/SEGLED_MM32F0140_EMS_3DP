@@ -514,9 +514,9 @@
  {
   "hex": "0x4F",
   "name": "SCROLL_TIME_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
+  "read": true,
+  "write": true,
+  "expr": "ParaScrollTime",
   "mode": null
  },
  {

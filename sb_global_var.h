@@ -13,7 +13,7 @@ extern uint8_t DeviceID;
 extern uint32_t gu32_SrNumber;
 extern uint8_t RTC_data[7];
 extern uint8_t mode;
-extern uint8_t Normal_para_cnt,autoCal_para_cnt,para_cnt1;
+extern uint8_t Normal_para_cnt,autoCal_para_cnt,gu8_scroll_disp_para;
 extern uint8_t gu8_SetACKPwd,gu8_deviceIDChangeTry;
 extern int16_t dummy,dummy1;
 extern uint8_t last_sec,last_min,last_hr,current_sec,current_min,current_hr;
@@ -153,6 +153,9 @@ extern uint32_t LowEpoch,MidEpoch,MidEpoch1,HighEpoch,MidLogInd;
 extern uint32_t InitLogInd,LastLogInd,StartEpoch,EndEpoch,StartEpochTime,EndEpochTime,TotalLog,StartLogInd,EndLogInd;
 extern uint8_t Temp_RTC_ARR[5];
 extern uint8_t gu8_masterEnable,gu8_rly_stat;
+#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
+extern uint8_t ParaScrollTime;
+#endif
 extern uint8_t RTCSetFlag;
 extern uint16_t logtransfer;
 
