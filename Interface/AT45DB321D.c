@@ -7,8 +7,12 @@
 #include "..\platform.h"
 #include "hal_conf.h"
 #include "..\gpio.h"
+#include "ConfigStore.h"
 
-#if (DATAFLASH_PART == DATAFLASH_AT45DB321D)
+//Gated on the part being FITTED as well as selected - see ENABLE_EXT_DATAFLASH.
+//Without this the driver still defines ReadEEPROMData/WriteEEPROMData and collides
+//with the stand-ins in ConfigStore.c.
+#if (ENABLE_EXT_DATAFLASH && (DATAFLASH_PART == DATAFLASH_AT45DB321D))
 
 union
 {
@@ -18,8 +22,26 @@ union
 
 bool at45d_ready_flag=false;
 
+//Cold configuration is diverted before it reaches the bus.  CFG_COLD_ADDR is a
+//virtual base well outside this part's address space, so anything carrying it is a
+//settings access and belongs to the RAM mirror in ConfigStore.c.  Everything else -
+//the logs, and the hot entries that sit beside them - goes to the chip as before.
+#if (CONFIG_STORE == CONFIG_STORE_INTERNAL)
+  #define CFG_IS_COLD(a)	((a) >= CFG_COLD_ADDR)
+#else
+  #define CFG_IS_COLD(a)	(0)
+#endif
+
 void WriteEEPROMData(uint32_t Address,uint8_t *buffer,uint16_t bytes)
 {
+#if (CONFIG_STORE == CONFIG_STORE_INTERNAL)
+	if(CFG_IS_COLD(Address))
+	{
+		ConfigStore_Write(Address - CFG_COLD_ADDR, buffer, bytes);
+		return;
+	}
+#endif
+	
 	uint16_t Page=0,StartAddress=0,RemainSpace=0;
 	uint8_t nextcheck=0;
 	
@@ -106,6 +128,14 @@ void WriteEEPROMData(uint32_t Address,uint8_t *buffer,uint16_t bytes)
 
 void ReadEEPROMData(uint32_t Address,uint8_t *buffer,uint16_t bytes)
 {
+#if (CONFIG_STORE == CONFIG_STORE_INTERNAL)
+	if(CFG_IS_COLD(Address))
+	{
+		ConfigStore_Read(Address - CFG_COLD_ADDR, buffer, bytes);
+		return;
+	}
+#endif
+	
 	//AT45D_ResumeFromPowerDown();
 	
 	// Wait until DataFlash is not busy

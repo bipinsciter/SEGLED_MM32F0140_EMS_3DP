@@ -14,7 +14,8 @@
 #include "hal_conf.h"
 #include "..\gpio.h"
 
-#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+//Gated on the part being FITTED as well as selected - see ENABLE_EXT_DATAFLASH.
+#if (ENABLE_EXT_DATAFLASH && (DATAFLASH_PART == DATAFLASH_XM25QH128A))
 
 //-------------------------------------------------------------------------------------
 // One 256-byte staging buffer, shared by the sector read-modify-write path.

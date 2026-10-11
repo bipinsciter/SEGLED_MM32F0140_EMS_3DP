@@ -13,7 +13,21 @@
 
 #include "..\sb_const.h"
 
-#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+#if !ENABLE_EXT_DATAFLASH
+
+	//No part fitted.  The API still exists so the application compiles unchanged, but
+	//nothing reaches a bus: ConfigStore.c answers the configuration out of the internal
+	//store and reports everything else as erased.  See ENABLE_EXT_DATAFLASH.
+	#include "ConfigStore.h"
+
+	//The size of a reading record, which is a property of the record and not of the
+	//part - the RAM buffer still keeps readings in this shape with no flash fitted.
+	//Both part headers define it to the same value.
+	#ifndef LOG_SIZE
+		#define LOG_SIZE	50
+	#endif
+
+#elif (DATAFLASH_PART == DATAFLASH_XM25QH128A)
 	#include "XM25QH128A.h"
 #else
 	#include "AT45DB321D.h"
@@ -31,7 +45,7 @@
 // (with the AT45 map as-is, REGULAR_LOG_ADDR = 2048 shares sector 0 with the whole
 // config block - the first log write would erase every stored setting).
 //-------------------------------------------------------------------------------------
-#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+#if (ENABLE_EXT_DATAFLASH && (DATAFLASH_PART == DATAFLASH_XM25QH128A))
 
 	#if ((CONFIG_PARA_ADDR % XM25_SECTOR_SIZE) != 0)
 		#error "XM25QH128A: CONFIG_PARA_ADDR must be 4 KB aligned"
@@ -76,7 +90,19 @@
 // Everything else (WriteEEPROMData / ReadEEPROMData / WriteLog / ReadLog /
 // ReadMinMaxLog) already has the same name in both drivers.
 //-------------------------------------------------------------------------------------
-#if (DATAFLASH_PART == DATAFLASH_XM25QH128A)
+#if !ENABLE_EXT_DATAFLASH
+
+	//No part fitted: every one of these is a no-op, and a bulk erase has nothing to
+	//walk.  They stay defined so the call sites need no #if of their own.
+	#define DF_Init()				((void)0)
+	#define DF_ConfigurePageSize()	((void)0)
+	#define DF_ChipErase()			((void)0)
+	#define DF_ERASE_UNITS			0UL
+	#define DF_EraseUnit(i)			((void)(i))
+	#define DF_RtFlush()			((void)0)
+	#define DF_RtReset()			((void)0)
+
+#elif (DATAFLASH_PART == DATAFLASH_XM25QH128A)
 
 	#define DF_Init()				XM25_Init()
 	#define DF_ConfigurePageSize()	((void)0)		//NOR has no configurable page size

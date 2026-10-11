@@ -133,16 +133,15 @@ P('The device takes what you send as the true reading and stores the difference 
   'what it is measuring at that moment, as measured minus reference. It also resets '
   'that channel’s recorded minimum and maximum. Sending 00250 to 0x32 therefore '
   'means “you are actually reading 25.0 right now”.', bold=True)
-P('Reading — the reply changes length with the unlock state', bold=True)
-TABLE(['State', 'Reply length', 'Contents'],
-      [['locked', '12 bytes', 'the stored correction only'],
-       ['factory unlocked', '39 bytes',
-        'correction, then 12 bytes of calibration date and 15 of certificate'],
-       ['customer unlocked', '72 bytes',
-        'correction, then 60 bytes of user calibration date history']],
-      [1.4, 1.2, 4.0])
-P('In every case the correction is the first five characters of the payload, zero '
-  'padded, in tenths, with a minus sign in the first position when negative.')
+P('Reading — always 12 bytes', bold=True)
+P('The reply carries the stored correction and nothing else, whatever the unlock state. '
+  'The correction is the first five characters of the payload, zero padded, in tenths, '
+  'with a minus sign in the first position when negative.')
+P('Up to V1.0.9 this reply grew with the unlock state - 39 bytes with factory '
+  'calibration open and 72 with customer calibration open - because the calibration '
+  'date and certificate history rode along behind the value. That history has been '
+  'removed from the firmware. A host that still reads by the old lengths will wait for '
+  'bytes that are never sent.', bold=True)
 
 H('10.5.1  Which unit a temperature is in', 3)
 P('This is not uniform, and it catches people out. The device stores and transmits '

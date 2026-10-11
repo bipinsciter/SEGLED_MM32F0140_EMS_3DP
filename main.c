@@ -20,6 +20,7 @@
 //#include "DS1307.h"
 #include "PCF8563.h"
 #include "dataflash.h"		//selects AT45DB321D or XM25QH128A via DATAFLASH_PART
+#include "Interface/ConfigStore.h"
 //#include "SPI.h"
 #include "spi_master_polling.h"
 #include "iwdg_systemmonitor.h"
@@ -651,7 +652,7 @@ void InitLEDController(void)
 	{
 		TM1680WriteCommand(SYS_ENABLE);
 		TM1680WriteCommand(LED_ON);
-		TM1680Brighness(gu8_LCDBrigthnessCnt);
+		TM1680Brighness(15);
 	}
 	//----------------------------
 	AllSegment(1);
@@ -4498,7 +4499,7 @@ void CheckUpDnKey(void)
 	else if(!PROG_ENT_KEY)
 	{
 		ProgModeTimer++;
-		if(ProgModeTimer > 10)
+		if(ProgModeTimer > KEY_HOLD_5SEC)
 		{
 			ProgModeTimer=0;
 			
@@ -9574,60 +9575,15 @@ void ServePCMsg(void)
 			chartostr(tempshort,&TxBuffer[5],5);	
 			if(a1==1)TxBuffer[5] = '-';
 			
-			if(bool_FactoryCalibrationOn)
-			{
-				switch(RxBuffer[3])
-				{
-					case DP1CAL_ID:			us1=DP1_CAL_DATE_ADDR;	us2=DP1_CAL_CERT_ADDR;			break;
-					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-					case DP2CAL_ID:			us1=DP2_CAL_DATE_ADDR;	us2=DP2_CAL_CERT_ADDR;			break;
-					case DP3CAL_ID:			us1=DP3_CAL_DATE_ADDR;	us2=DP3_CAL_CERT_ADDR;			break;
-					#else
-					case TMCAL_ID:			us1=TM_CAL_DATE_ADDR;	us2=TM_CAL_CERT_ADDR;			break;
-					case RHCAL_ID:			us1=RH_CAL_DATE_ADDR;	us2=RH_CAL_CERT_ADDR;			break;
-					#endif
-				}
-				
-				ReadEEPROMData(us1,(uint8_t*)&TxBuffer[10],12);
-				ReadEEPROMData(us2,(uint8_t*)&TxBuffer[22],15);
-				
-				TxBuffer[37]=CalCRC(&TxBuffer[1],36);
-				TxBuffer[38]=0xFC;
-				
-				SetTxmode(TxBuffer,39);
-			}
-			else if(bool_CustmerCalibrationOn)
-			{
-				switch(RxBuffer[3])
-				{
-					case DP1CAL_ID:			us1=DP1_USER_CAL_DATE_ADDR;				break;
-					#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-					case DP2CAL_ID:			us1=DP2_USER_CAL_DATE_ADDR;				break;
-					case DP3CAL_ID:			us1=DP3_USER_CAL_DATE_ADDR;				break;
-					#else
-					case TMCAL_ID:			us1=TM_USER_CAL_DATE_ADDR;				break;
-					case RHCAL_ID:			us1=RH_USER_CAL_DATE_ADDR;				break;
-					#endif
-				}
-				
-				ReadEEPROMData(us1,(uint8_t*)&TxBuffer[10],60);
-				
-				TxBuffer[70]=CalCRC(&TxBuffer[1],69);
-				TxBuffer[71]=0xFC;
-				
-				SetTxmode(TxBuffer,72);
-			}
-			else
-			{
-				//Calibration is locked, so there is no date history to attach - but the
-				//host still has to get an answer.  Without this the branch fell through
-				//having sent nothing at all, leaving the host to time out.  The read
-				//switch has already put 0 in tempshort for the locked case.
-				TxBuffer[10]=CalCRC(&TxBuffer[1],9);
-				TxBuffer[11]=0xFC;
-				
-				SetTxmode(TxBuffer,12);
-			}
+			//One length whatever the unlock state.  The reply used to grow to 39 bytes with
+			//factory calibration open and 72 with customer calibration open, because the
+			//calibration date and certificate history rode along behind the value.  That
+			//history has been removed, so those bytes had nothing left to carry - they were
+			//whatever the previous message left in TxBuffer, wrapped in a valid CRC.
+			TxBuffer[10]=CalCRC(&TxBuffer[1],9);
+			TxBuffer[11]=0xFC;
+			
+			SetTxmode(TxBuffer,12);
 		}
 		else
 		{
@@ -10369,6 +10325,12 @@ void SecondTick(void)
 		gu8_restartTimer--;
 		if(!gu8_restartTimer)
 		{
+			#if (CONFIG_STORE == CONFIG_STORE_INTERNAL)
+			//Commit anything still waiting on the settle timer.  The restart is deliberate
+			//and immediate, so there is no later pass of the main loop to do it for us.
+			ConfigStore_Flush();
+			#endif
+			
 			NVIC_SystemReset();	
 		}
 	}
@@ -11772,16 +11734,42 @@ void whileTask(void)
 	}
 	
 	#ifdef ENABLE_KEY_LOGIC
-	//Both key scanners run on the fixed 50 ms tick.  check_key() used to run at whatever
-	//rate the main loop happened to spin at, so its debounce counted loop iterations
-	//(microseconds) rather than time, and stalled whenever the loop blocked on flash.
-	//check_key() must stay first: it clears key_up_count / key_dn_count on release.
-	if(bool_keyScan_flag)
+	//Both key scanners run once per 50 ms of ELAPSED time.  check_key() must stay first:
+	//it clears key_up_count / key_dn_count on release.
+	//
+	//This used to be gated on bool_keyScan_flag, which the TIM1 ISR sets every 50 ms.  A
+	//boolean cannot hold more than one tick: setting one that is already set is a no-op.
+	//A whileTask() pass takes about 85 ms because it refreshes the display every time, so
+	//roughly every second tick was dropped and EVERY key timing measured in those ticks
+	//ran about 1.7 times long.  KEY_HOLD_5SEC is 100 ticks - five seconds on paper, nearer
+	//eight and a half in the hand - and KEY_HOLD_10SEC nearer seventeen.  The repeat
+	//ladder and the debounce were stretched by the same factor.
+	//
+	//Reading the free-running counter and consuming the difference is race free: the ISR
+	//only writes it, main only reads it, and unsigned subtraction survives the wrap.  It
+	//is the same shape as the timer block further down, which was fixed for this reason.
 	{
-		check_key();		//Check Keyboard
-		CheckUpDnKey();		//Check UP and Down key
-		bool_keyScan_flag=0;
+		static uint16_t lu16_lastKeyTick=0;
+		uint16_t lu16_now = gu16_tick50;
+		uint16_t lu16_ticks = (uint16_t)(lu16_now - lu16_lastKeyTick);
+		
+		lu16_lastKeyTick = lu16_now;
+		
+		//Bounded catch-up.  A normal pass owes one or two ticks and the limit never binds.
+		//It matters after a long stall - a blocking sensor read, a configuration commit -
+		//because CheckUpDnKey() contains four 4-second confirmation delays, and replaying
+		//forty ticks through those would stall the loop for minutes and then owe forty more.
+		if(lu16_ticks > KEY_SCAN_CATCHUP_MAX) lu16_ticks = KEY_SCAN_CATCHUP_MAX;
+		
+		while(lu16_ticks)
+		{
+			lu16_ticks--;
+			
+			check_key();		//Check Keyboard
+			CheckUpDnKey();		//Check UP and Down key
+		}
 	}
+	bool_keyScan_flag=0;	//still set by the ISR; nothing reads it now
 	#endif
 	
 	if(bool_msec250_flag)
@@ -11951,6 +11939,13 @@ void whileTask(void)
 
 	conv_value();
 	disp_value();
+
+	#if (CONFIG_STORE == CONFIG_STORE_INTERNAL)
+	//Commit a changed setting once the changes stop arriving.  Last in the pass, after
+	//the display, so the page erase lands in the quiet part of the loop rather than
+	//between a measurement and the reading it produces.
+	ConfigStore_Tick();
+	#endif
 } 
 
 
@@ -12124,9 +12119,6 @@ void boot_data(void)
 			u16_dp_limit[DP1]=DEFAULT_DP_LIMIT;
 			WriteEEPROMData((DP_LIMIT_ADDR),(uint8_t*)&u16_dp_limit[DP1],sizeof(u16_dp_limit[DP1]));
 			f32_dp_limit[DP1]=(float)u16_dp_limit[DP1]/10.0;
-			
-			DP_UserCalDateInd[DP1]=0;
-			WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
 		}
 		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 		if(gu16_parameterWord & ENABLE_DP2)
@@ -12171,8 +12163,6 @@ void boot_data(void)
 			WriteEEPROMData((DP_LIMIT_ADDR+2),(uint8_t*)&u16_dp_limit[DP2],sizeof(u16_dp_limit[DP2]));
 			f32_dp_limit[DP2]=(float)u16_dp_limit[DP2]/10.0;
 			
-			DP_UserCalDateInd[DP2]=0;
-			WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
 		}
 		
 		if(gu16_parameterWord & ENABLE_DP3)
@@ -12217,8 +12207,6 @@ void boot_data(void)
 			WriteEEPROMData((DP_LIMIT_ADDR+4),(uint8_t*)&u16_dp_limit[DP3],sizeof(u16_dp_limit[DP3]));
 			f32_dp_limit[DP3]=(float)u16_dp_limit[DP3]/10.0;
 			
-			DP_UserCalDateInd[DP3]=0;
-			WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
 		}
 		#else
 		if(gu16_parameterWord & ENABLE_TEMP)
@@ -12250,9 +12238,6 @@ void boot_data(void)
 			
 			LastTM_Alrm_ON=0;
 			WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
-			
-			TM_UserCalDateInd=0;
-			WriteEEPROMData(TM_USER_CAL_DATE_IND_ADDR,&TM_UserCalDateInd,sizeof(TM_UserCalDateInd));
 		}
 			
 		if(gu16_parameterWord & ENABLE_RH)
@@ -12281,9 +12266,6 @@ void boot_data(void)
 
 			LastRH_Alrm_ON=0;
 			WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
-			
-			RH_UserCalDateInd=0;
-			WriteEEPROMData(RH_USER_CAL_DATE_IND_ADDR,&RH_UserCalDateInd,sizeof(RH_UserCalDateInd));
 		}
 		#endif
 		gu8_broadcast = 0;
@@ -12566,13 +12548,6 @@ void boot_data(void)
 				WriteEEPROMData(DP1_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP1],sizeof(gu8_DpAlarmSensingTime[DP1]));
 			}
 			
-			ReadEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
-			if(DP_UserCalDateInd[DP1]>15)
-			{
-				DP_UserCalDateInd[DP1]=0;
-				WriteEEPROMData(DP1_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP1],sizeof(DP_UserCalDateInd[DP1]));
-			}
-			
 			ReadEEPROMData((DP_SW_FACT_ADDR+(DP1*2)),(uint8_t*)&su16_dp_sw_factor[DP1],sizeof(su16_dp_sw_factor[DP1]));
 			if((su16_dp_sw_factor[DP1]<-10000) || (su16_dp_sw_factor[DP1]>10000))
 			{	
@@ -12673,13 +12648,6 @@ void boot_data(void)
 				WriteEEPROMData(DP2_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP2],sizeof(gu8_DpAlarmSensingTime[DP2]));
 			}
 			
-			ReadEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
-			if(DP_UserCalDateInd[DP2]>15)
-			{
-				DP_UserCalDateInd[DP2]=0;
-				WriteEEPROMData(DP2_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP2],sizeof(DP_UserCalDateInd[DP2]));
-			}
-			
 			ReadEEPROMData((DP_SW_FACT_ADDR+(DP2*2)),(uint8_t*)&su16_dp_sw_factor[DP2],sizeof(su16_dp_sw_factor[DP2]));
 			if((su16_dp_sw_factor[DP2]<-10000) || (su16_dp_sw_factor[DP2]>10000))
 			{	
@@ -12778,13 +12746,6 @@ void boot_data(void)
 			{
 				gu8_DpAlarmSensingTime[DP3]=5;
 				WriteEEPROMData(DP3_ALM_SENSE_TIME_ADDR,&gu8_DpAlarmSensingTime[DP3],sizeof(gu8_DpAlarmSensingTime[DP3]));
-			}
-			
-			ReadEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
-			if(DP_UserCalDateInd[DP3]>15)
-			{
-				DP_UserCalDateInd[DP3]=0;
-				WriteEEPROMData(DP3_USER_CAL_DATE_IND_ADDR,&DP_UserCalDateInd[DP3],sizeof(DP_UserCalDateInd[DP3]));
 			}
 			
 			ReadEEPROMData((DP_SW_FACT_ADDR+(DP3*2)),(uint8_t*)&su16_dp_sw_factor[DP3],sizeof(su16_dp_sw_factor[DP3]));
@@ -12911,13 +12872,6 @@ void boot_data(void)
 				LastTM_Alrm_ON=0;
 				WriteEEPROMData(LAST_TM_ALRM_STAT,(uint8_t*)&LastTM_Alrm_ON,sizeof(LastTM_Alrm_ON));
 			}
-			
-			ReadEEPROMData(TM_USER_CAL_DATE_IND_ADDR,&TM_UserCalDateInd,sizeof(TM_UserCalDateInd));
-			if(TM_UserCalDateInd>15)
-			{
-				TM_UserCalDateInd=0;
-				WriteEEPROMData(TM_USER_CAL_DATE_IND_ADDR,&TM_UserCalDateInd,sizeof(TM_UserCalDateInd));
-			}
 		}
 		
 		if(gu16_parameterWord & ENABLE_RH)
@@ -12986,13 +12940,6 @@ void boot_data(void)
 			{
 				LastRH_Alrm_ON=0;
 				WriteEEPROMData(LAST_RH_ALRM_STAT,(uint8_t*)&LastRH_Alrm_ON,sizeof(LastRH_Alrm_ON));
-			}
-			
-			ReadEEPROMData(RH_USER_CAL_DATE_IND_ADDR,&RH_UserCalDateInd,sizeof(RH_UserCalDateInd));
-			if(RH_UserCalDateInd>15)
-			{
-				RH_UserCalDateInd=0;
-				WriteEEPROMData(RH_USER_CAL_DATE_IND_ADDR,&RH_UserCalDateInd,sizeof(RH_UserCalDateInd));
 			}
 		}
 		#endif
@@ -13593,6 +13540,13 @@ int main(void)
 	I2C3_Init();
 	
 	InitLEDController();
+	#if (CONFIG_STORE == CONFIG_STORE_INTERNAL)
+	//Before boot_data(), which is the first thing that reads a setting.  Until this
+	//runs the mirror is empty and every read would come back as zeros rather than the
+	//0xFF an unwritten cell should give.
+	ConfigStore_Load();
+	#endif
+	
 	boot_data();	//Boot Data from Dataflash
 
 	//-------------------------------------------------------

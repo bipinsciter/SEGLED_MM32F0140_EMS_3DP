@@ -1,10 +1,16 @@
 #ifndef SB_CONST_H_
 #define SB_CONST_H_
 
+//CfgCold_t below is a real structure and its field addresses are offsetof(), so
+//this header needs the fixed-width types and offsetof in its own right rather than
+//relying on whatever happened to be included before it.
+#include <stdint.h>
+#include <stddef.h>
+
 
 #define FW_MAJOR	1
-#define FW_MINOR	0
-#define FW_PATCH	8
+#define FW_MINOR	1
+#define FW_PATCH	0
 
 #define ENABLE_KEY_LOGIC
 
@@ -23,6 +29,41 @@
 #define DATAFLASH_XM25QH128A	1
 
 #define DATAFLASH_PART			DATAFLASH_AT45DB321D
+
+//------------------------------------------------------------------------
+//Where the COLD configuration lives.  The logs and the hot entries beside them
+//are unaffected by this and stay in the data flash either way.
+//
+//  EXTERNAL - as it has always been, in the data flash config region
+//  INTERNAL - the last 2 KB of the MCU's own 64 KB, two 1 KB pages used as an
+//             A/B pair so a power cut during a save leaves the previous copy intact
+//
+//Choosing INTERNAL means IROM1 must stop at 0xF800; see the note at CFG_FLASH_PAGE_A.
+//------------------------------------------------------------------------
+//Is an external data flash fitted at all?
+//
+//0 takes the part out of the build completely: its driver, all five logs, and the
+//persistence of the entries that live beside them.  What that costs is worth being
+//explicit about - the recorded minimum and maximum and the last alarm state are kept
+//in the data flash, so without it they start from the current reading on every power
+//up.  Everything the user configures is unaffected; that lives in the internal store.
+//
+//The cold configuration must already be internal when this is 0, or there would be
+//nowhere at all to keep it.  Checked below.
+#define ENABLE_EXT_DATAFLASH	0
+
+#define CONFIG_STORE_EXTERNAL	0
+#define CONFIG_STORE_INTERNAL	1
+#define CONFIG_STORE			CONFIG_STORE_INTERNAL
+
+#if (!ENABLE_EXT_DATAFLASH && (CONFIG_STORE != CONFIG_STORE_INTERNAL))
+	#error "No external data flash, so the configuration has nowhere to live - set CONFIG_STORE to CONFIG_STORE_INTERNAL"
+#endif
+
+//Last 2 KB of 64 KB.  Two pages, erased independently, written alternately.
+#define CFG_FLASH_PAGE_SIZE		0x400UL
+#define CFG_FLASH_PAGE_A		0x0800F800UL
+#define CFG_FLASH_PAGE_B		(CFG_FLASH_PAGE_A + CFG_FLASH_PAGE_SIZE)
 
 //Set to 1 to build XM25_SelfTest() and its diagnostics into the image.  Leave at 0
 //for production: the test costs about 600 bytes of code and erases the scratch
@@ -43,7 +84,7 @@
 //------------------------------------------------------------------------
 #define THREE_LINE_DISPLAY		0
 #define ONE_LINE_DISPLAY		1
-#define DISPLAY_TYPE			ONE_LINE_DISPLAY
+#define DISPLAY_TYPE			THREE_LINE_DISPLAY
 
 
 #define DP1_DISPLAY				0
@@ -98,9 +139,25 @@
 #endif
 
 #define BUILD_REGULAR_LOG	1	//60000-record event log, LogReading()  (RDLG_* commands)
+#if !ENABLE_EXT_DATAFLASH
+	#undef  BUILD_REGULAR_LOG
+	#define BUILD_REGULAR_LOG	0
+#endif
 #define BUILD_LOG24_LOG		1	//1440-record rolling 24 h ring         (FLASH24_* commands)
+#if !ENABLE_EXT_DATAFLASH
+	#undef  BUILD_LOG24_LOG
+	#define BUILD_LOG24_LOG	0
+#endif
 #define BUILD_MINMAX_LOG	1	//15-day min/max/mean archive           (MIN_MAX_MEAN_MODE)
+#if !ENABLE_EXT_DATAFLASH
+	#undef  BUILD_MINMAX_LOG
+	#define BUILD_MINMAX_LOG	0
+#endif
 #define BUILD_MEAN24_LOG	1	//24 hourly means                       (MEAN_HOUR_MODE)
+#if !ENABLE_EXT_DATAFLASH
+	#undef  BUILD_MEAN24_LOG
+	#define BUILD_MEAN24_LOG	0
+#endif
 #define BUILD_RAM_BUFFER	1	//rolling RAM copy of recent readings   (RAM_ALL_ID / RAM_IND_ID)
 
 #define ENABLE_DP1			0x0001
@@ -284,124 +341,181 @@
 
 
 //************************************************************************/
-// EEPROM LOCATION FOR PARAMETERS
+// CONFIGURATION PARAMETERS - ONE STRUCTURE
+//
+// Every COLD setting lives in CfgCold_t and its address is an offsetof() into that
+// structure.  The call sites still pass the same names to ReadEEPROMData() and
+// WriteEEPROMData(), so nothing outside this file changes - but the layout is now
+// produced by the compiler from one declaration instead of a hand-maintained chain of
+// "previous + size".  Inserting a field used to move every field below it: that is how
+// PARA_SCROLL_TIME shifted LOG_INTERVAL, the baud rate, the passwords, the serial
+// number and all the calibration data by one byte.
+//
+// COLD means it changes when somebody edits a setting or calibrates - a few hundred
+// times in the life of the product.  The HOT entries further down are rewritten while
+// the device runs and are deliberately NOT in here; see the note beside them.
+//
+// CFG_COLD_ADDR is a VIRTUAL base outside the data flash, the same trick RT_PARA_ADDR
+// uses: ReadEEPROMData()/WriteEEPROMData() recognise it and go to the RAM mirror in
+// ConfigStore.c instead of the bus.  Picking a base the part can never answer to means
+// a raw access that slips past the check fails visibly rather than quietly corrupting
+// whatever a truncated address would land on.
 //************************************************************************/
-#define FIRST_BOOT_CHECK		CONFIG_PARA_ADDR
-#define DISP_PARA_SELECT		(FIRST_BOOT_CHECK+1)
+#define CFG_COLD_ADDR			0x20000000UL
 
-#define DP1_UP_ALM_ON			(DISP_PARA_SELECT+2)
-#define DP1_UP_ALM_OFF			(DP1_UP_ALM_ON+2)
-#define DP1_LO_ALM_ON			(DP1_UP_ALM_OFF+2)
-#define DP1_LO_ALM_OFF			(DP1_LO_ALM_ON+2)
-#define DP2_UP_ALM_ON			(DP1_LO_ALM_OFF+2)
-#define DP2_UP_ALM_OFF			(DP2_UP_ALM_ON+2)
-#define DP2_LO_ALM_ON			(DP2_UP_ALM_OFF+2)
-#define DP2_LO_ALM_OFF			(DP2_LO_ALM_ON+2)
-#define DP3_UP_ALM_ON			(DP2_LO_ALM_OFF+2)
-#define DP3_UP_ALM_OFF			(DP3_UP_ALM_ON+2)
-#define DP3_LO_ALM_ON			(DP3_UP_ALM_OFF+2)
-#define DP3_LO_ALM_OFF			(DP3_LO_ALM_ON+2)
-#define TEMP_UP_ALM_ON			(DP3_LO_ALM_OFF+2)
-#define TEMP_UP_ALM_OFF			(TEMP_UP_ALM_ON+2)
-#define TEMP_LO_ALM_ON			(TEMP_UP_ALM_OFF+2)
-#define TEMP_LO_ALM_OFF			(TEMP_LO_ALM_ON+2)
-#define RH_UP_ALM_ON			(TEMP_LO_ALM_OFF+2)
-#define RH_UP_ALM_OFF			(RH_UP_ALM_ON+2)
-#define RH_LO_ALM_ON			(RH_UP_ALM_OFF+2)
-#define RH_LO_ALM_OFF			(RH_LO_ALM_ON+2)
+//Byte-exact layout, and the same under ARMCC and ARMCLANG - __packed is a keyword
+//in one and not the other.
+#pragma pack(push,1)
+typedef struct
+{
+	uint8_t		firstBootCheck;
+	uint16_t	paramWord;
 
-//Last alarm state per channel - reserved hole on the XM25, see CFG_MINMAX_BLOCK
-#define CFG_ALRM_STAT_BLOCK		(RH_LO_ALM_OFF+2)	/* 5 bytes: DP1,DP2,DP3,TM,RH */
+	int16_t		dp1UpAlmOn,  dp1UpAlmOff,  dp1LoAlmOn,  dp1LoAlmOff;
+	int16_t		dp2UpAlmOn,  dp2UpAlmOff,  dp2LoAlmOn,  dp2LoAlmOff;
+	int16_t		dp3UpAlmOn,  dp3UpAlmOff,  dp3LoAlmOn,  dp3LoAlmOff;
+	int16_t		tempUpAlmOn, tempUpAlmOff, tempLoAlmOn, tempLoAlmOff;
+	int16_t		rhUpAlmOn,   rhUpAlmOff,   rhLoAlmOn,   rhLoAlmOff;
 
-#define TEMP_UNIT				(CFG_ALRM_STAT_BLOCK+5)
+	uint8_t		tempUnit;
+	uint8_t		deviceId;
+	uint16_t	buzzerOnTime;
+	uint16_t	buzzerOffTime;
+	uint8_t		paraScrollTime;
+	uint16_t	logInterval;
+	uint8_t		uartBaudrate;
 
-#define DEVICE_ID				(TEMP_UNIT+1)
-#define BUZZER_ON_TIME			(DEVICE_ID+1)
-#define BUZZER_OFF_TIME			(BUZZER_ON_TIME+2)
-#define PARA_SCROLL_TIME		(BUZZER_OFF_TIME+2)
-#define LOG_INTERVAL			(PARA_SCROLL_TIME+1)
-#define UART_BAUDRATE			(LOG_INTERVAL+2)
+	uint16_t	customerPassword;
+	uint16_t	facCustomerPassword;
+	uint16_t	ackTimer;
+	uint8_t		ackPwdInd;
+	uint8_t		ackPassword[30];
+	uint8_t		deviceSrNo[16];
 
-//Min/max slots.  On the AT45 they live here; on the XM25 they move to the
-//real-time store further down, and this stays a reserved hole so that every
-//COLD address below keeps the byte offset it has always had.
-#define CFG_MINMAX_BLOCK		(UART_BAUDRATE+1)	/* 40 bytes */
+	//Set when the clock is deliberately set and cleared when it is found
+	//untrustworthy - a transition, not a periodic write, so it belongs here.
+	uint8_t		rtcSetFlag;
 
-#define CUSTOMER_PASSWORD		(CFG_MINMAX_BLOCK+40)
-#define FAC_CUSTOMER_PASSWORD	(CUSTOMER_PASSWORD+2)
-#define ACK_TIMER				(FAC_CUSTOMER_PASSWORD+2)
-#define ACK_PWD_IND				(ACK_TIMER+2)
-#define ACK_PASSWORD			(ACK_PWD_IND+1)
-#define DEVICE_SR_NO			(ACK_PASSWORD+30)
-//Log read pointer + overflow flag - reserved hole on the XM25
-#define CFG_LOG_PTR_BLOCK		(DEVICE_SR_NO+16)	/* 3 bytes: RDLC(2) + OVF(1) */
-#define CURR_LOG_IND			(CFG_LOG_PTR_BLOCK+3)
-#define CFG_LOG24_PTR_BLOCK		(CURR_LOG_IND+400)	/* 1 byte: 24 h RDLC */
-#define CURR_LOG24_IND			(CFG_LOG24_PTR_BLOCK+1)
-#define RTC_SET_FLAG_ADDR		(CURR_LOG24_IND+200)
+	int16_t		calValF[5];
+	int16_t		calValC[5];
 
-#define DP1_CAL_DATE_ADDR		(RTC_SET_FLAG_ADDR+1)
-#define DP2_CAL_DATE_ADDR		(DP1_CAL_DATE_ADDR+12)
-#define DP3_CAL_DATE_ADDR		(DP2_CAL_DATE_ADDR+12)
-#define TM_CAL_DATE_ADDR		(DP3_CAL_DATE_ADDR+12)
-#define RH_CAL_DATE_ADDR		(TM_CAL_DATE_ADDR+12)
+	uint8_t		masterEnable;
+	uint8_t		doorSensePolarity;
+	uint8_t		doorSenseTime;
+	uint8_t		dpAlmSenseTime[3];
+	uint8_t		lcdBrightCnt;
+	uint8_t		dpSwFactor[10];
+	uint8_t		relayStat;
+	uint8_t		autoSentInterval;
+	uint16_t	xbeeRstInterval;
+	uint8_t		broadcastEnb;
+	uint8_t		devicesInGroup;
+	uint8_t		xbeeMac[32];
+	uint8_t		dpLimit[6];
+	uint8_t		dpOffset[6];
+	uint8_t		lcdControl;
+	uint8_t		comControl;
+	uint8_t		dpSlotOffset[36];		//MAX_SUPPORTED_DP * DP_RANGE_SLOTS * 2
+} CfgCold_t;
+#pragma pack(pop)
 
-#define DP1_CAL_CERT_ADDR		(RH_CAL_DATE_ADDR+12)
-#define DP2_CAL_CERT_ADDR		(DP1_CAL_CERT_ADDR+15)
-#define DP3_CAL_CERT_ADDR		(DP2_CAL_CERT_ADDR+15)
-#define TM_CAL_CERT_ADDR		(DP3_CAL_CERT_ADDR+15)
-#define RH_CAL_CERT_ADDR		(TM_CAL_CERT_ADDR+15)
+#define CFG_COLD_SIZE			((uint32_t)sizeof(CfgCold_t))
+#define CFG(field)				(CFG_COLD_ADDR + offsetof(CfgCold_t, field))
 
-#define DP1_USER_CAL_DATE_IND_ADDR	(RH_CAL_CERT_ADDR+15)
-#define DP2_USER_CAL_DATE_IND_ADDR	(DP1_USER_CAL_DATE_IND_ADDR+1)
-#define DP3_USER_CAL_DATE_IND_ADDR	(DP2_USER_CAL_DATE_IND_ADDR+1)
-#define TM_USER_CAL_DATE_IND_ADDR	(DP3_USER_CAL_DATE_IND_ADDR+1)
-#define RH_USER_CAL_DATE_IND_ADDR	(TM_USER_CAL_DATE_IND_ADDR+1)
+#define FIRST_BOOT_CHECK		CFG(firstBootCheck)
+#define DISP_PARA_SELECT		CFG(paramWord)
 
-#define DP1_USER_CAL_DATE_ADDR	(RH_USER_CAL_DATE_IND_ADDR+1)
-#define DP2_USER_CAL_DATE_ADDR	(DP1_USER_CAL_DATE_ADDR+100)
-#define DP3_USER_CAL_DATE_ADDR	(DP2_USER_CAL_DATE_ADDR+100)
-#define TM_USER_CAL_DATE_ADDR	(DP3_USER_CAL_DATE_ADDR+100)
-#define RH_USER_CAL_DATE_ADDR	(TM_USER_CAL_DATE_ADDR+100)
+#define DP1_UP_ALM_ON			CFG(dp1UpAlmOn)
+#define DP1_UP_ALM_OFF			CFG(dp1UpAlmOff)
+#define DP1_LO_ALM_ON			CFG(dp1LoAlmOn)
+#define DP1_LO_ALM_OFF			CFG(dp1LoAlmOff)
+#define DP2_UP_ALM_ON			CFG(dp2UpAlmOn)
+#define DP2_UP_ALM_OFF			CFG(dp2UpAlmOff)
+#define DP2_LO_ALM_ON			CFG(dp2LoAlmOn)
+#define DP2_LO_ALM_OFF			CFG(dp2LoAlmOff)
+#define DP3_UP_ALM_ON			CFG(dp3UpAlmOn)
+#define DP3_UP_ALM_OFF			CFG(dp3UpAlmOff)
+#define DP3_LO_ALM_ON			CFG(dp3LoAlmOn)
+#define DP3_LO_ALM_OFF			CFG(dp3LoAlmOff)
+#define TEMP_UP_ALM_ON			CFG(tempUpAlmOn)
+#define TEMP_UP_ALM_OFF			CFG(tempUpAlmOff)
+#define TEMP_LO_ALM_ON			CFG(tempLoAlmOn)
+#define TEMP_LO_ALM_OFF			CFG(tempLoAlmOff)
+#define RH_UP_ALM_ON			CFG(rhUpAlmOn)
+#define RH_UP_ALM_OFF			CFG(rhUpAlmOff)
+#define RH_LO_ALM_ON			CFG(rhLoAlmOn)
+#define RH_LO_ALM_OFF			CFG(rhLoAlmOff)
 
-#define DP1_CAL_VAL_F_ADDR		(RH_USER_CAL_DATE_ADDR+100)
-#define DP2_CAL_VAL_F_ADDR		(DP1_CAL_VAL_F_ADDR+2)
-#define DP3_CAL_VAL_F_ADDR		(DP2_CAL_VAL_F_ADDR+2)
-#define TM_CAL_VAL_F_ADDR		(DP3_CAL_VAL_F_ADDR+2)
-#define RH_CAL_VAL_F_ADDR		(TM_CAL_VAL_F_ADDR+2)
+#define TEMP_UNIT				CFG(tempUnit)
+#define DEVICE_ID				CFG(deviceId)
+#define BUZZER_ON_TIME			CFG(buzzerOnTime)
+#define BUZZER_OFF_TIME			CFG(buzzerOffTime)
+#define PARA_SCROLL_TIME		CFG(paraScrollTime)
+#define LOG_INTERVAL			CFG(logInterval)
+#define UART_BAUDRATE			CFG(uartBaudrate)
 
-#define DP1_CAL_VAL_C_ADDR		(RH_CAL_VAL_F_ADDR+2)
-#define DP2_CAL_VAL_C_ADDR		(DP1_CAL_VAL_C_ADDR+2)
-#define DP3_CAL_VAL_C_ADDR		(DP2_CAL_VAL_C_ADDR+2)
-#define TM_CAL_VAL_C_ADDR		(DP3_CAL_VAL_C_ADDR+2)
-#define RH_CAL_VAL_C_ADDR		(TM_CAL_VAL_C_ADDR+2)
+#define CUSTOMER_PASSWORD		CFG(customerPassword)
+#define FAC_CUSTOMER_PASSWORD	CFG(facCustomerPassword)
+#define ACK_TIMER				CFG(ackTimer)
+#define ACK_PWD_IND				CFG(ackPwdInd)
+#define ACK_PASSWORD			CFG(ackPassword)
+#define DEVICE_SR_NO			CFG(deviceSrNo)
+#define RTC_SET_FLAG_ADDR		CFG(rtcSetFlag)
 
-//Day index of the min/max/mean log - reserved hole on the XM25
-#define CFG_MINMAX_IND_BLOCK	(RH_CAL_VAL_C_ADDR+2)	/* 5 bytes */
-#define MASTER_ENABLE_ADDR		(CFG_MINMAX_IND_BLOCK+5)
+#define DP1_CAL_VAL_F_ADDR		CFG(calValF[0])
+#define DP2_CAL_VAL_F_ADDR		CFG(calValF[1])
+#define DP3_CAL_VAL_F_ADDR		CFG(calValF[2])
+#define TM_CAL_VAL_F_ADDR		CFG(calValF[3])
+#define RH_CAL_VAL_F_ADDR		CFG(calValF[4])
 
-#define DOOR_SENSE_POLARITY_ADDR		(MASTER_ENABLE_ADDR+1)
-#define DOOR_SENSE_TIME_ADDR			(DOOR_SENSE_POLARITY_ADDR+1)
-#define DP1_ALM_SENSE_TIME_ADDR			(DOOR_SENSE_TIME_ADDR+1)
-#define DP2_ALM_SENSE_TIME_ADDR			(DP1_ALM_SENSE_TIME_ADDR+1)
-#define DP3_ALM_SENSE_TIME_ADDR			(DP2_ALM_SENSE_TIME_ADDR+1)
-#define LCD_BRIGHT_CNT_ADDR				(DP3_ALM_SENSE_TIME_ADDR+1)
-#define DP_SW_FACT_ADDR					(LCD_BRIGHT_CNT_ADDR+1)
-#define RELAY_STAT_ADDR					(DP_SW_FACT_ADDR+10)
-#define AUTO_SENT_INTERVAL_ADDR			(RELAY_STAT_ADDR+1)
-#define XBEE_RST_INTERVAL_ADDR			(AUTO_SENT_INTERVAL_ADDR+1)
-#define BROADCAST_ENB_ADDR				(XBEE_RST_INTERVAL_ADDR+2)
-#define DEVICES_IN_GROUP_ADDR			(BROADCAST_ENB_ADDR+1)
-#define XBEE_MAC_ADDR					(DEVICES_IN_GROUP_ADDR+1)
-#define DP_LIMIT_ADDR					(XBEE_MAC_ADDR+32)		//0x46A=1130
-#define DP_OFFSET_ADDR					(DP_LIMIT_ADDR+6)
-#define LCD_CONTROL_ADDR				(DP_OFFSET_ADDR+6)
-#define COM_CONTROL_ADDR				(LCD_CONTROL_ADDR+1)
+#define DP1_CAL_VAL_C_ADDR		CFG(calValC[0])
+#define DP2_CAL_VAL_C_ADDR		CFG(calValC[1])
+#define DP3_CAL_VAL_C_ADDR		CFG(calValC[2])
+#define TM_CAL_VAL_C_ADDR		CFG(calValC[3])
+#define RH_CAL_VAL_C_ADDR		CFG(calValC[4])
 
-//Per-slot DP offsets: MAX_SUPPORTED_DP channels x DP_RANGE_SLOTS slots, int16_t
-//each, addressed as DP_SLOT_OFFSET_ADDR + ((channel*DP_RANGE_SLOTS)+slot)*2.
-//Appended at the END of the chain so no existing address moves.
-#define DP_SLOT_OFFSET_ADDR			(COM_CONTROL_ADDR+1)	/* 3*6*2 = 36 bytes */
+#define MASTER_ENABLE_ADDR			CFG(masterEnable)
+#define DOOR_SENSE_POLARITY_ADDR	CFG(doorSensePolarity)
+#define DOOR_SENSE_TIME_ADDR		CFG(doorSenseTime)
+#define DP1_ALM_SENSE_TIME_ADDR		CFG(dpAlmSenseTime[0])
+#define DP2_ALM_SENSE_TIME_ADDR		CFG(dpAlmSenseTime[1])
+#define DP3_ALM_SENSE_TIME_ADDR		CFG(dpAlmSenseTime[2])
+#define LCD_BRIGHT_CNT_ADDR			CFG(lcdBrightCnt)
+#define DP_SW_FACT_ADDR				CFG(dpSwFactor)
+#define RELAY_STAT_ADDR				CFG(relayStat)
+#define AUTO_SENT_INTERVAL_ADDR		CFG(autoSentInterval)
+#define XBEE_RST_INTERVAL_ADDR		CFG(xbeeRstInterval)
+#define BROADCAST_ENB_ADDR			CFG(broadcastEnb)
+#define DEVICES_IN_GROUP_ADDR		CFG(devicesInGroup)
+#define XBEE_MAC_ADDR				CFG(xbeeMac)
+#define DP_LIMIT_ADDR				CFG(dpLimit)
+#define DP_OFFSET_ADDR				CFG(dpOffset)
+#define LCD_CONTROL_ADDR			CFG(lcdControl)
+#define COM_CONTROL_ADDR			CFG(comControl)
+#define DP_SLOT_OFFSET_ADDR			CFG(dpSlotOffset)
+
+//************************************************************************/
+// HOT ENTRIES - NOT part of CfgCold_t
+//
+// These are rewritten while the device runs: the log pointers on every log record,
+// which is once a minute; min/max on every new extreme; the alarm state on every
+// transition.  They stay in EXTERNAL flash at the addresses they have always had,
+// which is why they are spelled out as literals - the chain that used to compute them
+// now belongs to the structure above.
+//
+// Keeping them out of the internal-flash store is not tidiness.  Internal flash is
+// erased a page at a time and endures on the order of ten thousand cycles; 1440 writes
+// a day would exhaust that in about a week, and in nine weeks even at ten times the
+// endurance.  The external part is byte-rewritable (AT45) or has its own wear-levelled
+// stores (XM25), and neither cares.
+//************************************************************************/
+#define CFG_ALRM_STAT_BLOCK		(CONFIG_PARA_ADDR+43)	/* 5 bytes: DP1,DP2,DP3,TM,RH */
+#define CFG_MINMAX_BLOCK		(CONFIG_PARA_ADDR+58)	/* 40 bytes */
+#define CFG_LOG_PTR_BLOCK		(CONFIG_PARA_ADDR+151)	/* 3 bytes: RDLC(2) + OVF(1) */
+#define CURR_LOG_IND			(CONFIG_PARA_ADDR+154)	/* 100 x 4 byte rotation */
+#define CFG_LOG24_PTR_BLOCK		(CONFIG_PARA_ADDR+554)	/* 1 byte: 24 h RDLC */
+#define CURR_LOG24_IND			(CONFIG_PARA_ADDR+555)	/* 100 x 2 byte rotation */
+#define CFG_MINMAX_IND_BLOCK	(CONFIG_PARA_ADDR+1416)	/* 5 bytes */
 
 //************************************************************************/
 // HOT (real-time) PARAMETERS
@@ -1001,6 +1115,12 @@
 //only by the old 500 ms poll, so at 20 Hz one press advanced them several times.
 #define KEY_NAV_DELAY		20		//1.0 s hold-off before navigation auto-repeats
 #define KEY_NAV_REPEAT		10		//then one step every 500 ms, the original cadence
+
+//The most 50 ms ticks the key scan will replay in one pass of whileTask() when it has
+//fallen behind.  A normal pass owes one or two, so this never binds; it exists to keep
+//a long stall from replaying dozens of ticks through the 4-second confirmation delays
+//inside CheckUpDnKey().
+#define KEY_SCAN_CATCHUP_MAX	8		//400 ms
 
 //Long-press hold times for the key combinations, also in 50 ms ticks
 #define KEY_HOLD_5SEC		100
