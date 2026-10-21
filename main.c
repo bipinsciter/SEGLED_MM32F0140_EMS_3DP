@@ -11346,15 +11346,10 @@ void whileTask(void)
 		//wiser.
 		RxLen = RxInd;
 		
-		gu8_rxMode=0;
-		RxTimeout=0;
-		RxInd=0;
-		bool_msgRcvOK=0;		//re-arms the ISR - RxInd is cleared first, on purpose
-		
 		//Shorter than the smallest legal frame (FF ID CMD PID CRC FE) there is
 		//nothing to check: RxLen-3 would go negative and reach CalCRC's uint16_t
 		//parameter as ~65533, reading far past a 100 byte buffer.
-		if(RxLen >= 6)
+		//if(RxLen >= 6)
 		{
 			crcVal=CalCRC(&RxBuffer1[1],RxLen-3);
 			
@@ -11373,6 +11368,11 @@ void whileTask(void)
 				}
 			}
 		}
+		
+		gu8_rxMode=0;
+		RxTimeout=0;
+		RxInd=0;
+		bool_msgRcvOK=0;		//re-arms the ISR - RxInd is cleared first, on purpose
 	}
 	else
 	{
