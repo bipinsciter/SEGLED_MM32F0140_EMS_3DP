@@ -54,7 +54,7 @@ typedef struct {
 	float P1;       // Estimate covariance
 	float K1;       // Kalman gain
 } KalmanFilter;
-static KalmanFilter Kalman[5] = {0};		
+static KalmanFilter Kalman[FILTER_CHANNELS] = {0};		
 
 typedef struct __attribute__((__packed__))
 {
@@ -76,6 +76,19 @@ typedef union
 }Epoch_t;
 
 Epoch_t ep,ep1;
+
+#define WINDOW_SIZE  9   // must be odd, <= 39
+static uint8_t ignoreCnter[FILTER_CHANNELS]={0};
+static int buffer[FILTER_CHANNELS][WINDOW_SIZE]={0};
+static int sorted[FILTER_CHANNELS][WINDOW_SIZE]={0};   // temp buffer (global, no stack use)
+static uint8_t index[FILTER_CHANNELS] = {0};
+static uint8_t count[FILTER_CHANNELS] = {0};
+
+//Spike rejection state, in the same tenths-of-a-Pa units as the median window.
+//lastParaValue is the last value ACCEPTED as a reading; spikeRejectCnt bounds how long
+//a new level can be refused before it is believed.
+static int lastParaValue[FILTER_CHANNELS] = {0};
+static uint8_t spikeRejectCnt[FILTER_CHANNELS] = {0};
 
 /* Exported functions *************************************************************************************************/
 void AllSegment(uint8_t state);
@@ -125,6 +138,7 @@ void ServePCMsg(void);
 void print_short(long val,char *data1,uint8_t no_of_digit);
 //----------------------------------------------------------------------------------------------------------------------------
 void ReadDiffPressure(uint8_t);
+void ClearFilterState(uint8_t);
 //----------------------------------------------------------------------------------------------------------------------------
 #ifdef ENABLE_KEY_LOGIC
 void check_key(void);

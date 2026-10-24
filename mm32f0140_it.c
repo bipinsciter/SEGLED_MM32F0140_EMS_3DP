@@ -76,12 +76,75 @@ void NMI_Handler(void)
   * @param  none
   * @retval none
   *********************************************************************************************************************/
-void HardFault_Handler(void)
+//---------------------------------------------------------------------------------
+// A hard fault used to sit here in an empty loop until the watchdog noticed.
+//
+// That is indistinguishable, from outside, from any other hang: the device simply
+// stops answering and comes back ten seconds later with the watchdog flag set.  The
+// stacked exception frame holds the address of the instruction that faulted, which
+// names the function once it is looked up in the .map, so send it before the reset
+// rather than throwing it away.
+//
+// Everything below pokes the UART directly.  SendToUART() cannot be used here: it
+// touches globals that the faulting code may have been halfway through updating, and
+// this code has to work when the rest of the firmware is not trustworthy.
+//---------------------------------------------------------------------------------
+volatile uint32_t gu32_faultPC = 0;
+volatile uint32_t gu32_faultLR = 0;
+
+static void FaultPutByte(uint8_t b)
 {
-    /* Go to infinite loop when Hard Fault exception occurs */
-    while (1)
-    {
-    }
+    uint32_t spin = 200000UL;
+
+    UART1->ICR = UART_ICR_TX;
+    UART1->TDR = b;
+    while(spin-- && !(UART1->ISR & UART_ISR_TX)) {}
+}
+
+static void FaultPutHex(uint32_t v)
+{
+    static const char digits[] = "0123456789ABCDEF";
+    int8_t i;
+
+    for(i = 28; i >= 0; i -= 4) FaultPutByte((uint8_t)digits[(v >> i) & 0x0F]);
+}
+
+void HardFaultReport(uint32_t *frame)
+{
+    const char *tag = "\r\nHARDFAULT PC=";
+    uint32_t spin;
+
+    //Exception entry stacks r0 r1 r2 r3 r12 LR PC xPSR, so the faulting address is
+    //the seventh word and the return address of its caller the sixth.
+    gu32_faultPC = frame[6];
+    gu32_faultLR = frame[5];
+
+    //Drive the RS485 transceiver ourselves - PB5, the same pin RS485_TX_ENB uses.
+    GPIOB->BSRR = (1u << 5);
+    for(spin = 0; spin < 2000; spin++) { __NOP(); }
+
+    while(*tag) FaultPutByte((uint8_t)*tag++);
+    FaultPutHex(gu32_faultPC);
+    FaultPutByte(' '); FaultPutByte('L'); FaultPutByte('R'); FaultPutByte('=');
+    FaultPutHex(gu32_faultLR);
+    FaultPutByte('\r'); FaultPutByte('\n');
+
+    //Let the last byte leave before releasing the driver, then stop.  The watchdog
+    //restarts the device, which is what used to happen anyway - only now the host
+    //has been told why.
+    spin = 200000UL;
+    while(spin-- && !(UART1->ISR & UART_ISR_TXC)) {}
+    GPIOB->BRR = (1u << 5);
+
+    while(1) {}
+}
+
+__attribute__((naked)) void HardFault_Handler(void)
+{
+    //No RTOS here, so the frame is always on MSP.  bl reaches anywhere in a 4 MB
+    //image, which b on a Cortex-M0 does not.
+    __asm volatile ("mrs r0, msp\n\t"
+                    "bl  HardFaultReport\n\t");
 }
 
 /***********************************************************************************************************************
@@ -156,8 +219,6 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 		if(mcnt1>=10)
 		{
 			mcnt1=0;		
-			bool_mec500_blink_flag ^= 1;
-			
 			bool_dp_sw_factor_add[DP1] = 1;
 			bool_dp_sw_factor_add[DP2] = 1;
 			bool_dp_sw_factor_add[DP3] = 1;

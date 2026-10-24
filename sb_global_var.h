@@ -151,6 +151,14 @@ extern uint32_t LowEpoch,MidEpoch,MidEpoch1,HighEpoch,MidLogInd;
 extern uint32_t InitLogInd,LastLogInd,StartEpoch,EndEpoch,StartEpochTime,EndEpochTime,TotalLog,StartLogInd,EndLogInd;
 extern uint8_t Temp_RTC_ARR[5];
 extern uint8_t gu8_masterEnable,gu8_rly_stat;
+extern uint8_t gu8_resetCause;
+extern uint16_t gu16_txSent;
+extern uint8_t gu8_txAbort;
+extern uint16_t gu16_txPaceUs;
+extern uint16_t gu16_txPaceBytes;
+#if DEBUG_CKPT
+extern uint32_t gu32_lastCkpt;
+#endif
 #if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
 extern uint8_t ParaScrollTime;
 #endif
@@ -200,7 +208,7 @@ void NearBlinkTick(void);
 extern bool bool_resetDevice;
 extern bool bool_triggerXbeeReset;
 extern bool bool_RamAllReadCmd;
-extern bool bool_sec_flag,bool_msec_flag,bool_msec250_flag,bool_mec500_blink_flag,bool_keyScan_flag;
+extern bool bool_sec_flag,bool_msec_flag,bool_msec250_flag,bool_keyScan_flag;
 extern volatile uint16_t gu16_tick50;
 extern uint16_t gu16_logoAckBlinkTimer;
 

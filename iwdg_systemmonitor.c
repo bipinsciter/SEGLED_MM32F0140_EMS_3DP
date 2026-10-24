@@ -67,7 +67,25 @@
   *********************************************************************************************************************/
 void IWDG_Configure(uint32_t Timeout)
 {
-    uint16_t Reload = LSI_VALUE / 1000 * Timeout / 32;
+    //Timeout is in MILLISECONDS and now actually means that.
+    //
+    //This divided by 32 while setting the prescaler to 256, so every requested timeout
+    //came out EIGHT TIMES too long: IWDG_Configure(1250) asked for 1.25 s and armed a
+    //watchdog of very nearly ten seconds.  Nothing depended on the real figure, so it
+    //went unnoticed - but it meant the one number describing how long the firmware may
+    //stall was wrong by almost an order of magnitude.
+    //
+    //  period = Reload * Prescaler / LSI_VALUE
+    //
+    //The reload register is 12 bits, so with /256 and a 40 kHz LSI the longest possible
+    //period is 4095 * 256 / 40000 = 26.2 s.  Anything longer is clamped rather than
+    //silently wrapping to a very short one.
+    uint32_t lu32_reload = ((uint32_t)LSI_VALUE / 1000UL) * Timeout / 256UL;
+    uint16_t Reload;
+
+    if(lu32_reload < 1UL)        lu32_reload = 1UL;
+    if(lu32_reload > 0x0FFFUL)   lu32_reload = 0x0FFFUL;
+    Reload = (uint16_t)lu32_reload;
 
     RCC_APB1PeriphClockCmd(RCC_APB1ENR_IWDG, ENABLE);
 

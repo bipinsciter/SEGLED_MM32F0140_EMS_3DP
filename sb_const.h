@@ -9,8 +9,8 @@
 
 
 #define FW_MAJOR	1
-#define FW_MINOR	1
-#define FW_PATCH	1
+#define FW_MINOR	2
+#define FW_PATCH	0
 
 #define ENABLE_KEY_LOGIC
 
@@ -216,6 +216,76 @@
 #define KALMAN_Q					0.01f
 #define KALMAN_R					0.1f
 
+//------------------------------------------------------------------------
+//Median and spike rejection, ahead of the Kalman.
+//
+//A Kalman fed un-despiked data SMEARS a spike across many samples instead of
+//rejecting it, so the order matters: median, then spike, then Kalman.
+//
+//The filters work in TENTHS of a Pa - the same representation the per-slot trim in
+//ReadDiffPressure() uses - because median_filter() carries samples as int.
+#define DP_FILTER_SCALE				10.0f	//Pa -> tenths
+
+//A step larger than this between samples is treated as a spike rather than a reading.
+#define DP_SPIKE_LIMIT_PA			10.0f
+#define DP_SPIKE_LIMIT				((int32_t)(DP_SPIKE_LIMIT_PA * DP_FILTER_SCALE))
+
+//How many consecutive samples may be rejected before the new level is accepted as
+//real.  BOUNDED on purpose: rejecting indefinitely would let one glitch freeze the
+//reading for good.  Each DP is sampled every 500 ms - the trigger and the read fall on
+//alternate 250 ms ticks - so four samples is about two seconds.
+#define DP_SPIKE_MAX_REJECT			4
+
+//Samples let straight through after a reset or a sensor fault, while the median window
+//fills.  Without it the first readings are judged against a stale last value and the
+//spike test rejects all of them.
+#define DP_FILTER_WARMUP			15
+
+//------------------------------------------------------------------------
+//Which filter channel each measurement uses.
+//
+//These index every piece of filter state - the median window, the spike counters and
+//the Kalman estimates - so they must be distinct.  They used to collide: TEMPERATURE_ID
+//is 1 and HUMIDITY_ID is 2, the same slots as DP2 and DP3, and temperature shared a
+//Kalman estimate with DP2.  Nothing went wrong only because no build enables both at
+//once - DP1_TEMP_RH_MODE leaves DP2 and DP3 unused.  That is luck, not design, and it
+//would have broken the moment a four channel mode appeared.
+#define FILT_DP1					0
+#define FILT_DP2					1
+#define FILT_DP3					2
+#define FILT_TEMP					3
+#define FILT_RH						4
+#define FILTER_CHANNELS				5
+
+//------------------------------------------------------------------------
+//Median and spike rejection for temperature and humidity.
+//
+//Same treatment as the DP channels and for the same reason: a Kalman fed un-despiked
+//data smears a spike across many samples instead of rejecting it.  The SHT25 is read
+//every 250 ms, twice as often as a DP, so the counts below cover half the wall clock
+//time the DP equivalents do.
+//
+//Both work in HUNDREDTHS of their unit.  The sensor resolves about 0.01 C and 0.04 %RH,
+//so tenths would quantise away real detail; hundredths of -40..125 C and 0..100 %RH fit
+//an int with room to spare.
+#define TMRH_FILTER_SCALE			100.0f
+
+//A step larger than this between consecutive samples is a glitch, not a reading.  Air
+//temperature cannot move 5 C in 250 ms and humidity cannot move 10 %RH; a sensor with a
+//bad checksum or a loose connection routinely appears to.
+#define TM_SPIKE_LIMIT_C			5.0f
+#define TM_SPIKE_LIMIT				((int32_t)(TM_SPIKE_LIMIT_C * TMRH_FILTER_SCALE))
+#define RH_SPIKE_LIMIT_PCT			10.0f
+#define RH_SPIKE_LIMIT				((int32_t)(RH_SPIKE_LIMIT_PCT * TMRH_FILTER_SCALE))
+
+//Bounded for the same reason as the DP one - refusing a new level indefinitely would
+//let a single glitch freeze the reading.  8 samples at 250 ms is about two seconds.
+#define TMRH_SPIKE_MAX_REJECT		8
+
+//Samples passed straight through while the median window fills, after a reset or a
+//sensor fault.  15 at 250 ms is under four seconds and overlaps TMRH_StartUpTimer.
+#define TMRH_FILTER_WARMUP			15
+
 //************************************************************************/
 // RS485 PARAMETER
 //************************************************************************/
@@ -338,6 +408,81 @@
 //  RxBuffer[4] = channel '0'..'2', RxBuffer[5] = slot '0'..'5',
 //  RxBuffer[6..10] = 5-digit signed value in tenths of a Pa.
 #define DP_SLOT_OFFSET_ID			0x72
+
+//Why the device last restarted, captured from RCC_CSR before the flags are cleared.
+//Read only, one byte of flags - see RST_CAUSE_* below.  A restart that nobody asked
+//for is otherwise invisible from outside: the device simply comes back with its RAM
+//cleared and carries on.
+#define RESET_CAUSE_ID			0x73
+
+//The bits in that byte, in RCC_CSR's own order.  More than one can be set: a
+//watchdog reset also drives the reset pin, so 0x09 is one watchdog event and not
+//two separate causes.
+#define RST_CAUSE_PIN				0x01	//reset pin
+#define RST_CAUSE_POR				0x02	//power on / power down
+#define RST_CAUSE_SOFT			0x04	//NVIC_SystemReset(), i.e. deliberate
+#define RST_CAUSE_IWDG			0x08	//independent watchdog expired
+#define RST_CAUSE_WWDG			0x10	//window watchdog
+#define RST_CAUSE_LPWR			0x20	//low power
+#define RST_CAUSE_PVD				0x40	//supply sagged past the detector
+#define RST_CAUSE_VDT				0x80	//supply sagged past the detector
+
+//------------------------------------------------------------------------
+// Which transmit path to build.
+//
+// 0 = exactly what is in the last commit, untouched since the first one: write the
+//     byte, spin on the buffer-empty flag, clear it afterwards, drop the RS485
+//     driver as soon as the last byte has been handed over.
+// 1 = the rewrite - clear the flag before the write, bound every spin, and wait for
+//     TRANSMIT COMPLETE before dropping the driver, plus the chunked pacing.
+//
+// The rewrite is under suspicion: the device restarts about every 17 seconds while
+// it is being polled and survives a full minute of silence without restarting, so
+// transmitting is what kills it - and this is the only part of the comms path that
+// has ever been changed.  Set this to 0 to take it out of the picture.
+#define UART_TX_REWRITE				0
+
+//------------------------------------------------------------------------
+// Where the main loop last was, kept across a reset.  DIAGNOSTIC ONLY.
+//
+// Set DEBUG_CKPT to 1 to turn this on.  CKPT(n) stores a number at a fixed RAM
+// address that survives a watchdog reset, and 0x78 reads back whichever one was
+// current when the device last died - which is how the runt-frame hang in
+// whileTask() was found, after four wrong guesses made from reading code.
+//
+// OFF by default, and the reason matters: CKPT_ADDR is chosen by hand and the
+// linker knows nothing about it.  It sits above ZI (which ended at 0x200013C8 when
+// this was written) and below the stack (which starts at 0x20002000).  Grow ZI past
+// it and the checkpoint writes start landing on real variables - a far worse fault
+// than anything it would help find.  Before switching it on, check the map:
+//
+//     Total RW Size (RW Data + ZI Data)   must stay well under 0x1600
+//
+#define DEBUG_CKPT					0
+
+#if DEBUG_CKPT
+#define CKPT_ADDR					0x20001600UL
+#define CKPT_MAGIC				0xC0DEFEEDUL
+#define CKPT_MAGIC_CELL			(*(volatile uint32_t *)(CKPT_ADDR))
+#define CKPT_VALUE_CELL			(*(volatile uint32_t *)(CKPT_ADDR + 4))
+#define CKPT(n)					do { CKPT_MAGIC_CELL = CKPT_MAGIC; CKPT_VALUE_CELL = (n); } while(0)
+#else
+#define CKPT(n)					do { } while(0)
+#endif
+
+//Read back over 0x78: the checkpoint the device was sitting at when it last died.
+#define LAST_CKPT_ID				0x78
+
+//  1 main loop top          2 SecondTick
+// 10 whileTask entry       13 about to serve a host message   14 message served
+// 20 the 250 ms block      21 about to read the SHT25         23 block finished
+// 40 about to transmit     41 transmit returned
+// 50 configuration commit
+// 11 past the reset-flag spin   12 past auto-send   15 about to check for a message
+// 16 about to CRC the message   17 CRC done         19 serving a log transfer
+// 25 about to do the 250 ms work
+// 99 INSIDE the bool_resetDevice spin - the flag was corrupted
+
 
 
 //************************************************************************/
@@ -596,17 +741,16 @@ typedef struct
 #define RT_FLUSH_INTERVAL_SEC	60
 
 //--------------------------------------------------
-//The logo blinks to acknowledge UART traffic: it runs for LOGO_ACK_BLINK_MS from
-//the last valid message served, at the 500 ms rate the TIM1 ISR already keeps in
-//bool_mec500_blink_flag.  Counted in the 50 ms display ticks that gate
-//the 50 ms tick, so the two stay in step.
+//The logo blinks to acknowledge UART traffic: it runs for LOGO_ACK_BLINK_MS from the
+//last valid message served, at the 500 ms rate BLINK_500MS_ON() derives from the
+//free-running tick.  Counted in 50 ms display ticks, so the two stay in step.
 #define LOGO_ACK_BLINK_MS		5000
 #define LOGO_ACK_BLINK_TICKS	(LOGO_ACK_BLINK_MS/50)
 
-//The 500 ms blink PHASE, worked out from the free-running 50 ms tick rather than read
-//out of bool_mec500_blink_flag.
+//The 500 ms blink PHASE, worked out from the free-running 50 ms tick.
 //
-//The ISR toggles that flag every ten ticks, which is correct.  The problem is at the
+//This used to read a boolean the TIM1 ISR toggled every ten ticks.  The ISR end was
+//correct; the problem was at the
 //other end: the display looks at it once per pass of whileTask(), so what it sees
 //depends on how long a pass takes.  In DP1_TEMP_RH_MODE a pass includes Read_SHT25(),
 //whose two hold-master waits each spin up to a full second in 1 ms steps, so a pass can
@@ -914,8 +1058,10 @@ typedef struct
 #define DP1			0
 #define DP2			1
 #define DP3			2
-#define TEMPERATURE_ID			1
-#define HUMIDITY_ID			2
+//TEMPERATURE_ID and HUMIDITY_ID used to live here, as 1 and 2 - the same values as
+//DP2 and DP3 immediately above, in a block that reads like a list of channel indices.
+//Both were only ever used to index the Kalman array, where they aliased the DP slots.
+//Use FILT_TEMP and FILT_RH for filter state; nothing else needed them.
 
 //------------------------------------------------------------------------------------
 #define NORMAL_LOG				0
@@ -954,6 +1100,10 @@ typedef struct
 #define RAW_DP_CNT_IND			10
 #define XBEE_RX_IND_MAX			20
 #define RX_IND_MAX				100
+//The shortest frame that can legally arrive: FF ID CMD PID CRC FE.  Anything
+//shorter cannot be checked, because the CRC length is computed as RxLen-3 in
+//unsigned 16 bit arithmetic and would wrap to about 65533.
+#define RX_MIN_FRAME_LEN			6
 #define TX_IND_MAX				100
 
 //DATA LOG ADDRESS IN DATA FLASH -----------------------------------------------------
@@ -1285,23 +1435,23 @@ typedef struct
 
 #define BLANK	20
 #define DASH	21
-#define C		22
-#define A		23
-#define L		24
-#define D		25
-#define N		26
-#define E		27
-#define B		28
-#define t		29
-#define r		30
-#define P		31
-#define I		32
-#define F		33
-#define U		34
-#define H		35
-#define M		36
-#define Y		37
-#define V		38
+#define SEG_C		22
+#define SEG_A		23
+#define SEG_L		24
+#define SEG_D		25
+#define SEG_N		26
+#define SEG_E		27
+#define SEG_B		28
+#define SEG_t		29
+#define SEG_r		30
+#define SEG_P		31
+#define SEG_I		32
+#define SEG_F		33
+#define SEG_U		34
+#define SEG_H		35
+#define SEG_M		36
+#define SEG_Y		37
+#define SEG_V		38
 
 //EPOCH
 #define SHR(a, b) (-1 >> 1 == -1 ? (a) >> (b) : (a) / (1 << (b)) - ((a) % (1 << (b)) < 0))

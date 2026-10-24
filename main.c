@@ -665,9 +665,9 @@ void InitLEDController(void)
 	//-------------------------------------------------------------------
 	
 	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-	data[1] = V;
-	data[2] = E;
-	data[3] = r;
+	data[1] = SEG_V;
+	data[2] = SEG_E;
+	data[3] = SEG_r;
 	
 	data[4] = FW_MAJOR;
 	data[5] = FW_MINOR;
@@ -679,9 +679,9 @@ void InitLEDController(void)
 	{
 		PLATFORM_DelayMS(2000);
 		for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-		data[4] = E;
-		data[5] = r;
-		data[6] = r;
+		data[4] = SEG_E;
+		data[5] = SEG_r;
+		data[6] = SEG_r;
 		disp_value();
 	}
 	#endif
@@ -709,8 +709,8 @@ void InitDisplay(void)
 	TM1680Blink(BLINK_OFF);
 	////-------------------------------------------------------------------
 	for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-	data[2] = I;
-	data[3] = D;
+	data[2] = SEG_I;
+	data[3] = SEG_D;
 	convert_char(DeviceID,&data[4],3);
 	disp_value();
 	PLATFORM_DelayMS(1000);
@@ -1594,9 +1594,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP1])
 						{
-							data[4]=E;
-							data[5]=r;
-							data[6]=r;
+							data[4]=SEG_E;
+							data[5]=SEG_r;
+							data[6]=SEG_r;
 						}
 						else
 						{
@@ -1634,12 +1634,12 @@ void conv_value(void)
 							}
 							else if(DP_limit[DP1]==1)
 							{
-								data[5]=H;
-								data[6]=I;
+								data[5]=SEG_H;
+								data[6]=SEG_I;
 							}
 							else if(DP_limit[DP1]==2)
 							{
-								data[5]=L;
+								data[5]=SEG_L;
 								data[6]=0;
 							}
 
@@ -1662,9 +1662,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP2])
 						{
-							data[7]=E;
-							data[8]=r;
-							data[9]=r;
+							data[7]=SEG_E;
+							data[8]=SEG_r;
+							data[9]=SEG_r;
 						}
 						else
 						{
@@ -1702,12 +1702,12 @@ void conv_value(void)
 							}
 							else if(DP_limit[DP2]==1)
 							{
-								data[8]=H;
-								data[9]=I;
+								data[8]=SEG_H;
+								data[9]=SEG_I;
 							}
 							else if(DP_limit[DP2]==2)
 							{
-								data[8]=L;
+								data[8]=SEG_L;
 								data[9]=0;
 							}
 
@@ -1729,9 +1729,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP3])
 						{
-							data[10]=E;
-							data[11]=r;
-							data[12]=r;
+							data[10]=SEG_E;
+							data[11]=SEG_r;
+							data[12]=SEG_r;
 						}
 						else
 						{
@@ -1769,12 +1769,12 @@ void conv_value(void)
 							}
 							else if(DP_limit[DP3]==1)
 							{
-								data[11]=H;
-								data[12]=I;
+								data[11]=SEG_H;
+								data[12]=SEG_I;
 							}
 							else if(DP_limit[DP3]==2)
 							{
-								data[11]=L;
+								data[11]=SEG_L;
 								data[12]=0;
 							}
 
@@ -1798,9 +1798,9 @@ void conv_value(void)
 					{
 						if(bool_RH_TEMP_NC)
 						{
-							data[7]=E;
-							data[8]=r;
-							data[9]=r;
+							data[7]=SEG_E;
+							data[8]=SEG_r;
+							data[9]=SEG_r;
 						}
 						else
 						{
@@ -1865,9 +1865,9 @@ void conv_value(void)
 					{
 						if(bool_RH_TEMP_NC)
 						{
-							data[10]=E;
-							data[11]=r;
-							data[12]=r;
+							data[10]=SEG_E;
+							data[11]=SEG_r;
+							data[12]=SEG_r;
 						}
 						else
 						{
@@ -1926,9 +1926,9 @@ void conv_value(void)
 				
 				case 2:
 				
-					data[10] = B;
-					data[11] = D;
-					data[12] = r;
+					data[10] = SEG_B;
+					data[11] = SEG_D;
+					data[12] = SEG_r;
 				
 					switch(UART_BaudRate)
 					{
@@ -1954,9 +1954,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP1])
 						{
-							data[4]=E;
-							data[5]=r;
-							data[6]=r;
+							data[4]=SEG_E;
+							data[5]=SEG_r;
+							data[6]=SEG_r;
 						}
 						else
 						{
@@ -1993,9 +1993,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP2])
 						{
-							data[7]=E;
-							data[8]=r;
-							data[9]=r;
+							data[7]=SEG_E;
+							data[8]=SEG_r;
+							data[9]=SEG_r;
 						}
 						else
 						{
@@ -2028,9 +2028,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP3])
 						{
-							data[10]=E;
-							data[11]=r;
-							data[12]=r;
+							data[10]=SEG_E;
+							data[11]=SEG_r;
+							data[12]=SEG_r;
 						}
 						else
 						{
@@ -2065,9 +2065,9 @@ void conv_value(void)
 					{
 						if(bool_RH_TEMP_NC)
 						{
-							data[7]=E;
-							data[8]=r;
-							data[9]=r;
+							data[7]=SEG_E;
+							data[8]=SEG_r;
+							data[9]=SEG_r;
 						}
 						else
 						{
@@ -2117,9 +2117,9 @@ void conv_value(void)
 					{
 						if(bool_RH_TEMP_NC)
 						{
-							data[10]=E;
-							data[11]=r;
-							data[12]=r;
+							data[10]=SEG_E;
+							data[11]=SEG_r;
+							data[12]=SEG_r;
 						}
 						else
 						{
@@ -2163,9 +2163,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP1])
 						{
-							data[4]=E;
-							data[5]=r;
-							data[6]=r;
+							data[4]=SEG_E;
+							data[5]=SEG_r;
+							data[6]=SEG_r;
 						}
 						else
 						{
@@ -2204,9 +2204,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP2])
 						{
-							data[7]=E;
-							data[8]=r;
-							data[9]=r;
+							data[7]=SEG_E;
+							data[8]=SEG_r;
+							data[9]=SEG_r;
 						}
 						else
 						{
@@ -2239,9 +2239,9 @@ void conv_value(void)
 					{
 						if(bool_DP_NC[DP3])
 						{
-							data[10]=E;
-							data[11]=r;
-							data[12]=r;
+							data[10]=SEG_E;
+							data[11]=SEG_r;
+							data[12]=SEG_r;
 						}
 						else
 						{
@@ -2276,9 +2276,9 @@ void conv_value(void)
 					{
 						if(bool_RH_TEMP_NC)
 						{
-							data[7]=E;
-							data[8]=r;
-							data[9]=r;
+							data[7]=SEG_E;
+							data[8]=SEG_r;
+							data[9]=SEG_r;
 						}
 						else
 						{
@@ -2335,9 +2335,9 @@ void conv_value(void)
 					{
 						if(bool_RH_TEMP_NC)
 						{
-							data[10]=E;
-							data[11]=r;
-							data[12]=r;
+							data[10]=SEG_E;
+							data[11]=SEG_r;
+							data[12]=SEG_r;
 						}
 						else
 						{
@@ -2391,13 +2391,13 @@ void conv_value(void)
 		
 		case DP_AUTO_CAL_MODE:
 		
-			data[4] = A;
-			data[5] = U;
-			data[6] = t;
+			data[4] = SEG_A;
+			data[5] = SEG_U;
+			data[6] = SEG_t;
 			
-			data[7] = C;
-			data[8] = A;
-			data[9] = L;
+			data[7] = SEG_C;
+			data[8] = SEG_A;
+			data[9] = SEG_L;
 
 			lcd.Sym_DP_LOGO = 1;
 			
@@ -2410,10 +2410,10 @@ void conv_value(void)
 			{
 				case 0:
 			
-					data[4] = P;
-					data[5] = A;
+					data[4] = SEG_P;
+					data[5] = SEG_A;
 					data[6] = 9;
-					data[7] = E;
+					data[7] = SEG_E;
 				
 					MIN_on;
 					MAX_on;
@@ -2439,8 +2439,8 @@ void conv_value(void)
 			
 					convert_char(dispLogInd,&data[2],2);
 					
-					data[4] = D;
-					data[5] = t;
+					data[4] = SEG_D;
+					data[5] = SEG_t;
 					
 					convert_char(rtc2.day,&data[7],2);
 					convert_char(rtc2.month,&data[10],2);
@@ -2715,13 +2715,13 @@ void conv_value(void)
 			
 			if(!mean_hr_page_disp_cnt)
 			{
-				data[4] = P;
-				data[5] = A;
+				data[4] = SEG_P;
+				data[5] = SEG_A;
 				data[6] = 9;
-				data[7] = E;
+				data[7] = SEG_E;
 			
-				data[10] = M;
-				data[11] = N;
+				data[10] = SEG_M;
+				data[11] = SEG_N;
 			}
 			else if((mean_hr_page_disp_cnt>=1) && (mean_hr_page_disp_cnt<=24))
 			{
@@ -2734,9 +2734,9 @@ void conv_value(void)
 				{
 					if(bool_DP_NC[DP1])
 					{
-						data[4]=E;
-						data[5]=r;
-						data[6]=r;
+						data[4]=SEG_E;
+						data[5]=SEG_r;
+						data[6]=SEG_r;
 					}
 					else
 					{
@@ -2768,9 +2768,9 @@ void conv_value(void)
 				{
 					if(bool_DP_NC[DP2])
 					{
-						data[7]=E;
-						data[8]=r;
-						data[9]=r;
+						data[7]=SEG_E;
+						data[8]=SEG_r;
+						data[9]=SEG_r;
 					}
 					else
 					{
@@ -2799,9 +2799,9 @@ void conv_value(void)
 				{
 					if(bool_DP_NC[DP3])
 					{
-						data[10]=E;
-						data[11]=r;
-						data[12]=r;
+						data[10]=SEG_E;
+						data[11]=SEG_r;
+						data[12]=SEG_r;
 					}
 					else
 					{
@@ -2831,9 +2831,9 @@ void conv_value(void)
 				{
 					if(bool_RH_TEMP_NC)
 					{
-						data[7]=E;
-						data[8]=r;
-						data[9]=r;
+						data[7]=SEG_E;
+						data[8]=SEG_r;
+						data[9]=SEG_r;
 					}
 					else
 					{							
@@ -2872,9 +2872,9 @@ void conv_value(void)
 				{
 					if(bool_RH_TEMP_NC)
 					{
-						data[10]=E;
-						data[11]=r;
-						data[12]=r;
+						data[10]=SEG_E;
+						data[11]=SEG_r;
+						data[12]=SEG_r;
 					}
 					else
 					{
@@ -2912,20 +2912,20 @@ void conv_value(void)
 			{
 				case PROG_PAGE_DISP:
 				
-					data[4] = P;
-					data[5] = r;
+					data[4] = SEG_P;
+					data[5] = SEG_r;
 					data[6] = 9;
 				
 				break;
 				
 				case DEVICE_ID_DISP:
 				
-					data[4] = D;
-					data[5] = V;
-					data[6] = C;
+					data[4] = SEG_D;
+					data[5] = SEG_V;
+					data[6] = SEG_C;
 				
 					data[2] = 1;
-					data[3] = D;
+					data[3] = SEG_D;
 				
 					convert_char(dummy,&data[7],3);
 				
@@ -2941,10 +2941,10 @@ void conv_value(void)
 					lcd.Sym_DP_UNIT = 1;
 					
 					data[1] = 0;
-					data[2] = N;
+					data[2] = SEG_N;
 					
-					data[10] = U;
-					data[11] = P;
+					data[10] = SEG_U;
+					data[11] = SEG_P;
 					
 					if(dummy<0)
 					{
@@ -2970,11 +2970,11 @@ void conv_value(void)
 					lcd.Sym_DP_UNIT = 1;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
-					data[10] = U;
-					data[11] = P;
+					data[10] = SEG_U;
+					data[11] = SEG_P;
 	
 					if(dummy<0)
 					{
@@ -3000,10 +3000,10 @@ void conv_value(void)
 					lcd.Sym_DP_UNIT = 1;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
-					data[10] = L;
+					data[10] = SEG_L;
 					data[11] = 0;
 				
 					if(dummy<0)
@@ -3030,9 +3030,9 @@ void conv_value(void)
 					lcd.Sym_DP_UNIT = 1;
 				
 					data[1] = 0;
-					data[2] = N;
+					data[2] = SEG_N;
 				
-					data[10] = L;
+					data[10] = SEG_L;
 					data[11] = 0;
 				
 					if(dummy<0)
@@ -3065,10 +3065,10 @@ void conv_value(void)
 					lcd.Sym_TM_LOGO = 1;
 				
 					data[1] = 0;
-					data[2] = N;
+					data[2] = SEG_N;
 				
-					data[10] = U;
-					data[11] = P;
+					data[10] = SEG_U;
+					data[11] = SEG_P;
 				
 					if(dummy<0)
 					{
@@ -3098,11 +3098,11 @@ void conv_value(void)
 					lcd.Sym_TM_LOGO = 1;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
-					data[10] = U;
-					data[11] = P;
+					data[10] = SEG_U;
+					data[11] = SEG_P;
 				
 					if(dummy<0)
 					{
@@ -3132,10 +3132,10 @@ void conv_value(void)
 					lcd.Sym_TM_LOGO = 1;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
-					data[10] = L;
+					data[10] = SEG_L;
 					data[11] = 0;
 
 					if(dummy<0)
@@ -3166,9 +3166,9 @@ void conv_value(void)
 					lcd.Sym_TM_LOGO = 1;
 				
 					data[1] = 0;
-					data[2] = N;
+					data[2] = SEG_N;
 				
-					data[10] = L;
+					data[10] = SEG_L;
 					data[11] = 0;
 				
 					if(dummy<0)
@@ -3198,9 +3198,9 @@ void conv_value(void)
 						
 					lcd.Sym_TM_LOGO = 1;
 				
-					data[7] = U;
-					data[8] = N;
-					data[9] = t;
+					data[7] = SEG_U;
+					data[8] = SEG_N;
+					data[9] = SEG_t;
 				
 				break;
 				
@@ -3210,10 +3210,10 @@ void conv_value(void)
 					lcd.Sym_RH_UNIT = 1;
 					
 					data[1] = 0;
-					data[2] = N;
+					data[2] = SEG_N;
 					
-					data[10] = U;
-					data[11] = P;
+					data[10] = SEG_U;
+					data[11] = SEG_P;
 
 					convert_char(dummy,&data[6],4);
 				
@@ -3227,11 +3227,11 @@ void conv_value(void)
 					lcd.Sym_RH_UNIT = 1;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
-					data[10] = U;
-					data[11] = P;
+					data[10] = SEG_U;
+					data[11] = SEG_P;
 				
 					convert_char(dummy,&data[6],4);
 				
@@ -3245,10 +3245,10 @@ void conv_value(void)
 					lcd.Sym_RH_UNIT = 1;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
-					data[10] = L;
+					data[10] = SEG_L;
 					data[11] = 0;
 
 					convert_char(dummy,&data[6],4);
@@ -3263,9 +3263,9 @@ void conv_value(void)
 					lcd.Sym_RH_UNIT = 1;
 				
 					data[1] = 0;
-					data[2] = N;
+					data[2] = SEG_N;
 				
-					data[10] = L;
+					data[10] = SEG_L;
 					data[11] = 0;
 
 					convert_char(dummy,&data[6],4);
@@ -3278,12 +3278,12 @@ void conv_value(void)
 				
 				case RTC_HR_DISP:
 				
-					data[1] = r;
-					data[2] = t;
-					data[3] = C;
+					data[1] = SEG_r;
+					data[2] = SEG_t;
+					data[3] = SEG_C;
 				
-					data[4] = H;
-					data[5] = r;
+					data[4] = SEG_H;
+					data[5] = SEG_r;
 				
 					convert_char(dummy,&data[7],2);
 				
@@ -3291,12 +3291,12 @@ void conv_value(void)
 				
 				case RTC_MN_DISP:
 				
-					data[1] = r;
-					data[2] = t;
-					data[3] = C;
+					data[1] = SEG_r;
+					data[2] = SEG_t;
+					data[3] = SEG_C;
 				
-					data[4] = M;
-					data[5] = N;
+					data[4] = SEG_M;
+					data[5] = SEG_N;
 				
 					convert_char(dummy,&data[7],2);
 				
@@ -3304,12 +3304,12 @@ void conv_value(void)
 				
 				case RTC_DT_DISP:
 				
-					data[1] = r;
-					data[2] = t;
-					data[3] = C;
+					data[1] = SEG_r;
+					data[2] = SEG_t;
+					data[3] = SEG_C;
 				
-					data[4] = D;
-					data[5] = t;
+					data[4] = SEG_D;
+					data[5] = SEG_t;
 				
 					convert_char(dummy,&data[7],2);
 				
@@ -3317,11 +3317,11 @@ void conv_value(void)
 				
 				case RTC_MH_DISP:
 				
-					data[1] = r;
-					data[2] = t;
-					data[3] = C;
+					data[1] = SEG_r;
+					data[2] = SEG_t;
+					data[3] = SEG_C;
 				
-					data[4] = M;
+					data[4] = SEG_M;
 					data[5] = 0;
 				
 					convert_char(dummy,&data[7],2);
@@ -3330,12 +3330,12 @@ void conv_value(void)
 				
 				case RTC_YR_DISP:
 				
-					data[1] = r;
-					data[2] = t;
-					data[3] = C;
+					data[1] = SEG_r;
+					data[2] = SEG_t;
+					data[3] = SEG_C;
 				
-					data[4] = Y;
-					data[5] = r;
+					data[4] = SEG_Y;
+					data[5] = SEG_r;
 				
 					convert_char(dummy,&data[7],2);
 				
@@ -3343,12 +3343,12 @@ void conv_value(void)
 				
 				case BUZ_ON_DISP:
 				
-					data[4] = B;
-					data[5] = U;
-					data[6] = r;
+					data[4] = SEG_B;
+					data[5] = SEG_U;
+					data[6] = SEG_r;
 				
 					data[2] = 0;
-					data[3] = N;
+					data[3] = SEG_N;
 				
 					convert_char(dummy,&data[7],3);
 				
@@ -3356,13 +3356,13 @@ void conv_value(void)
 				
 				case BUZ_OFF_DISP:
 				
-					data[4] = B;
-					data[5] = U;
-					data[6] = r;
+					data[4] = SEG_B;
+					data[5] = SEG_U;
+					data[6] = SEG_r;
 				
 					data[1] = 0;
-					data[2] = F;
-					data[3] = F;
+					data[2] = SEG_F;
+					data[3] = SEG_F;
 				
 					convert_char(dummy,&data[7],3);
 				
@@ -3370,13 +3370,13 @@ void conv_value(void)
 				
 				case UART_BDT_DISP:
 				
-					data[1] = U;
-					data[2] = r;
-					data[3] = t;
+					data[1] = SEG_U;
+					data[2] = SEG_r;
+					data[3] = SEG_t;
 				
-					data[10] = B;
-					data[11] = D;
-					data[12] = r;
+					data[10] = SEG_B;
+					data[11] = SEG_D;
+					data[12] = SEG_r;
 				
 					switch(dummy)
 					{
@@ -3396,9 +3396,9 @@ void conv_value(void)
 					
 				case CAL_DISP:
 				
-					data[1] = C;
-					data[2] = A;
-					data[3] = L;
+					data[1] = SEG_C;
+					data[2] = SEG_A;
+					data[3] = SEG_L;
 				
 					convert_char(dummy,&data[4],3);
 				
@@ -3714,6 +3714,14 @@ void conv_value(void)
 	lcd.Sym_DP_UNIT_Pa = 0;
 	lcd.Sym_DP_UNIT_mmH2O = 0;
 	
+	//Cleared with everything else.  These three were set and never reset, so after one
+	//lap of the scroll all three channel markers were latched on.  It did not show,
+	//because each DPn_on is painted inside its own case of the switch below - but the
+	//flags were lying, and moving those calls to a shared block would have lit all three.
+	lcd.Sym_DP1_ON = 0;
+	lcd.Sym_DP2_ON = 0;
+	lcd.Sym_DP3_ON = 0;
+	
 	lcd.Sym_RH_LOGO = 0;
 	lcd.Sym_RH_UNIT = 0;
 	
@@ -3802,9 +3810,9 @@ void conv_value(void)
 							{
 								if(bool_DP_NC[DP1])
 								{
-									data[4]=E;
-									data[5]=r;
-									data[6]=r;
+									data[4]=SEG_E;
+									data[5]=SEG_r;
+									data[6]=SEG_r;
 								}
 								else
 								{
@@ -3851,12 +3859,12 @@ void conv_value(void)
 									}
 									else if(DP_limit[DP1]==1)
 									{
-										data[5]=H;
-										data[6]=I;
+										data[5]=SEG_H;
+										data[6]=SEG_I;
 									}
 									else if(DP_limit[DP1]==2)
 									{
-										data[5]=L;
+										data[5]=SEG_L;
 										data[6]=0;
 									}
 
@@ -3877,9 +3885,9 @@ void conv_value(void)
 							{
 								if(bool_DP_NC[DP2])
 								{
-									data[4]=E;
-									data[5]=r;
-									data[6]=r;
+									data[4]=SEG_E;
+									data[5]=SEG_r;
+									data[6]=SEG_r;
 								}
 								else
 								{
@@ -3926,12 +3934,12 @@ void conv_value(void)
 									}
 									else if(DP_limit[DP2]==1)
 									{
-										data[5]=H;
-										data[6]=I;
+										data[5]=SEG_H;
+										data[6]=SEG_I;
 									}
 									else if(DP_limit[DP2]==2)
 									{
-										data[5]=L;
+										data[5]=SEG_L;
 										data[6]=0;
 									}
 
@@ -3950,9 +3958,9 @@ void conv_value(void)
 							{
 								if(bool_DP_NC[DP3])
 								{
-									data[4]=E;
-									data[5]=r;
-									data[6]=r;
+									data[4]=SEG_E;
+									data[5]=SEG_r;
+									data[6]=SEG_r;
 								}
 								else
 								{
@@ -3999,12 +4007,12 @@ void conv_value(void)
 									}
 									else if(DP_limit[DP3]==1)
 									{
-										data[5]=H;
-										data[6]=I;
+										data[5]=SEG_H;
+										data[6]=SEG_I;
 									}
 									else if(DP_limit[DP3]==2)
 									{
-										data[5]=L;
+										data[5]=SEG_L;
 										data[6]=0;
 									}
 
@@ -4025,9 +4033,9 @@ void conv_value(void)
 							{
 								if(bool_RH_TEMP_NC)
 								{
-									data[4]=E;
-									data[5]=r;
-									data[6]=r;
+									data[4]=SEG_E;
+									data[5]=SEG_r;
+									data[6]=SEG_r;
 								}
 								else
 								{
@@ -4088,9 +4096,9 @@ void conv_value(void)
 							{
 								if(bool_RH_TEMP_NC)
 								{
-									data[4]=E;
-									data[5]=r;
-									data[6]=r;
+									data[4]=SEG_E;
+									data[5]=SEG_r;
+									data[6]=SEG_r;
 								}
 								else
 								{
@@ -4147,9 +4155,9 @@ void conv_value(void)
 				
 				case 1:
 				
-					data[1] = D;
-					data[2] = V;
-					data[3] = C;
+					data[1] = SEG_D;
+					data[2] = SEG_V;
+					data[3] = SEG_C;
 					convert_char(DeviceID,&data[4],3);
 				
 				break;
@@ -4172,13 +4180,13 @@ void conv_value(void)
 		
 		case DP_AUTO_CAL_MODE:
 		
-			data[1] = A;
-			data[2] = U;
-			data[3] = t;
+			data[1] = SEG_A;
+			data[2] = SEG_U;
+			data[3] = SEG_t;
 			
-			data[4] = C;
-			data[5] = A;
-			data[6] = L;
+			data[4] = SEG_C;
+			data[5] = SEG_A;
+			data[6] = SEG_L;
 
 			lcd.Sym_DP_LOGO = 1;
 			
@@ -4190,20 +4198,20 @@ void conv_value(void)
 			{
 				case PROG_PAGE_DISP:
 				
-					data[4] = P;
-					data[5] = r;
+					data[4] = SEG_P;
+					data[5] = SEG_r;
 					data[6] = 9;
 				
 				break;
 				
 				case DEVICE_ID_DISP:
 				
-					data[4] = D;
-					data[5] = V;
-					data[6] = C;
+					data[4] = SEG_D;
+					data[5] = SEG_V;
+					data[6] = SEG_C;
 				
 					data[2] = 1;
-					data[3] = D;
+					data[3] = SEG_D;
 				
 					convert_char(dummy,&data[7],3);
 				
@@ -4369,9 +4377,9 @@ void CheckUpDnKey(void)
 
 				#endif
 				
-				data[4] = C;
-				data[5] = L;
-				data[6] = r;
+				data[4] = SEG_C;
+				data[5] = SEG_L;
+				data[6] = SEG_r;
 				disp_value();
 				
 				PLATFORM_DelayMS(4000);
@@ -4436,9 +4444,9 @@ void CheckUpDnKey(void)
 //				}
 				
 				for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-				data[4] = D;
+				data[4] = SEG_D;
 				data[5] = 0;
-				data[6] = N;
+				data[6] = SEG_N;
 				disp_value();
 				
 				PLATFORM_DelayMS(4000);
@@ -4482,13 +4490,13 @@ void CheckUpDnKey(void)
 				progTimeout=0;
 
 				for(uint8_t i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-				data[1] = F;
-				data[2] = A;
-				data[3] = C;
+				data[1] = SEG_F;
+				data[2] = SEG_A;
+				data[3] = SEG_C;
 				
-				data[4] = C;
-				data[5] = A;
-				data[6] = L;
+				data[4] = SEG_C;
+				data[5] = SEG_A;
+				data[6] = SEG_L;
 				disp_value();
 				
 				PLATFORM_DelayMS(4000);
@@ -4521,9 +4529,9 @@ void CheckUpDnKey(void)
 				progTimeout=0;
 				
 				for(i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-				data[4] = N;
+				data[4] = SEG_N;
 				data[5] = 0;
-				data[6] = r;
+				data[6] = SEG_r;
 				disp_value();
 				
 				PLATFORM_DelayMS(4000);
@@ -6085,27 +6093,27 @@ void EraseWholeFlash(void)
 	data[2] = BLANK;
 	data[3] = BLANK;
 
-	data[4] = P;
+	data[4] = SEG_P;
 	data[5] = 1;
 	data[6] = 5;
 
-	data[7] = E;
-	data[8] = E;
+	data[7] = SEG_E;
+	data[8] = SEG_E;
 	data[9] = BLANK;
 	
-	data[10] = E;
-	data[11] = r;
+	data[10] = SEG_E;
+	data[11] = SEG_r;
 	data[12] = 5;
 	
 	#else
 
-	data[0] = E;
-	data[1] = E;
-	data[2] = P;
-	data[3] = r;
+	data[0] = SEG_E;
+	data[1] = SEG_E;
+	data[2] = SEG_P;
+	data[3] = SEG_r;
 	
-	data[4] = E;
-	data[5] = r;
+	data[4] = SEG_E;
+	data[5] = SEG_r;
 	data[6] = 5;
 	
 	#endif
@@ -9628,9 +9636,11 @@ void ServePCMsg(void)
 
 void SetTxmode(uint8_t *buffer,uint16_t bytes)
 {
+	CKPT(40);
 	RS485_TX_ENB;
 	SendToUART(buffer,bytes);
 	RS485_RX_ENB;
+	CKPT(41);
 }
 
 uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd)
@@ -9931,16 +9941,158 @@ uint8_t CalCRC(uint8_t *ptr,uint16_t NoOfByte)
 	return ((uint8_t)Total);
 }
 
+//=====================================================================================
+// Put one filter channel back to the state it had at power up.
+//
+// Called whenever a sensor read fails, so the first good reading afterwards is not
+// judged against whatever the channel held while it was broken.  Every DP, and now
+// temperature and humidity, share this - the state they reset is identical.
+//=====================================================================================
+void ClearFilterState(uint8_t idx)
+{
+	ignoreCnter[idx]=0;
+	Kalman_Init(&Kalman[idx], KALMAN_Q, KALMAN_R, 0.0);  // Initialize with default values
+	for(uint8_t i=0; i<WINDOW_SIZE; i++) 
+	{
+		buffer[idx][i]=0;
+		sorted[idx][i]=0;
+	}
+	
+	//The window has to be emptied as well as zeroed.  Clearing buffer[] while leaving
+	//count[] alone left the median averaging cells that hold nothing but are still
+	//counted as samples, so the first readings after a fault were pulled toward zero.
+	index[idx]=0;
+	count[idx]=0;
+	
+	//And the spike filter, or the first good reading is measured against whatever the
+	//channel held before it failed.
+	spikeRejectCnt[idx]=0;
+	lastParaValue[idx]=0;
+}
+
+void ClearDPPara(uint8_t idx)
+{
+	bool_DP_NC[idx]=1;		
+	Dpressure[idx]=0.0;
+	DP_Alrm_ON[idx]=NO_ALARM;
+	gu8_DpAlarmSensingTimer[idx]=0;
+	
+	ClearFilterState(idx);
+}
+
+int median_filter(uint8_t para, int new_sample)
+{
+	unsigned char i, j;
+	int key;
+
+	// Insert into circular buffer
+	buffer[para][index[para]++] = new_sample;
+	if (index[para] >= WINDOW_SIZE)
+	index[para] = 0;
+
+	if (count[para] < WINDOW_SIZE)
+	count[para]++;
+
+	// Copy active elements into sorted array
+	for (i = 0; i < count[para]; i++)
+	sorted[para][i] = buffer[para][i];
+
+	// Insertion sort (in-place on sorted[])
+	for (i = 1; i < count[para]; i++) {
+		key = sorted[para][i];
+		j = i;
+
+		while (j > 0 && sorted[para][j - 1] > key) {
+			sorted[para][j] = sorted[para][j - 1];
+			j--;
+		}
+		sorted[para][j] = key;
+	}
+
+	// Return median
+	return sorted[para][count[para] >> 1]; // divide by 2
+}
+
+//=====================================================================================
+// Median, then spike rejection.  Runs on the CALIBRATED reading, before the Kalman.
+//
+// Order is the point.  The Kalman used to run first, which meant a spike was smeared
+// across the following samples rather than thrown away - the filter faithfully
+// smoothed a value that was never real.  Median first removes a lone outlier outright;
+// the step test then catches a sustained jump that the median would otherwise pass.
+//
+// Rejection is BOUNDED.  A step larger than ls32_limit is refused for at most
+// lu8_maxReject samples and then believed, because a genuine fast change - a door
+// opening, a probe carried into warmer air - looks exactly like a spike at the moment
+// it starts.  Refusing indefinitely would let one glitch freeze the channel until the
+// next power cycle.
+//
+// median_filter() carries samples as int, so the caller says what scale to work in:
+// tenths of a Pa for the DP channels, hundredths of a degree or a percent for the
+// SHT25.  Rounding is away from zero so the round trip does not bias every reading
+// toward zero.
+//=====================================================================================
+static float ParaSpikeFilter(uint8_t idx, float f32_value, float f32_scale,
+                             int32_t ls32_limit, uint8_t lu8_maxReject,
+                             uint8_t lu8_warmup)
+{
+	int32_t ls32_diff;
+	int li_sample;
+	
+	li_sample = (int)((f32_value * f32_scale) + ((f32_value >= 0.0f) ? 0.5f : -0.5f));
+	
+	li_sample = median_filter(idx, li_sample);
+	
+	//Still filling the window: take what comes.  Judging these against lastParaValue
+	//would reject the lot, because there is nothing meaningful to compare with yet.
+	if(ignoreCnter[idx] < lu8_warmup)
+	{
+		ignoreCnter[idx]++;
+		spikeRejectCnt[idx] = 0;
+		lastParaValue[idx] = li_sample;
+		return ((float)li_sample / f32_scale);
+	}
+	
+	//32 bit: +300 Pa to -300 Pa is a 6000 tenth step, and -40 C to +125 C is 16500
+	//hundredths.  Neither may wrap.
+	ls32_diff = (int32_t)li_sample - (int32_t)lastParaValue[idx];
+	
+	if((ls32_diff >= ls32_limit) || (ls32_diff <= -ls32_limit))
+	{
+		if(spikeRejectCnt[idx] < lu8_maxReject)
+		{
+			//Hold the last accepted reading rather than publish the jump.
+			spikeRejectCnt[idx]++;
+			return ((float)lastParaValue[idx] / f32_scale);
+		}
+		//Refused long enough - this is where the signal actually is.
+	}
+	
+	spikeRejectCnt[idx] = 0;
+	lastParaValue[idx] = li_sample;
+	return ((float)li_sample / f32_scale);
+}
+
 void ReadDiffPressure(uint8_t SensNo)
 {
 	float f32_temp=0;
+	
+	//Reached only on a successful read - the caller sends a failed one to ClearDPPara().
+	//The fault flag was set in four places and cleared in none, so a channel that
+	//glitched once reported itself faulty until the next power cycle.
+	bool_DP_NC[SensNo]=0;
+	
 	f32_temp = RealDpressure[SensNo];
 	f32_temp -= DP_Cal_float_Value_F[SensNo];
 	f32_temp -= DP_Cal_float_Value_C[SensNo];
 	
-	Dpressure[SensNo] = f32_temp;
+	//Median and spike rejection BEFORE the Kalman.  The Kalman used to come first and
+	//smoothed spikes into the reading instead of discarding them; median_filter() was
+	//written, allocated and cleared on every fault, but never actually called.
+	f32_temp = ParaSpikeFilter(SensNo, f32_temp, DP_FILTER_SCALE, DP_SPIKE_LIMIT,
+	                           DP_SPIKE_MAX_REJECT, DP_FILTER_WARMUP);
 	
-	Dpressure[SensNo] = Kalman_Update(&Kalman[SensNo], Dpressure[SensNo]);
+	Dpressure[SensNo] = Kalman_Update(&Kalman[SensNo], f32_temp);
 	
 	if((Dpressure[SensNo]<1.0) && (Dpressure[SensNo]>-1.0))
 	{
@@ -9991,7 +10143,20 @@ void ReadDiffPressure(uint8_t SensNo)
 		int16_t ls16_Dpressure;
 		int16_t ls16_Magnitude;
 		
-		ls16_Dpressure = (int16_t)((Dpressure[SensNo] * 10.0f) + ((Dpressure[SensNo] >= 0.0f) ? 0.5f : -0.5f));
+		//Saturate before the cast.  This runs BEFORE the clamp to f32_dp_limit further
+		//down, so an out-of-range reading reaches it unbounded: anything past about
+		//3276 Pa overflows the int16 and comes out with the sign flipped, turning a large
+		//positive pressure into a large negative one.  A float cannot wrap, so the guard
+		//has to be here rather than after.
+		{
+			float lf32_tenths = (Dpressure[SensNo] * 10.0f)
+			                  + ((Dpressure[SensNo] >= 0.0f) ? 0.5f : -0.5f);
+			
+			if(lf32_tenths > 32767.0f)		lf32_tenths = 32767.0f;
+			else if(lf32_tenths < -32767.0f)	lf32_tenths = -32767.0f;
+			
+			ls16_Dpressure = (int16_t)lf32_tenths;
+		}
 		ls16_Magnitude = (ls16_Dpressure < 0) ? -ls16_Dpressure : ls16_Dpressure;
 		
 		if(ls16_Magnitude < DP_SLOT_1_LIMIT)		ls16_Dpressure += DpRangeSlotOffset[SensNo][0];
@@ -10209,6 +10374,7 @@ uint32_t ascii2hex(uint8_t *data, uint8_t NoOfdigit)
 
 void SecondTick(void)
 {
+	CKPT(2);
 	static uint16_t rtFlushTimer=0;
 	
 	//Serve Watchdog Timer
@@ -10356,9 +10522,9 @@ void SecondTick(void)
 			gu8_MinMaxClearTimer=0;
 			
 			for(uint8_t i=0;i<NO_DIGIT;i++) data[i]=BLANK;
-			data[4] = N;
+			data[4] = SEG_N;
 			data[5] = 0;
-			data[6] = r;
+			data[6] = SEG_r;
 			disp_value();
 			
 			PLATFORM_DelayMS(4000);
@@ -10806,6 +10972,57 @@ void TMUnitChange(void)
 }
 #endif
 
+//=====================================================================================
+// UART transmit primitives
+//
+// The byte loop used to write first and test the "transmit buffer empty" flag
+// afterwards.  That flag is still set from the PREVIOUS byte when the test runs, so it
+// could pass on a stale value and the next pass would write a byte straight over one
+// that had not yet reached the shift register.  In a six byte reply the CRC catches the
+// loss and the host retries, which is why it went unnoticed; in the 1507 byte RAM_ALL
+// reply a hundred or more bytes went missing on every read - a different number each
+// time - and the frame never parsed.
+//
+// Clearing the flag BEFORE the write removes the race: the buffer is full the instant
+// the byte goes in, so only the hardware emptying it can set the flag again.
+//=====================================================================================
+#define UART_WAIT_SPINS		100000UL
+
+//Bounded, so a transmitter that never answers cannot wedge the main loop until the
+//watchdog fires.  The bound is far longer than a byte takes at any supported baud.
+#if !UART_TX_REWRITE
+//Only the rewrite calls these.  They stay compiled so that switching the macro back
+//needs no other edit, and the compiler is told they may go unused.
+__attribute__((unused))
+#endif
+static uint8_t WaitUartFlag(uint16_t flag)
+{
+	uint32_t lu32_spin = UART_WAIT_SPINS;
+	
+	while(lu32_spin--)
+	{
+		if(RESET != UART_GetITStatus(UART1, flag))	return 1;
+	}
+	return 0;
+}
+
+static uint8_t UartPutByte(uint8_t lu8_byte)
+{
+	UART_ClearITPendingBit(UART1, UART_IT_TXIEN);
+	UART_SendData(UART1, lu8_byte);
+	return WaitUartFlag(UART_IT_TXIEN);
+}
+
+//"Buffer empty" is not "byte sent" - the last byte is still in the shift register at
+//that point, and dropping the RS485 driver there cuts its tail off on the wire.  Wait
+//for transmit COMPLETE instead.
+static void UartDriverRelease(void)
+{
+	WaitUartFlag(UART_ISR_TXC);
+	UART_ClearITPendingBit(UART1, UART_ICR_TXC);
+	RS485_RX_ENB;
+}
+
 void opstr(char *str)
 {
 	RS485_TX_ENB;
@@ -10814,16 +11031,26 @@ void opstr(char *str)
 	
 	while(*str != '\0')
 	{		
+#if !UART_TX_REWRITE
 		UART_SendData(UART1, *str);
 		while (RESET == UART_GetITStatus(UART1, UART_IT_TXIEN)){};
         UART_ClearITPendingBit(UART1, UART_IT_TXIEN);
-	
+#else
+		if(!UartPutByte((uint8_t)*str))	break;
+#endif
 		str++;
 	}
 
+#if !UART_TX_REWRITE
 	RS485_RX_ENB;
+#else
+	UartDriverRelease();
+#endif
 }
 
+#if !UART_TX_REWRITE
+//The committed version, byte for byte.  Kept so the rewrite above can be switched
+//out without reaching for git in the middle of a measurement.
 void SendToUART(uint8_t *str,uint16_t NoOfBytes)
 {
 	RS485_TX_ENB;
@@ -10840,10 +11067,68 @@ void SendToUART(uint8_t *str,uint16_t NoOfBytes)
 		NoOfBytes--;
 	}
 	
+	//Still reported over 0x74 so the host can tell a short transmit from a lost
+	//reply; the legacy loop has no way to fail, so the abort flag stays clear.
+	gu16_txSent = 0;
+	gu8_txAbort = 0;
+	
 	gu16_logoAckBlinkTimer = LOGO_ACK_BLINK_TICKS;
 
 	RS485_RX_ENB;
 }
+#else
+void SendToUART(uint8_t *str,uint16_t NoOfBytes)
+{
+	uint16_t lu16_sinceIdle = 0;
+	
+	RS485_TX_ENB;
+		
+	PLATFORM_DelayUS(40);
+			
+	//Count what we actually hand to the UART, and record whether the per-byte wait ever
+	//gave up.  Readable as 0x74 / 0x75 - the only way to tell a transmitter that stopped
+	//early from bytes going missing after they left.
+	gu16_txSent = 0;
+	gu8_txAbort = 0;
+	
+	while(NoOfBytes)
+	{
+		if(!UartPutByte(*str))
+		{
+			gu8_txAbort = 1;
+			break;
+		}
+		gu16_txSent++;
+		str++;
+		NoOfBytes--;
+		
+		//Let the line sit at mark every so often.  A long unbroken run of 0x00 is nine
+		//low bit times per byte with a single high stop bit between them, and the RAM
+		//buffer reply carries up to 1250 of them for the slots not yet filled.  Measured
+		//on the bench: the device handed all 1507 bytes to the UART every time, the first
+		//and last bytes always arrived, and every byte that went missing was a zero -
+		//while those same zeros carried in 71 byte frames arrived intact.  The receiver
+		//loses start bit sync inside that run and only finds it again when the line
+		//idles, so give it an idle to find.  The driver stays enabled throughout, so no
+		//RS485 turnaround is involved and the host still sees one unbroken reply.
+		if(NoOfBytes && (++lu16_sinceIdle >= gu16_txPaceBytes))
+		{
+			lu16_sinceIdle = 0;
+			
+			//Let the byte leave the shift register first, or the idle overlaps it and is
+			//shorter than it looks.
+			WaitUartFlag(UART_ISR_TXC);
+			UART_ClearITPendingBit(UART1, UART_ICR_TXC);
+			
+			PLATFORM_DelayUS(gu16_txPaceUs);
+		}
+	}
+	
+	gu16_logoAckBlinkTimer = LOGO_ACK_BLINK_TICKS;
+
+	UartDriverRelease();
+}
+#endif
 
 void opchar(uint8_t str)
 {
@@ -10851,11 +11136,17 @@ void opchar(uint8_t str)
 	
 	PLATFORM_DelayUS(40);
 
+#if !UART_TX_REWRITE
 	UART_SendData(UART1, str);
 	while (RESET == UART_GetITStatus(UART1, UART_IT_TXIEN)){};
 	UART_ClearITPendingBit(UART1, UART_IT_TXIEN);
 	
 	RS485_RX_ENB;
+#else
+	UartPutByte(str);
+	
+	UartDriverRelease();
+#endif
 }
 
 void print_Hex(uint8_t portNo,uint8_t str)
@@ -11010,6 +11301,13 @@ void Read_SHT25(void)
 		
 		TM_Alrm_ON=NO_ALARM;
 		RH_Alrm_ON=NO_ALARM;
+		
+		//Same reasoning as ClearDPPara().  A sensor that drops out and comes back must
+		//not have its first good reading measured against the last one from before the
+		//fault, and the median window must not keep averaging samples taken while it
+		//was broken.
+		ClearFilterState(FILT_TEMP);
+		ClearFilterState(FILT_RH);
 	}
 	else
 	{
@@ -11027,7 +11325,15 @@ void Read_SHT25(void)
 			temperatureC -= TM_Cal_float_Value_F;
 			temperatureC -= TM_Cal_float_Value_C;
 			
-			temperatureC = Kalman_Update(&Kalman[TEMPERATURE_ID], temperatureC);
+			//Median and spike rejection BEFORE the Kalman, for the same reason as the DP
+			//channels: a Kalman fed a spike smooths it into the reading instead of
+			//discarding it.  FILT_TEMP rather than TEMPERATURE_ID - that constant is 1,
+			//which is also DP2, and the two shared a Kalman estimate.
+			temperatureC = ParaSpikeFilter(FILT_TEMP, temperatureC, TMRH_FILTER_SCALE,
+			                               TM_SPIKE_LIMIT, TMRH_SPIKE_MAX_REJECT,
+			                               TMRH_FILTER_WARMUP);
+			
+			temperatureC = Kalman_Update(&Kalman[FILT_TEMP], temperatureC);
 			
 			if(TM_Unit) 
 			{
@@ -11167,6 +11473,11 @@ void Read_SHT25(void)
 //			TM_Min=0.0;
 			
 			TM_Alrm_ON=NO_ALARM;
+			
+			//Disabled, so the window holds readings from whenever it was last on.  Leaving
+			//them there means re-enabling the channel starts the median off with stale
+			//samples and the spike test comparing against a value of any age.
+			ClearFilterState(FILT_TEMP);
 		}
 		
 		if(gu16_parameterWord & ENABLE_RH)
@@ -11182,7 +11493,12 @@ void Read_SHT25(void)
 			humidityRH -= RH_Cal_float_Value_F;
 			humidityRH -= RH_Cal_float_Value_C;
 			
-			humidityRH = Kalman_Update(&Kalman[HUMIDITY_ID], humidityRH);
+			//As above; HUMIDITY_ID is 2, which is also DP3.
+			humidityRH = ParaSpikeFilter(FILT_RH, humidityRH, TMRH_FILTER_SCALE,
+			                             RH_SPIKE_LIMIT, TMRH_SPIKE_MAX_REJECT,
+			                             TMRH_FILTER_WARMUP);
+			
+			humidityRH = Kalman_Update(&Kalman[FILT_RH], humidityRH);
 			
 			if(!TMRH_StartUpTimer)
 			{
@@ -11306,6 +11622,9 @@ void Read_SHT25(void)
 //			RH_Min=0.0;
 			
 			RH_Alrm_ON=NO_ALARM;
+			
+			//As above.
+			ClearFilterState(FILT_RH);
 		}
 	}
 }
@@ -11313,16 +11632,26 @@ void Read_SHT25(void)
 
 void whileTask(void)
 {
+	CKPT(10);
 	if(bool_resetDevice) 	
 	{
+		//Nothing in this project ever sets bool_resetDevice.  If this is ever
+		//reached, the flag was corrupted by a stray write rather than set on
+		//purpose - and this spin never kicks the watchdog, so it looks exactly
+		//like the hang being chased.
+		CKPT(99);
 		while(1);
 	}	
 					
+	CKPT(11);
+	
 	if(bool_autoSendResponse)
 	{
 		AutoSendDataResponse(1);
 		bool_autoSendResponse = false;
 	}
+	
+	CKPT(12);
 	
 	if(bool_triggerXbeeReset)
 	{
@@ -11334,6 +11663,8 @@ void whileTask(void)
 		
 		bool_triggerXbeeReset=false;
 	}
+	
+	CKPT(15);
 	
 	// Check for any RS485 Command ================================================
 	if(bool_msgRcvOK)
@@ -11347,11 +11678,24 @@ void whileTask(void)
 		RxLen = RxInd;
 		
 		//Shorter than the smallest legal frame (FF ID CMD PID CRC FE) there is
-		//nothing to check: RxLen-3 would go negative and reach CalCRC's uint16_t
-		//parameter as ~65533, reading far past a 100 byte buffer.
-		//if(RxLen >= 6)
+		//nothing to check, and checking anyway is fatal rather than merely wrong.
+		//RxLen-3 is computed in uint16_t, so a length of 0, 1 or 2 wraps to about
+		//65533; CalCRC then walks 65533 bytes from a 100 byte buffer, off the end
+		//of RAM, and RxBuffer1[RxLen-2] on the line below is out of bounds for the
+		//same reason.  The device stops dead there and only the watchdog recovers it.
+		//
+		//This check was commented out in a56cac2 "removed min Rx buffer length
+		//validation".  A wired link delivers whole frames or none, so short frames
+		//were rare and it went unnoticed; over the wireless link they arrive
+		//constantly and the device restarted every ~17 seconds.
+		//
+		//Dropping a runt frame costs nothing: the receiver is re-armed below either
+		//way, and the host retries.
+		if(RxLen >= RX_MIN_FRAME_LEN)
 		{
+			CKPT(16);
 			crcVal=CalCRC(&RxBuffer1[1],RxLen-3);
+			CKPT(17);
 			
 			#ifdef DEBUG_RCV_CMD
 			opstr(0,"\r\nCRC:");
@@ -11364,7 +11708,9 @@ void whileTask(void)
 				{
 					for(uint8_t m=0;m<RxLen;m++) RxBuffer[m]=RxBuffer1[m];
 					RxBuffer[1]=DeviceID;
+					CKPT(13);
 					ServePCMsg();
+					CKPT(14);
 				}
 			}
 		}
@@ -11376,6 +11722,7 @@ void whileTask(void)
 	}
 	else
 	{
+		CKPT(19);
 		if(bool_FlashReadCmd)
 		{
 			//Body gated, not the branch: this is the head of the else-if chain below.
@@ -11772,12 +12119,17 @@ void whileTask(void)
 	bool_keyScan_flag=0;	//still set by the ISR; nothing reads it now
 	#endif
 	
+	CKPT(25);
+	
 	if(bool_msec250_flag)
 	{
+		CKPT(20);
 		//Read_SHT25() only exists in the TEMP/RH build - the differential pressure
 		//sampling below runs in BOTH modes, so only this call may be guarded.
 		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
+		CKPT(21);
 		Read_SHT25();
+		CKPT(22);
 		#endif
 		
 		//Read Differential Pressure -----------------------------------------
@@ -11796,10 +12148,7 @@ void whileTask(void)
 				}
 				else
 				{
-					bool_DP_NC[DP1]=1;		
-					Dpressure[DP1]=0.0;
-					DP_Alrm_ON[DP1]=NO_ALARM;
-					gu8_DpAlarmSensingTimer[DP1]=0;
+					ClearDPPara(DP1);
 				}
 				
 				StageDP[DP1]=0;
@@ -11808,15 +12157,12 @@ void whileTask(void)
 		else
 		{
 			bool_DP_NC[DP1]=1;
-			
 			Dpressure[DP1]=0.0;
-
+			DP_Alrm_ON[DP1]=NO_ALARM;
+			gu8_DpAlarmSensingTimer[DP1]=0;
+			
 //			DP_Max[DP1]=0.0;
 //			DP_Min[DP1]=0.0;
-
-			DP_Alrm_ON[DP1]=NO_ALARM;
-			
-			DP_StartUpTimer=0;
 		}
 		//-------------------------------------------------------------
 		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
@@ -11835,10 +12181,7 @@ void whileTask(void)
 				}
 				else
 				{
-					bool_DP_NC[DP2]=1;		
-					Dpressure[DP2]=0.0;
-					DP_Alrm_ON[DP2]=NO_ALARM;
-					gu8_DpAlarmSensingTimer[DP2]=0;
+					ClearDPPara(DP2);
 				}
 				
 				StageDP[DP2]=0;
@@ -11847,15 +12190,12 @@ void whileTask(void)
 		else
 		{
 			bool_DP_NC[DP2]=1;
-			
 			Dpressure[DP2]=0.0;
-
-			DP_Max[DP2]=0.0;
-			DP_Min[DP2]=0.0;
-
 			DP_Alrm_ON[DP2]=NO_ALARM;
-			
-			DP_StartUpTimer=0;
+			gu8_DpAlarmSensingTimer[DP2]=0;
+
+//			DP_Max[DP2]=0.0;
+//			DP_Min[DP2]=0.0;
 		}
 		//-------------------------------------------------------------
 		if(gu16_parameterWord & ENABLE_DP3) 
@@ -11873,10 +12213,7 @@ void whileTask(void)
 				}
 				else
 				{
-					bool_DP_NC[DP3]=1;		
-					Dpressure[DP3]=0.0;
-					DP_Alrm_ON[DP3]=NO_ALARM;
-					gu8_DpAlarmSensingTimer[DP3]=0;
+					ClearDPPara(DP3);
 				}
 				
 				StageDP[DP3]=0;
@@ -11885,15 +12222,12 @@ void whileTask(void)
 		else
 		{
 			bool_DP_NC[DP3]=1;
-			
 			Dpressure[DP3]=0.0;
-
-			DP_Max[DP3]=0.0;
-			DP_Min[DP3]=0.0;
-
 			DP_Alrm_ON[DP3]=NO_ALARM;
+			gu8_DpAlarmSensingTimer[DP3]=0;
 			
-			DP_StartUpTimer=0;
+//			DP_Max[DP3]=0.0;
+//			DP_Min[DP3]=0.0;
 		}
 		#endif
 		
@@ -11947,7 +12281,6 @@ void whileTask(void)
 	ConfigStore_Tick();
 	#endif
 } 
-
 
 // Initialize the Kalman filter
 void Kalman_Init(KalmanFilter *kf, float qr, float rs, float initial_estimate) 
@@ -13135,7 +13468,7 @@ void Init_variables(void)
 	}	
 	#endif
 
-	for(i=0;i<5;i++)
+	for(i=0;i<FILTER_CHANNELS;i++)
 	{
 		Kalman_Init(&Kalman[i], KALMAN_Q, KALMAN_R, 0.0);	// tuning lives in sb_const.h
 	}
@@ -13516,6 +13849,35 @@ void Init_variables(void)
   *********************************************************************************************************************/
 int main(void)
 {
+	//FIRST, before anything can reset the flags or mask what happened.  RCC_CSR keeps
+	//the reason for the LAST reset until it is explicitly cleared, so this is the only
+	//chance to see whether the device came up from a power cycle, the reset pin, a
+	//deliberate NVIC_SystemReset(), the watchdog, or the supply sagging.
+	{
+		uint32_t lu32_csr = RCC->CSR;
+		
+		gu8_resetCause = 0;
+		if(lu32_csr & RCC_CSR_PINRSTF)		gu8_resetCause |= RST_CAUSE_PIN;
+		if(lu32_csr & RCC_CSR_PORRSTF)		gu8_resetCause |= RST_CAUSE_POR;
+		if(lu32_csr & RCC_CSR_SFTRSTF)		gu8_resetCause |= RST_CAUSE_SOFT;
+		if(lu32_csr & RCC_CSR_IWDGRSTF)		gu8_resetCause |= RST_CAUSE_IWDG;
+		if(lu32_csr & RCC_CSR_WWDGRSTF)		gu8_resetCause |= RST_CAUSE_WWDG;
+		if(lu32_csr & RCC_CSR_LPWRRSTF)		gu8_resetCause |= RST_CAUSE_LPWR;
+		if(lu32_csr & RCC_CSR_PVDRSTF)		gu8_resetCause |= RST_CAUSE_PVD;
+		if(lu32_csr & RCC_CSR_VDTRSTF)		gu8_resetCause |= RST_CAUSE_VDT;
+		
+		//Clear them, or the next restart reports this one as well as its own.
+		RCC->CSR |= RCC_CSR_RMVF;
+	
+#if DEBUG_CKPT
+	//Take the breadcrumb BEFORE any checkpoint overwrites it.  Only trust it when
+	//the magic word is there: after a power on this RAM holds whatever it held.
+	if(CKPT_MAGIC_CELL == CKPT_MAGIC)	gu32_lastCkpt = CKPT_VALUE_CELL;
+	else									gu32_lastCkpt = 0xFFFFFFFFUL;
+	CKPT(0);
+#endif
+	}
+	
     PLATFORM_Init();
     GPIO_Configure();
 	
@@ -13570,7 +13932,16 @@ int main(void)
 	TIM1_Configure();
 	Init_variables();
 	
-	IWDG_Configure(1250);	//Initialize WDT
+	//10 seconds, which is what this has ACTUALLY been since the beginning - the old
+	//IWDG_Configure() divided by 32 while setting a /256 prescaler, so the 1250 it was
+	//called with armed very nearly ten.  The argument now means milliseconds, so the
+	//same behaviour has to be asked for honestly.
+	//
+	//Deliberately NOT tightened in the same change as fixing the arithmetic.  Several
+	//operations here block for a long time - the first-boot initialisation, a
+	//configuration page erase, a 1507 byte reply - and cutting the window to 1.25 s
+	//without measuring them first would turn a latent problem into resets in the field.
+	IWDG_Configure(10000);	//Initialize WDT
 
 	#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
 	//Start on a slot that is actually switched on ------------------------------------------
@@ -13597,7 +13968,8 @@ int main(void)
 	#endif
 	
     while (1)
-    {	
+    {
+		CKPT(1);	
 		//1 Second Tick ====================================================
 		if(bool_sec_flag)
 		{

@@ -163,6 +163,19 @@ uint8_t Temp_RTC_ARR[5]={0};
 
 uint8_t gu8_masterEnable=0,gu8_rly_stat=0;
 
+//Latched from RCC_CSR at start-up, before the flags are cleared.
+uint8_t gu8_resetCause=0;
+
+//Instrumentation for the long-reply problem: what the transmit loop actually did.
+uint16_t gu16_txSent=0;
+uint8_t gu8_txAbort=0;
+
+
+#if DEBUG_CKPT
+//Captured from CKPT_ADDR at start-up, before anything overwrites it.
+uint32_t gu32_lastCkpt=0;
+#endif
+
 #if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
 uint8_t ParaScrollTime=0;
 #endif
@@ -217,7 +230,7 @@ uint16_t gu16_nearBlinkTimer=0;
 bool bool_resetDevice=0;
 bool bool_triggerXbeeReset=0;
 bool bool_RamAllReadCmd=0;
-bool bool_sec_flag=0,bool_msec_flag=0,bool_msec250_flag=0,bool_mec500_blink_flag=0,bool_keyScan_flag=0;
+bool bool_sec_flag=0,bool_msec_flag=0,bool_msec250_flag=0,bool_keyScan_flag=0;
 
 //Free-running count of 50 ms ticks, incremented by the TIM1 ISR only.  volatile:
 //main reads it in a loop condition and must not cache it.
