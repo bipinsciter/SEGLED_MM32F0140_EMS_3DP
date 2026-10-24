@@ -144,6 +144,18 @@ TABLE(['Byte', 'Meaning'],
        ['FE / FC', 'End of a request / end of a reply']],
       [1.1, 5.5])
 
+P('Read-with-alarm carries no parameter identifier', bold=True)
+P('0x00 returns the live readings together with the alarm state, so there is '
+  'nothing to name and the PID byte is absent. Its request is five bytes, not '
+  'six:')
+MONO('  FF   ID   00   CRC   FE\n'
+     '  0    1    2    3     4\n'
+     '\n'
+     '  device 1:   FF 01 00 56 FE      0x55 + 0x01 + 0x00 = 0x56')
+P('Five is the shortest frame the device accepts. Anything shorter is discarded '
+  'without a reply: the checksum length is derived from the frame length, and '
+  'below five bytes there is nothing left for it to cover.')
+
 P('Addressing by serial number', bold=True)
 P('A request may be addressed to a serial number instead of a device address. It opens '
   'with 0xEA followed by the last 8 characters of the serial number, and closes with '

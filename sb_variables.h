@@ -19,7 +19,7 @@ int16_t dummy=0,dummy1=0;
 uint8_t last_sec=0,last_min=0,last_hr=0,current_sec=0,current_min=0,current_hr=0;
 uint8_t keybyte=0,key_up_count=0,key_dn_count=0;
 uint8_t debounce=DEBOUNCE;	
-uint16_t gu16_XbeeRstInterval=0,gu16_logtransfer=0;
+uint16_t gu16_logtransfer=0;
 
 uint8_t PCCalibrationTimer=0,gu8_doorSensingTimer=0,progTimeout=0;
 uint8_t gu8_doorSensingTime=0,gu8_doorSensingPolarity=0,gu8_LCDBrigthnessCnt=0;
@@ -74,8 +74,6 @@ uint8_t crcVal=0;
 uint16_t CustPassword=0,FactCustPassword=0;
 
 uint8_t gu8ar_SrNumber[16]={0};
-uint8_t gu8arr_XbeeMac[NO_OF_XBEE_MAC][XBEE_MAC_SIZE]={0};
-uint8_t gu8arr_XbeeSelfMac[XBEE_MAC_SIZE]={'0'};
 
 uint8_t Buffer1[100]={0};
 uint8_t RAMBuffer[RAM_BUF_SIZE]={0};
@@ -156,7 +154,7 @@ uint8_t gu8_DPAutoCalDoorCnt[MAX_SUPPORTED_DP] = {0};
 uint32_t LowEpoch=0,MidEpoch=0,MidEpoch1=0,HighEpoch=0,MidLogInd=0;
 uint32_t InitLogInd=0,LastLogInd=0,StartEpoch=0,EndEpoch=0,StartEpochTime=0,EndEpochTime=0,TotalLog=0,StartLogInd=0,EndLogInd=0;
 
-uint8_t gu8_AutoSentTimeout=60,gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL,gu8_DeviceInGroup=DEFAULT_DEVICES_IN_GROUP,gu8_AutoSentTimer=0,gu8_groupID=0,gu8_broadcast=0;
+uint8_t gu8_AutoSentTimeout=60,gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL,gu8_AutoSentTimer=0,gu8_broadcast=0;
 uint32_t gu32_triggerXbeeResetTimer=0;
 
 uint8_t Temp_RTC_ARR[5]={0};
@@ -171,10 +169,6 @@ uint16_t gu16_txSent=0;
 uint8_t gu8_txAbort=0;
 
 
-#if DEBUG_CKPT
-//Captured from CKPT_ADDR at start-up, before anything overwrites it.
-uint32_t gu32_lastCkpt=0;
-#endif
 
 #if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
 uint8_t ParaScrollTime=0;
@@ -228,7 +222,6 @@ uint8_t gu8_nearBlinkOn=0;
 uint8_t gu8_nearBlinkPulses=0;
 uint16_t gu16_nearBlinkTimer=0;
 bool bool_resetDevice=0;
-bool bool_triggerXbeeReset=0;
 bool bool_RamAllReadCmd=0;
 bool bool_sec_flag=0,bool_msec_flag=0,bool_msec250_flag=0,bool_keyScan_flag=0;
 

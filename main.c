@@ -5289,7 +5289,6 @@ void keyboard(void)
 							if(DeviceID != dummy)
 							{
 								DeviceID = dummy;
-								gu8_groupID = ((DeviceID - 1)/gu8_DeviceInGroup)+1;
 								WriteEEPROMData(DEVICE_ID,&DeviceID,sizeof(DeviceID));
 							}
 						break;
@@ -6636,8 +6635,10 @@ void AutoSendDataResponse(uint8_t SrcPort)
 		Buffer1[j++]=0;
 		
 		//Fill DP value
-		templong = Dpressure[DP1]*100;
-		j += fillValue(&Buffer1[j],templong);	
+		//Cast, do not route through templong: it is uint32_t, so a negative
+		//reading loses its sign there and -5.10 Pa goes out as "510".
+		//fillValue() takes a signed long and writes the minus itself.
+		j += fillValue(&Buffer1[j],(int32_t)(Dpressure[DP1]*100));
 	}
 	
 	Buffer1[j++] = 0xEE;	//Field Separator
@@ -6651,8 +6652,7 @@ void AutoSendDataResponse(uint8_t SrcPort)
 		Buffer1[j++]=0;
 		
 		//Fill DP value
-		templong = Dpressure[DP2]*100;
-		j += fillValue(&Buffer1[j],templong);
+		j += fillValue(&Buffer1[j],(int32_t)(Dpressure[DP2]*100));
 	}
 	
 	Buffer1[j++] = 0xEE;	//Field Separator
@@ -6666,8 +6666,7 @@ void AutoSendDataResponse(uint8_t SrcPort)
 		Buffer1[j++]=0;
 		
 		//Fill DP value
-		templong = Dpressure[DP3]*100;
-		j += fillValue(&Buffer1[j],templong);
+		j += fillValue(&Buffer1[j],(int32_t)(Dpressure[DP3]*100));
 	}
 	
 	Buffer1[j++] = 0xEE;	//Field Separator
@@ -6844,7 +6843,7 @@ void ServePCMsg(void)
 	#ifdef DEBUG_RCV_CMD
 		opstr("\r\nMsg OK");
 	#endif
-	uint8_t index=0,j=0,lu8_sendResponse=0,lu8_GroupDelay=0,m=0;
+	uint8_t index=0,j=0,m=0;
 	
 	if(gu8_IsCOMDisable)
 	{
@@ -6869,270 +6868,230 @@ void ServePCMsg(void)
 	
 	if(RxBuffer[2]==PARA_WITH_ALM_READ_CMD)
 	{	
-		if(RxLen==6)
+		RxBuffer[0]=0xFD;
+		
+		RxBuffer[3]=0x00;
+		if(bool_paraIdNotValid) 		RxBuffer[3] |= INVALID_PARA;
+		if(bool_DP_NC[DP1]) 			RxBuffer[3] |= DP1_FAULTY;
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		if(bool_DP_NC[DP2]) 			RxBuffer[3] |= DP2_FAULTY;
+		if(bool_DP_NC[DP3]) 			RxBuffer[3] |= DP3_FAULTY;
+		#else
+		if(bool_RH_TEMP_NC) 			RxBuffer[3] |= RH_TEMP_FAULTY;
+		#endif
+		
+		j=4;
+		
+		if(bool_DP_NC[DP1]) 			
 		{
-			if((RxBuffer[3]==0x00) || (RxBuffer[3]==gu8_groupID))
+			RxBuffer[j++] |= DP1_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill DP value
+			j += fillValue(&RxBuffer[j],(int32_t)(Dpressure[DP1]*100));
+		}
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		if(bool_DP_NC[DP2])
+		{
+			RxBuffer[j++] |= DP2_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill DP value
+			j += fillValue(&RxBuffer[j],(int32_t)(Dpressure[DP2]*100));
+		}
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		
+		if(bool_DP_NC[DP3])
+		{
+			RxBuffer[j++] |= DP3_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill DP value
+			j += fillValue(&RxBuffer[j],(int32_t)(Dpressure[DP3]*100));
+		}
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		#else
+		
+		if(bool_RH_TEMP_NC) 			
+		{
+			RxBuffer[j++] |= RH_TEMP_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill Temp value
+			if(!TM_Unit)
 			{
-				lu8_sendResponse = 1;
-				
-				//if(gu8_groupID>1)
-				//{
-					//for(m=0;m<gu8_groupID;m++)
-					//{
-						//PLATFORM_DelayMS(100);
-					//}
-				//}
-				
-				lu8_GroupDelay = (DeviceID - 1)%gu8_DeviceInGroup;
-				
-				if(lu8_GroupDelay)
-				{
-					for(m=0;m<lu8_GroupDelay;m++)
-					{
-						PLATFORM_DelayMS(1);
-					}
-				}
+				tempshort = temperatureC*100;
 			}
 			else
 			{
-				lu8_sendResponse = 0;
+				tempshort = temperatureF*100;
+			}
+			
+			j += fillValue(&RxBuffer[j],tempshort);
+		}
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		
+		if(bool_RH_TEMP_NC) 			
+		{
+			RxBuffer[j++] |= RH_TEMP_FAULTY;
+		}
+		else
+		{
+			RxBuffer[j++]=0;
+			
+			//Fill Temp value
+			tempshort = humidityRH*100;
+			j += fillValue(&RxBuffer[j],tempshort);
+		}
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		#endif
+		
+		if(gu16_parameterWord & ENABLE_DP1)
+		{
+			if(!DP_Alrm_ON[DP1])
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(DP_Alrm_ON[DP1]==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
 			}
 		}
 		else
-		{	
-			lu8_sendResponse = 1;
-		}
-		
-		if(lu8_sendResponse==1)
 		{
-			RxBuffer[0]=0xFD;
-			
-			RxBuffer[3]=0x00;
-			if(bool_paraIdNotValid) 		RxBuffer[3] |= INVALID_PARA;
-			if(bool_DP_NC[DP1]) 			RxBuffer[3] |= DP1_FAULTY;
-			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-			if(bool_DP_NC[DP2]) 			RxBuffer[3] |= DP2_FAULTY;
-			if(bool_DP_NC[DP3]) 			RxBuffer[3] |= DP3_FAULTY;
-			#else
-			if(bool_RH_TEMP_NC) 			RxBuffer[3] |= RH_TEMP_FAULTY;
-			#endif
-			
-			j=4;
-			
-			if(bool_DP_NC[DP1]) 			
-			{
-				RxBuffer[j++] |= DP1_FAULTY;
-			}
-			else
-			{
-				RxBuffer[j++]=0;
-				
-				//Fill DP value
-				templong = Dpressure[DP1]*100;
-				j += fillValue(&RxBuffer[j],templong);	
-			}
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-			if(bool_DP_NC[DP2])
-			{
-				RxBuffer[j++] |= DP2_FAULTY;
-			}
-			else
-			{
-				RxBuffer[j++]=0;
-				
-				//Fill DP value
-				templong = Dpressure[DP2]*100;
-				j += fillValue(&RxBuffer[j],templong);
-			}
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			
-			if(bool_DP_NC[DP3])
-			{
-				RxBuffer[j++] |= DP3_FAULTY;
-			}
-			else
-			{
-				RxBuffer[j++]=0;
-				
-				//Fill DP value
-				templong = Dpressure[DP3]*100;
-				j += fillValue(&RxBuffer[j],templong);
-			}
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			#else
-			
-			if(bool_RH_TEMP_NC) 			
-			{
-				RxBuffer[j++] |= RH_TEMP_FAULTY;
-			}
-			else
-			{
-				RxBuffer[j++]=0;
-				
-				//Fill Temp value
-				if(!TM_Unit)
-				{
-					tempshort = temperatureC*100;
-				}
-				else
-				{
-					tempshort = temperatureF*100;
-				}
-				
-				j += fillValue(&RxBuffer[j],tempshort);
-			}
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			
-			if(bool_RH_TEMP_NC) 			
-			{
-				RxBuffer[j++] |= RH_TEMP_FAULTY;
-			}
-			else
-			{
-				RxBuffer[j++]=0;
-				
-				//Fill Temp value
-				tempshort = humidityRH*100;
-				j += fillValue(&RxBuffer[j],tempshort);
-			}
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			#endif
-			
-			if(gu16_parameterWord & ENABLE_DP1)
-			{
-				if(!DP_Alrm_ON[DP1])
-				{
-					RxBuffer[j++] = 0;
-				}
-				else
-				{
-					if(DP_Alrm_ON[DP1]==UPPER_ALARM) RxBuffer[j++] = 1;
-					else						  RxBuffer[j++] = 2;
-				}
-			}
-			else
-			{
-				RxBuffer[j++] = 0;
-			}
-			
-			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
-			if(gu16_parameterWord & ENABLE_DP2)
-			{
-				if(!DP_Alrm_ON[DP2])
-				{
-					RxBuffer[j++] = 0;
-				}
-				else
-				{
-					if(DP_Alrm_ON[DP2]==UPPER_ALARM) RxBuffer[j++] = 1;
-					else						  RxBuffer[j++] = 2;
-				}
-			}
-			else
-			{
-				RxBuffer[j++] = 0;
-			}
-			
-			if(gu16_parameterWord & ENABLE_DP3)
-			{
-				if(!DP_Alrm_ON[DP3])
-				{
-					RxBuffer[j++] = 0;
-				}
-				else
-				{
-					if(DP_Alrm_ON[DP3]==UPPER_ALARM) RxBuffer[j++] = 1;
-					else						  RxBuffer[j++] = 2;
-				}
-			}
-			else
-			{
-				RxBuffer[j++] = 0;
-			}
-			#else
-			if(gu16_parameterWord & ENABLE_TEMP)
-			{
-				if(!TM_Alrm_ON)
-				{
-					RxBuffer[j++] = 0;
-				}
-				else
-				{
-					if(TM_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
-					else						  RxBuffer[j++] = 2;
-				}
-			}
-			else
-			{
-				RxBuffer[j++] = 0;
-			}
-			
-			if(gu16_parameterWord & ENABLE_RH)
-			{
-				if(!RH_Alrm_ON)
-				{
-					RxBuffer[j++] = 0;
-				}
-				else
-				{
-					if(RH_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
-					else						  RxBuffer[j++] = 2;
-				}
-			}
-			else
-			{
-				RxBuffer[j++] = 0;
-			}
-			#endif
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			
-			#ifdef DISABLE_DOOR_SENSING
-
-				//Door Close
-				RxBuffer[j++] = 0x0F;
-				RxBuffer[j++] = 0x0F;
-			
-			#else
-				
-			if(bool_doorStatus==OPEN)
-			{
-				//Door Open
-				RxBuffer[j++] = 0x0E;
-				RxBuffer[j++] = 0x0E;	
-			}
-			else
-			{
-				//Door Close
-				RxBuffer[j++] = 0x0F;
-				RxBuffer[j++] = 0x0F;
-			}
-				
-			#endif
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			
-			memcpy(&RxBuffer[j],&gu8ar_SrNumber[8],8);
-			j+=8;
-			
-			RxBuffer[j++] = 0xEE;	//Field Separator
-			
-			memcpy(&RxBuffer[j],(uint8_t*)&ep.currentEpochTime,4);
-			j+=4;
-			
-			RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
-			j++;
-			
-			RxBuffer[j++]=0xFC;
-		
-			SendToUART(RxBuffer,j);
-			//SetTxmode(RxBuffer,j);
+			RxBuffer[j++] = 0;
 		}
+		
+		#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
+		if(gu16_parameterWord & ENABLE_DP2)
+		{
+			if(!DP_Alrm_ON[DP2])
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(DP_Alrm_ON[DP2]==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		
+		if(gu16_parameterWord & ENABLE_DP3)
+		{
+			if(!DP_Alrm_ON[DP3])
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(DP_Alrm_ON[DP3]==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		#else
+		if(gu16_parameterWord & ENABLE_TEMP)
+		{
+			if(!TM_Alrm_ON)
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(TM_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		
+		if(gu16_parameterWord & ENABLE_RH)
+		{
+			if(!RH_Alrm_ON)
+			{
+				RxBuffer[j++] = 0;
+			}
+			else
+			{
+				if(RH_Alrm_ON==UPPER_ALARM) RxBuffer[j++] = 1;
+				else						  RxBuffer[j++] = 2;
+			}
+		}
+		else
+		{
+			RxBuffer[j++] = 0;
+		}
+		#endif
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		
+		#ifdef DISABLE_DOOR_SENSING
+
+			//Door Close
+			RxBuffer[j++] = 0x0F;
+			RxBuffer[j++] = 0x0F;
+		
+		#else
+			
+		if(bool_doorStatus==OPEN)
+		{
+			//Door Open
+			RxBuffer[j++] = 0x0E;
+			RxBuffer[j++] = 0x0E;	
+		}
+		else
+		{
+			//Door Close
+			RxBuffer[j++] = 0x0F;
+			RxBuffer[j++] = 0x0F;
+		}
+			
+		#endif
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		
+		memcpy(&RxBuffer[j],&gu8ar_SrNumber[8],8);
+		j+=8;
+		
+		RxBuffer[j++] = 0xEE;	//Field Separator
+		
+		memcpy(&RxBuffer[j],(uint8_t*)&ep.currentEpochTime,4);
+		j+=4;
+		
+		RxBuffer[j]=CalCRC(&RxBuffer[1],j-1);
+		j++;
+		
+		RxBuffer[j++]=0xFC;
+	
+		SendToUART(RxBuffer,j);
+		//SetTxmode(RxBuffer,j);
 	}
 	else if(RxBuffer[2]==READ_DP1_VALUE)
 	{	
@@ -7150,8 +7109,7 @@ void ServePCMsg(void)
 			RxBuffer[j++]=0;
 			
 			//Fill DP value
-			templong = Dpressure[DP1]*100;
-			j += fillValue(&RxBuffer[j],templong);	
+			j += fillValue(&RxBuffer[j],(int32_t)(Dpressure[DP1]*100));
 		}
 
 		RxBuffer[j++] = 0xEE;	//Field Separator
@@ -7197,8 +7155,7 @@ void ServePCMsg(void)
 			RxBuffer[j++]=0;
 			
 			//Fill DP value
-			templong = Dpressure[DP2]*100;
-			j += fillValue(&RxBuffer[j],templong);	
+			j += fillValue(&RxBuffer[j],(int32_t)(Dpressure[DP2]*100));
 		}
 
 		RxBuffer[j++] = 0xEE;	//Field Separator
@@ -7243,8 +7200,7 @@ void ServePCMsg(void)
 			RxBuffer[j++]=0;
 			
 			//Fill DP value
-			templong = Dpressure[DP3]*100;
-			j += fillValue(&RxBuffer[j],templong);	
+			j += fillValue(&RxBuffer[j],(int32_t)(Dpressure[DP3]*100));
 		}
 
 		RxBuffer[j++] = 0xEE;	//Field Separator
@@ -7726,7 +7682,6 @@ void ServePCMsg(void)
 					gu8_deviceIDChangeTry=0;
 					
 					DeviceID=tempshort;
-					gu8_groupID = ((DeviceID - 1)/gu8_DeviceInGroup)+1;
 					WriteEEPROMData(DEVICE_ID,&DeviceID,sizeof(DeviceID));
 				}
 				
@@ -8318,13 +8273,6 @@ void ServePCMsg(void)
 					WriteEEPROMData(AUTO_SENT_INTERVAL_ADDR,&gu8_AutoSentInterval,sizeof(gu8_AutoSentInterval));
 				}
 			break;
-			case DEVICES_IN_GROUP_ID:
-				if((tempshort>=2) && (tempshort <= 100))
-				{
-					gu8_DeviceInGroup=tempshort;
-					WriteEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
-				}
-			break;
 			case LCD_CONTROL_ID:
 				if((tempshort==0) || (tempshort==1))
 				{
@@ -8349,14 +8297,6 @@ void ServePCMsg(void)
 				{
 					gu8_IsCOMDisable=tempshort;
 					WriteEEPROMData(COM_CONTROL_ADDR,&gu8_IsCOMDisable,sizeof(gu8_IsCOMDisable));
-				}
-			break;
-			case XBEE_RST_INTERVAL_ID:
-				if(tempshort <= 1440)
-				{
-					gu16_XbeeRstInterval=tempshort;
-					gu32_triggerXbeeResetTimer = (unsigned long)gu16_XbeeRstInterval*60;
-					WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
 				}
 			break;
 			case DP1_ALM_SENSE_TIME_ID:
@@ -8730,10 +8670,8 @@ void ServePCMsg(void)
 			case DOOR_SENSE_TIME_ID:		tempshort = gu8_doorSensingTime;		break;
 			case LCD_BRIGHT_CNT_ID:			tempshort = gu8_LCDBrigthnessCnt;		break;
 			case AUTO_SENT_INTERVAL_ID:			tempshort = gu8_AutoSentInterval;		break;
-			case DEVICES_IN_GROUP_ID:			tempshort = gu8_DeviceInGroup;			break;
 			case LCD_CONTROL_ID:			tempshort = gu8_IsLCDDisable;			break;
 			case COM_CONTROL_ID:			tempshort = gu8_IsCOMDisable;			break;
-			case XBEE_RST_INTERVAL_ID:			tempshort = gu16_XbeeRstInterval;		break;
 			case DP1_ALM_SENSE_TIME_ID:			tempshort = gu8_DpAlarmSensingTime[DP1];	break;
 			#if (DEVICE_MODE==DP1_DP2_DP3_MODE)
 			case DP2_ALM_SENSE_TIME_ID:			tempshort = gu8_DpAlarmSensingTime[DP2];	break;
@@ -9636,11 +9574,9 @@ void ServePCMsg(void)
 
 void SetTxmode(uint8_t *buffer,uint16_t bytes)
 {
-	CKPT(40);
 	RS485_TX_ENB;
 	SendToUART(buffer,bytes);
 	RS485_RX_ENB;
-	CKPT(41);
 }
 
 uint32_t FindLogIndex(uint32_t EpochTime,uint32_t InitLogInd,uint32_t LastLogInd)
@@ -10374,7 +10310,6 @@ uint32_t ascii2hex(uint8_t *data, uint8_t NoOfdigit)
 
 void SecondTick(void)
 {
-	CKPT(2);
 	static uint16_t rtFlushTimer=0;
 	
 	//Serve Watchdog Timer
@@ -10442,17 +10377,6 @@ void SecondTick(void)
 		if(!gu8_deviceIDChangeTryTimer)
 		{
 			gu8_deviceIDChangeTry=0;
-		}
-	}
-	
-	if(gu32_triggerXbeeResetTimer)
-	{
-		gu32_triggerXbeeResetTimer--;
-		if(!gu32_triggerXbeeResetTimer)
-		{
-			gu32_triggerXbeeResetTimer = (unsigned long)gu16_XbeeRstInterval*60;
-
-			bool_triggerXbeeReset = true;
 		}
 	}
 	
@@ -11632,18 +11556,14 @@ void Read_SHT25(void)
 
 void whileTask(void)
 {
-	CKPT(10);
 	if(bool_resetDevice) 	
 	{
-		//Nothing in this project ever sets bool_resetDevice.  If this is ever
-		//reached, the flag was corrupted by a stray write rather than set on
-		//purpose - and this spin never kicks the watchdog, so it looks exactly
-		//like the hang being chased.
-		CKPT(99);
+		//Nothing in this project ever sets bool_resetDevice, so reaching this
+		//would mean the flag had been corrupted by a stray write.  The spin
+		//never kicks the watchdog, which is the only reason it is survivable.
 		while(1);
 	}	
 					
-	CKPT(11);
 	
 	if(bool_autoSendResponse)
 	{
@@ -11651,20 +11571,6 @@ void whileTask(void)
 		bool_autoSendResponse = false;
 	}
 	
-	CKPT(12);
-	
-	if(bool_triggerXbeeReset)
-	{
-		PLATFORM_DelayMS(25);
-		XBEE_RST_LOW;
-		PLATFORM_DelayMS(1);
-		XBEE_RST_HIGH;
-		PLATFORM_DelayMS(25);
-		
-		bool_triggerXbeeReset=false;
-	}
-	
-	CKPT(15);
 	
 	// Check for any RS485 Command ================================================
 	if(bool_msgRcvOK)
@@ -11677,25 +11583,26 @@ void whileTask(void)
 		//wiser.
 		RxLen = RxInd;
 		
-		//Shorter than the smallest legal frame (FF ID CMD PID CRC FE) there is
-		//nothing to check, and checking anyway is fatal rather than merely wrong.
-		//RxLen-3 is computed in uint16_t, so a length of 0, 1 or 2 wraps to about
-		//65533; CalCRC then walks 65533 bytes from a 100 byte buffer, off the end
-		//of RAM, and RxBuffer1[RxLen-2] on the line below is out of bounds for the
-		//same reason.  The device stops dead there and only the watchdog recovers it.
+		//Shorter than the smallest legal frame there is nothing to check, and
+		//checking anyway is fatal rather than merely wrong.  RxLen-3 is computed
+		//in uint16_t, so a length of 0, 1 or 2 wraps to about 65533; CalCRC then
+		//walks 65533 bytes from a 100 byte buffer, off the end of RAM, and
+		//RxBuffer1[RxLen-2] below is out of bounds for the same reason.  The
+		//device stops dead there and only the watchdog recovers it.
 		//
-		//This check was commented out in a56cac2 "removed min Rx buffer length
-		//validation".  A wired link delivers whole frames or none, so short frames
-		//were rare and it went unnoticed; over the wireless link they arrive
-		//constantly and the device restarted every ~17 seconds.
+		//The limit is FIVE, not six: PARA_WITH_ALM_READ_CMD carries no parameter
+		//id, so it arrives as FF ID CMD CRC FE.  Guarding at six rejected it, and
+		//that is the likely reason this check was commented out in a56cac2
+		//"removed min Rx buffer length validation" rather than anyone judging
+		//runt frames harmless.  Removing it cost a restart every ~17 seconds over
+		//a wireless link, where truncated frames arrive constantly; a wired link
+		//delivers whole frames or none, so it went unnoticed for a long time.
 		//
 		//Dropping a runt frame costs nothing: the receiver is re-armed below either
 		//way, and the host retries.
 		if(RxLen >= RX_MIN_FRAME_LEN)
 		{
-			CKPT(16);
 			crcVal=CalCRC(&RxBuffer1[1],RxLen-3);
-			CKPT(17);
 			
 			#ifdef DEBUG_RCV_CMD
 			opstr(0,"\r\nCRC:");
@@ -11708,9 +11615,7 @@ void whileTask(void)
 				{
 					for(uint8_t m=0;m<RxLen;m++) RxBuffer[m]=RxBuffer1[m];
 					RxBuffer[1]=DeviceID;
-					CKPT(13);
 					ServePCMsg();
-					CKPT(14);
 				}
 			}
 		}
@@ -11722,7 +11627,6 @@ void whileTask(void)
 	}
 	else
 	{
-		CKPT(19);
 		if(bool_FlashReadCmd)
 		{
 			//Body gated, not the branch: this is the head of the else-if chain below.
@@ -12119,17 +12023,13 @@ void whileTask(void)
 	bool_keyScan_flag=0;	//still set by the ISR; nothing reads it now
 	#endif
 	
-	CKPT(25);
 	
 	if(bool_msec250_flag)
 	{
-		CKPT(20);
 		//Read_SHT25() only exists in the TEMP/RH build - the differential pressure
 		//sampling below runs in BOTH modes, so only this call may be guarded.
 		#if (DEVICE_MODE==DP1_TEMP_RH_MODE)
-		CKPT(21);
 		Read_SHT25();
-		CKPT(22);
 		#endif
 		
 		//Read Differential Pressure -----------------------------------------
@@ -12661,20 +12561,6 @@ void boot_data(void)
 		gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL;
 		WriteEEPROMData(AUTO_SENT_INTERVAL_ADDR,&gu8_AutoSentInterval,sizeof(gu8_AutoSentInterval));
 		
-		gu8_DeviceInGroup=DEFAULT_DEVICES_IN_GROUP;
-		WriteEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
-		
-		gu16_XbeeRstInterval=DEFAULT_XBEE_RST_INTERVAL;
-		WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
-		
-		memcpy(&gu8arr_XbeeMac[0][0],"000000000000FFFF",XBEE_MAC_SIZE);
-		WriteEEPROMData(XBEE_MAC_ADDR,(uint8_t*)&gu8arr_XbeeMac[0][0],XBEE_MAC_SIZE);
-		for(uint8_t i=1;i<NO_OF_XBEE_MAC;i++)
-		{
-			memset(&gu8arr_XbeeMac[i][0],'0',XBEE_MAC_SIZE);
-			WriteEEPROMData((XBEE_MAC_ADDR+(i*XBEE_MAC_SIZE)),(uint8_t*)&gu8arr_XbeeMac[i][0],XBEE_MAC_SIZE);
-		}
-		
 		#if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
 		ParaScrollTime=DEFAULT_PARA_SCROLL_TIME;
 		WriteEEPROMData(PARA_SCROLL_TIME,&ParaScrollTime,sizeof(ParaScrollTime)); 
@@ -12723,20 +12609,6 @@ void boot_data(void)
 		{
 			gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL;
 			WriteEEPROMData(AUTO_SENT_INTERVAL_ADDR,&gu8_AutoSentInterval,sizeof(gu8_AutoSentInterval));
-		}
-		
-		ReadEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
-		if((gu8_DeviceInGroup < 2) || (gu8_DeviceInGroup > 100))
-		{
-			gu8_DeviceInGroup=DEFAULT_DEVICES_IN_GROUP;
-			WriteEEPROMData(DEVICES_IN_GROUP_ADDR,&gu8_DeviceInGroup,sizeof(gu8_DeviceInGroup));
-		}
-		
-		ReadEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
-		if(gu16_XbeeRstInterval > 1440)
-		{
-			gu16_XbeeRstInterval=DEFAULT_XBEE_RST_INTERVAL;
-			WriteEEPROMData(XBEE_RST_INTERVAL_ADDR,(uint8_t*)&gu16_XbeeRstInterval,sizeof(gu16_XbeeRstInterval));
 		}
 		
 		ReadEEPROMData(DEVICE_SR_NO,&gu8ar_SrNumber[0],sizeof(gu8ar_SrNumber));
@@ -13358,17 +13230,6 @@ void boot_data(void)
 			}
 		}
 		
-		for(uint8_t i=0;i<NO_OF_XBEE_MAC;i++)
-		{
-			ReadEEPROMData((XBEE_MAC_ADDR+(i*XBEE_MAC_SIZE)),&gu8arr_XbeeMac[i][0],XBEE_MAC_SIZE);
-			
-			if(gu8arr_XbeeMac[i][0]==0xFF)
-			{
-				memset(&gu8arr_XbeeMac[i][0],'0',XBEE_MAC_SIZE);
-				WriteEEPROMData((XBEE_MAC_ADDR+(i*XBEE_MAC_SIZE)),(uint8_t*)&gu8arr_XbeeMac[i][0],XBEE_MAC_SIZE);
-			}
-		}
-		
 		#if BUILD_REGULAR_LOG
 		//Data Logging Parameter -------------------------------------------
 		ReadEEPROMData(LOG_INTERVAL,(uint8_t*)&LogInterval,sizeof(LogInterval));
@@ -13429,11 +13290,6 @@ void Init_variables(void)
 	#endif
 	
 	bool_autoSendResponse = false;
-	bool_triggerXbeeReset = false;
-	gu32_triggerXbeeResetTimer = (unsigned long)gu16_XbeeRstInterval*60;
-	
-	//gu8_AutoSentTimer=gu8_AutoSentInterval;
-	gu8_groupID = ((DeviceID - 1)/gu8_DeviceInGroup)+1;
 	
 	#if BUILD_REGULAR_LOG
 	logTimer = LogInterval;
@@ -13869,13 +13725,6 @@ int main(void)
 		//Clear them, or the next restart reports this one as well as its own.
 		RCC->CSR |= RCC_CSR_RMVF;
 	
-#if DEBUG_CKPT
-	//Take the breadcrumb BEFORE any checkpoint overwrites it.  Only trust it when
-	//the magic word is there: after a power on this RAM holds whatever it held.
-	if(CKPT_MAGIC_CELL == CKPT_MAGIC)	gu32_lastCkpt = CKPT_VALUE_CELL;
-	else									gu32_lastCkpt = 0xFFFFFFFFUL;
-	CKPT(0);
-#endif
 	}
 	
     PLATFORM_Init();
@@ -13969,7 +13818,6 @@ int main(void)
 	
     while (1)
     {
-		CKPT(1);	
 		//1 Second Tick ====================================================
 		if(bool_sec_flag)
 		{

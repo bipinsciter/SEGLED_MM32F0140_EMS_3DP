@@ -368,14 +368,6 @@
   "mode": null
  },
  {
-  "hex": "0x3D",
-  "name": "BATPER_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
-  "mode": null
- },
- {
   "hex": "0x3E",
   "name": "BRDSTP_ID",
   "read": false,
@@ -405,30 +397,6 @@
   "read": true,
   "write": true,
   "expr": "UART_BaudRate",
-  "mode": null
- },
- {
-  "hex": "0x42",
-  "name": "UDBT_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
-  "mode": null
- },
- {
-  "hex": "0x43",
-  "name": "UPRT_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
-  "mode": null
- },
- {
-  "hex": "0x44",
-  "name": "USTB_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
   "mode": null
  },
  {
@@ -555,14 +523,6 @@
   "hex": "0x54",
   "name": "MEAN_HR_ID",
   "read": true,
-  "write": false,
-  "expr": null,
-  "mode": null
- },
- {
-  "hex": "0x57",
-  "name": "BIG_FONT_LED_SET_ID",
-  "read": false,
   "write": false,
   "expr": null,
   "mode": null
@@ -701,38 +661,6 @@
   "read": true,
   "write": true,
   "expr": "gu8_AutoSentInterval",
-  "mode": null
- },
- {
-  "hex": "0x6A",
-  "name": "XBEE_RST_INTERVAL_ID",
-  "read": true,
-  "write": true,
-  "expr": "gu16_XbeeRstInterval",
-  "mode": null
- },
- {
-  "hex": "0x6B",
-  "name": "XBEE_MAC_ADDR_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
-  "mode": null
- },
- {
-  "hex": "0x6C",
-  "name": "DEVICES_IN_GROUP_ID",
-  "read": true,
-  "write": true,
-  "expr": "gu8_DeviceInGroup",
-  "mode": null
- },
- {
-  "hex": "0x6D",
-  "name": "XBEE_SELF_MAC_ADDR_ID",
-  "read": false,
-  "write": false,
-  "expr": null,
   "mode": null
  },
  {

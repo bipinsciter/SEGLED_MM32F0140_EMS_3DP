@@ -81,7 +81,27 @@ P('Nothing in the frame says which of the two channel layouts applies. Ask for 0
   'which only exists in the DP1+Temp+RH build: an answer means temperature and '
   'humidity, INVALID_PARA means DP2 and DP3.')
 
-H('10.4  Indexed parameters', 2)
+H('10.4  Readings with alarms  (command 0x00)', 2)
+P('One exchange for everything the front panel shows. The request is five bytes and names no parameter \u2014 see section 2. The reply is variable length, 43 bytes on a DP1 + temperature + humidity build:')
+MONO('  FD  ID  00  STATUS'
+     '    <reading 1>  EE  <reading 2>  EE  <reading 3>  EE'
+     '    <alarm 1><alarm 2><alarm 3>  EE'
+     '    <door><door>  EE'
+     '    <serial, 8 characters>  EE'
+     '    <epoch, uint32 little endian>  CRC  FC')
+P('Fields', bold=True)
+TABLE(['Field', 'Meaning'],
+      [['reading', 'A fault byte, then the value multiplied by 100 as ASCII \u2014 variable width, no leading zeros, a leading minus when negative. A channel in fault sends its fault byte alone, with no value after it.'],
+       ['EE', 'Field separator'],
+       ['alarm', 'One byte per channel: 0 none, 1 upper, 2 lower'],
+       ['door', 'Two identical bytes: 0x0E open, 0x0F closed'],
+       ['serial', 'The last 8 characters of the serial number'],
+       ['epoch', 'The device clock, seconds since 1 January 1970, little endian']],
+      [1.3, 5.3])
+P('Which three channels depends on the build, in the same order as everywhere else: DP1, DP2, DP3, or DP1, temperature, humidity.')
+P('Parse the tail by offset, not by splitting on the separator.', bold=True)
+P('Everything from the alarm bytes onwards is fixed width, so it can be measured back from the terminator: 4 epoch, separator, 8 serial, separator, 2 door, separator, 3 alarms. Only the three readings at the front are variable, and only those should be split on 0xEE. The reason is that a faulted channel\u2019s fault byte is written over whatever the request left in the buffer, so it can hold any value \u2014 including 0xEE, which would split a field in two.')
+H('10.5  Indexed parameters', 2)
 P('Four parameters carry index bytes between the identifier and the value. The value '
   'field is a fixed five characters, and a negative value carries its sign inside '
   'those five — so it has one digit fewer.')
@@ -123,7 +143,7 @@ TABLE(['Slot', 'Applies when the reading is'],
 P('An offset is limited to ±500.0 Pa; outside that the device sets INVALID_PARA '
   'and stores nothing.')
 
-H('10.5  Calibration  (0x30, 0x31, 0x67, 0x32, 0x33)', 2)
+H('10.6  Calibration  (0x30, 0x31, 0x67, 0x32, 0x33)', 2)
 P('Calibration has to be unlocked first, with 0x37 for factory or 0x38 for customer. '
   'The window stays open for about 60 seconds and every calibration exchange restarts '
   'it.')
@@ -143,7 +163,7 @@ P('Up to V1.0.9 this reply grew with the unlock state - 39 bytes with factory '
   'removed from the firmware. A host that still reads by the old lengths will wait for '
   'bytes that are never sent.', bold=True)
 
-H('10.5.1  Which unit a temperature is in', 3)
+H('10.6.1  Which unit a temperature is in', 3)
 P('This is not uniform, and it catches people out. The device stores and transmits '
   'temperature in Celsius almost everywhere; only the values a person reads off the '
   'display follow the selected unit.')
@@ -170,7 +190,7 @@ P('Firmware before 1.0.4 sent nothing at all for a locked calibration read — t
   'branch built a reply and never transmitted it, leaving the host to time out. Fixed '
   'in 1.0.4.', colour=GREY)
 
-H('10.6  Feature word  (0x4E)', 2)
+H('10.7  Feature word  (0x4E)', 2)
 MONO('  read      FF  ID  10  4E  PPPP  CRC  FE\n'
      '  write     FF  ID  11  4E  PPPP  BBBBB  CRC  FE')
 P('Four digits of factory password, and for a write five more holding the bit pattern '
@@ -198,7 +218,7 @@ P('Logging itself is no longer switched here. It is now settled when the firmwar
   'and BUILD_RAM_BUFFER macros, and a unit that should not log needs a different build '
   'rather than a different setting.', colour=GREY)
 
-H('10.7  Reading the logs', 2)
+H('10.8  Reading the logs', 2)
 
 P('Five logs, all written only while the clock has been set AND is trusted - checked '
   'when each record is written, not merely at start-up. A clock that reads plausibly '

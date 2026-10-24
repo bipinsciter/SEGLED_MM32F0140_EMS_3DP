@@ -10,7 +10,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	2
-#define FW_PATCH	0
+#define FW_PATCH	1
 
 #define ENABLE_KEY_LOGIC
 
@@ -354,14 +354,10 @@
 #define ACK_TIMER_ID		0x3A
 #define ACK_PW_ID			0x3B
 #define ALM_ACK_ID			0x3C
-#define BATPER_ID			0x3D
 #define BRDSTP_ID			0x3E
 #define BRDSTR_ID			0x3F
 #define SRNO_ID				0x40
 #define UBRT_ID				0x41
-#define UDBT_ID				0x42
-#define UPRT_ID				0x43
-#define USTB_ID				0x44
 #define RAM_ALL_ID			0x45
 #define RAM_IND_ID			0x46
 #define FLASH24_IND_ID		0x47
@@ -378,7 +374,6 @@
 #define DFLT_CAL_ID			0x52
 #define MINMAXMEAN_IND_ID	0x53
 #define MEAN_HR_ID			0x54
-#define BIG_FONT_LED_SET_ID	0x57
 #define MENB_ID				0x58
 #define DOOR_SENSE_POLARITY_ID		0x5A
 #define DOOR_SENSE_TIME_ID			0x5B
@@ -396,10 +391,6 @@
 #define DP3CAL_ID					0x67
 #define DP3_ALM_SENSE_TIME_ID		0x68
 #define AUTO_SENT_INTERVAL_ID		0x69
-#define XBEE_RST_INTERVAL_ID		0x6A
-#define XBEE_MAC_ADDR_ID			0x6B
-#define DEVICES_IN_GROUP_ID			0x6C
-#define XBEE_SELF_MAC_ADDR_ID		0x6D
 #define DP_LIMIT_ID					0x6E
 #define LCD_CONTROL_ID				0x6F
 #define COM_CONTROL_ID				0x70
@@ -408,12 +399,6 @@
 //  RxBuffer[4] = channel '0'..'2', RxBuffer[5] = slot '0'..'5',
 //  RxBuffer[6..10] = 5-digit signed value in tenths of a Pa.
 #define DP_SLOT_OFFSET_ID			0x72
-
-//Why the device last restarted, captured from RCC_CSR before the flags are cleared.
-//Read only, one byte of flags - see RST_CAUSE_* below.  A restart that nobody asked
-//for is otherwise invisible from outside: the device simply comes back with its RAM
-//cleared and carries on.
-#define RESET_CAUSE_ID			0x73
 
 //The bits in that byte, in RCC_CSR's own order.  More than one can be set: a
 //watchdog reset also drives the reset pin, so 0x09 is one watchdog event and not
@@ -441,49 +426,6 @@
 // transmitting is what kills it - and this is the only part of the comms path that
 // has ever been changed.  Set this to 0 to take it out of the picture.
 #define UART_TX_REWRITE				0
-
-//------------------------------------------------------------------------
-// Where the main loop last was, kept across a reset.  DIAGNOSTIC ONLY.
-//
-// Set DEBUG_CKPT to 1 to turn this on.  CKPT(n) stores a number at a fixed RAM
-// address that survives a watchdog reset, and 0x78 reads back whichever one was
-// current when the device last died - which is how the runt-frame hang in
-// whileTask() was found, after four wrong guesses made from reading code.
-//
-// OFF by default, and the reason matters: CKPT_ADDR is chosen by hand and the
-// linker knows nothing about it.  It sits above ZI (which ended at 0x200013C8 when
-// this was written) and below the stack (which starts at 0x20002000).  Grow ZI past
-// it and the checkpoint writes start landing on real variables - a far worse fault
-// than anything it would help find.  Before switching it on, check the map:
-//
-//     Total RW Size (RW Data + ZI Data)   must stay well under 0x1600
-//
-#define DEBUG_CKPT					0
-
-#if DEBUG_CKPT
-#define CKPT_ADDR					0x20001600UL
-#define CKPT_MAGIC				0xC0DEFEEDUL
-#define CKPT_MAGIC_CELL			(*(volatile uint32_t *)(CKPT_ADDR))
-#define CKPT_VALUE_CELL			(*(volatile uint32_t *)(CKPT_ADDR + 4))
-#define CKPT(n)					do { CKPT_MAGIC_CELL = CKPT_MAGIC; CKPT_VALUE_CELL = (n); } while(0)
-#else
-#define CKPT(n)					do { } while(0)
-#endif
-
-//Read back over 0x78: the checkpoint the device was sitting at when it last died.
-#define LAST_CKPT_ID				0x78
-
-//  1 main loop top          2 SecondTick
-// 10 whileTask entry       13 about to serve a host message   14 message served
-// 20 the 250 ms block      21 about to read the SHT25         23 block finished
-// 40 about to transmit     41 transmit returned
-// 50 configuration commit
-// 11 past the reset-flag spin   12 past auto-send   15 about to check for a message
-// 16 about to CRC the message   17 CRC done         19 serving a log transfer
-// 25 about to do the 250 ms work
-// 99 INSIDE the bool_resetDevice spin - the flag was corrupted
-
-
 
 //************************************************************************/
 // CONFIGURATION PARAMETERS - ONE STRUCTURE
@@ -552,10 +494,18 @@ typedef struct
 	uint8_t		dpSwFactor[10];
 	uint8_t		relayStat;
 	uint8_t		autoSentInterval;
-	uint16_t	xbeeRstInterval;
 	uint8_t		broadcastEnb;
-	uint8_t		devicesInGroup;
-	uint8_t		xbeeMac[32];
+	uint8_t		reserved0;	//keeps the structure an even number of bytes - the
+							//flash is programmed a half word at a time and
+							//ConfigStore.c asserts on an odd size.  Removing
+							//the 35 bytes of XBee fields left it odd.
+	//The XBee radio fields that used to sit around here are gone: no code ever
+	//read them and their parameter ids were unserved.  Removing them shortens
+	//this structure, so every CFG() address after this point moves - which is
+	//exactly what ConfigStore.c's "hdr->len != sizeof(CfgCold_t)" check is for.
+	//A device holding the old layout reports it as written by another build and
+	//falls back to defaults rather than reading the wrong bytes.
+
 	uint8_t		dpLimit[6];
 	uint8_t		dpOffset[6];
 	uint8_t		lcdControl;
@@ -629,10 +579,7 @@ typedef struct
 #define DP_SW_FACT_ADDR				CFG(dpSwFactor)
 #define RELAY_STAT_ADDR				CFG(relayStat)
 #define AUTO_SENT_INTERVAL_ADDR		CFG(autoSentInterval)
-#define XBEE_RST_INTERVAL_ADDR		CFG(xbeeRstInterval)
 #define BROADCAST_ENB_ADDR			CFG(broadcastEnb)
-#define DEVICES_IN_GROUP_ADDR		CFG(devicesInGroup)
-#define XBEE_MAC_ADDR				CFG(xbeeMac)
 #define DP_LIMIT_ADDR				CFG(dpLimit)
 #define DP_OFFSET_ADDR				CFG(dpOffset)
 #define LCD_CONTROL_ADDR			CFG(lcdControl)
@@ -1100,10 +1047,16 @@ typedef struct
 #define RAW_DP_CNT_IND			10
 #define XBEE_RX_IND_MAX			20
 #define RX_IND_MAX				100
-//The shortest frame that can legally arrive: FF ID CMD PID CRC FE.  Anything
-//shorter cannot be checked, because the CRC length is computed as RxLen-3 in
-//unsigned 16 bit arithmetic and would wrap to about 65533.
-#define RX_MIN_FRAME_LEN			6
+//The shortest frame that can legally arrive.
+//
+//Most commands name a parameter and are six bytes, FF ID CMD PID CRC FE, but
+//PARA_WITH_ALM_READ_CMD has no parameter to name and arrives as FF ID CMD CRC FE
+//- five.  Five is still safe to check: RxLen-3 is 2, which is exactly the ID and
+//CMD byte the CRC covers, and RxLen-2 indexes the CRC byte itself.
+//
+//Below five there is nothing to check and checking is fatal, because RxLen-3 is
+//computed in unsigned 16 bit arithmetic and wraps to about 65533.
+#define RX_MIN_FRAME_LEN			5
 #define TX_IND_MAX				100
 
 //DATA LOG ADDRESS IN DATA FLASH -----------------------------------------------------

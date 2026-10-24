@@ -120,7 +120,12 @@ for want, why in [
         ('END precedes its START', 'the reversed-window rejection on 0x49'),
         ('[4]      device id', 'byte 4 of the reading record'),
         ('AT45DB321D', 'data flash'),
-        ('57600', 'default baud')]:
+        ('57600', 'default baud'),
+        ('FF 01 00 56 FE', 'the five byte read-with-alarm request'),
+        ('Two identical bytes: 0x0E open',
+         'the door field of the read-with-alarm reply'),
+        ('shortest frame the device accepts',
+         'that frames below five bytes are discarded')]:
     if want in body:
         print("  ok       %s present (%s)" % (want, why))
     else:

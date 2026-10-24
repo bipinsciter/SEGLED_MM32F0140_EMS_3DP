@@ -19,7 +19,7 @@ extern int16_t dummy,dummy1;
 extern uint8_t last_sec,last_min,last_hr,current_sec,current_min,current_hr;
 extern uint8_t keybyte,key_up_count,key_dn_count;
 extern uint8_t debounce;
-extern uint16_t gu16_XbeeRstInterval,gu16_logtransfer;
+extern uint16_t gu16_logtransfer;
 
 extern uint8_t PCCalibrationTimer,gu8_doorSensingTimer,progTimeout;
 extern uint8_t gu8_doorSensingTime,gu8_doorSensingPolarity,gu8_LCDBrigthnessCnt;
@@ -71,8 +71,6 @@ extern uint8_t crcVal;
 extern uint16_t CustPassword,FactCustPassword;
 
 extern uint8_t gu8ar_SrNumber[16];
-extern uint8_t gu8arr_XbeeMac[NO_OF_XBEE_MAC][XBEE_MAC_SIZE];
-extern uint8_t gu8arr_XbeeSelfMac[XBEE_MAC_SIZE];
 
 extern uint8_t Buffer1[100];
 extern uint8_t RAMBuffer[RAM_BUF_SIZE];
@@ -145,7 +143,7 @@ extern uint8_t gu8_dp_sw_factor_add_cnt[MAX_SUPPORTED_DP];
 extern uint16_t gu16_DPAutoCalTimer10Sec[MAX_SUPPORTED_DP],gu16_DPAutoCalTimer5Min[MAX_SUPPORTED_DP];
 extern uint8_t gu8_DPAutoCalDoorCnt[MAX_SUPPORTED_DP];
 
-extern uint8_t gu8_AutoSentTimeout,gu8_AutoSentInterval,gu8_DeviceInGroup,gu8_AutoSentTimer,gu8_groupID,gu8_broadcast;
+extern uint8_t gu8_AutoSentTimeout,gu8_AutoSentInterval,gu8_AutoSentTimer,gu8_broadcast;
 extern uint32_t gu32_triggerXbeeResetTimer;
 extern uint32_t LowEpoch,MidEpoch,MidEpoch1,HighEpoch,MidLogInd;
 extern uint32_t InitLogInd,LastLogInd,StartEpoch,EndEpoch,StartEpochTime,EndEpochTime,TotalLog,StartLogInd,EndLogInd;
@@ -156,9 +154,6 @@ extern uint16_t gu16_txSent;
 extern uint8_t gu8_txAbort;
 extern uint16_t gu16_txPaceUs;
 extern uint16_t gu16_txPaceBytes;
-#if DEBUG_CKPT
-extern uint32_t gu32_lastCkpt;
-#endif
 #if (DISPLAY_TYPE==ONE_LINE_DISPLAY)
 extern uint8_t ParaScrollTime;
 #endif
@@ -206,7 +201,6 @@ extern uint16_t gu16_nearBlinkTimer;
 //Defined in main.c, called from the TIM1 ISR
 void NearBlinkTick(void);
 extern bool bool_resetDevice;
-extern bool bool_triggerXbeeReset;
 extern bool bool_RamAllReadCmd;
 extern bool bool_sec_flag,bool_msec_flag,bool_msec250_flag,bool_keyScan_flag;
 extern volatile uint16_t gu16_tick50;
