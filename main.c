@@ -8670,6 +8670,10 @@ void ServePCMsg(void)
 			case DOOR_SENSE_TIME_ID:		tempshort = gu8_doorSensingTime;		break;
 			case LCD_BRIGHT_CNT_ID:			tempshort = gu8_LCDBrigthnessCnt;		break;
 			case AUTO_SENT_INTERVAL_ID:			tempshort = gu8_AutoSentInterval;		break;
+			//Broadcast on or off, so a host can show its real state instead of guessing.
+			//0x3F and 0x3E only ever SET it; without this there was no way to ask.  The
+			//flag is stored, so it survives a restart.
+			case BRDSTR_ID:				tempshort = gu8_broadcast;			break;
 			case LCD_CONTROL_ID:			tempshort = gu8_IsLCDDisable;			break;
 			case COM_CONTROL_ID:			tempshort = gu8_IsCOMDisable;			break;
 			case DP1_ALM_SENSE_TIME_ID:			tempshort = gu8_DpAlarmSensingTime[DP1];	break;
