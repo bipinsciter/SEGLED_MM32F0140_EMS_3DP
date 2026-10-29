@@ -143,7 +143,7 @@ extern uint8_t gu8_dp_sw_factor_add_cnt[MAX_SUPPORTED_DP];
 extern uint16_t gu16_DPAutoCalTimer10Sec[MAX_SUPPORTED_DP],gu16_DPAutoCalTimer5Min[MAX_SUPPORTED_DP];
 extern uint8_t gu8_DPAutoCalDoorCnt[MAX_SUPPORTED_DP];
 
-extern uint8_t gu8_AutoSentTimeout,gu8_AutoSentInterval,gu8_AutoSentTimer,gu8_broadcast;
+extern uint8_t gu8_AutoSentInterval,gu8_AutoSentTimer,gu8_broadcast;
 extern uint32_t gu32_triggerXbeeResetTimer;
 extern uint32_t LowEpoch,MidEpoch,MidEpoch1,HighEpoch,MidLogInd;
 extern uint32_t InitLogInd,LastLogInd,StartEpoch,EndEpoch,StartEpochTime,EndEpochTime,TotalLog,StartLogInd,EndLogInd;

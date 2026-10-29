@@ -10396,17 +10396,6 @@ void SecondTick(void)
 				gu8_AutoSentTimer=gu8_AutoSentInterval;
 			}
 		}
-		
-		if(gu8_AutoSentTimeout)
-		{
-			gu8_AutoSentTimeout--;
-			if(!gu8_AutoSentTimeout)
-			{
-				bool_autoSendResponse = true;
-				
-				gu8_AutoSentTimer=gu8_AutoSentInterval;
-			}
-		}
 	}
 	
 	if(DP_StartUpTimer)DP_StartUpTimer--;

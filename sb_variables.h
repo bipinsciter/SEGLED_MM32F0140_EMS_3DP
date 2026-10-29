@@ -154,7 +154,7 @@ uint8_t gu8_DPAutoCalDoorCnt[MAX_SUPPORTED_DP] = {0};
 uint32_t LowEpoch=0,MidEpoch=0,MidEpoch1=0,HighEpoch=0,MidLogInd=0;
 uint32_t InitLogInd=0,LastLogInd=0,StartEpoch=0,EndEpoch=0,StartEpochTime=0,EndEpochTime=0,TotalLog=0,StartLogInd=0,EndLogInd=0;
 
-uint8_t gu8_AutoSentTimeout=60,gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL,gu8_AutoSentTimer=0,gu8_broadcast=0;
+uint8_t gu8_AutoSentInterval=DEFAULT_AUTO_SENT_INTERVAL,gu8_AutoSentTimer=60,gu8_broadcast=0;
 uint32_t gu32_triggerXbeeResetTimer=0;
 
 uint8_t Temp_RTC_ARR[5]={0};

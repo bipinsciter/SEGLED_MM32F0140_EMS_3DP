@@ -10,7 +10,7 @@
 
 #define FW_MAJOR	1
 #define FW_MINOR	2
-#define FW_PATCH	2
+#define FW_PATCH	3
 
 #define ENABLE_KEY_LOGIC
 
@@ -79,7 +79,7 @@
 #define PRESSURE_SENSOR_XGZP6891D	0
 #define PRESSURE_SENSOR_WF200DP		1
 
-#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_XGZP6891D
+#define PRESSURE_SENSOR_PART		PRESSURE_SENSOR_WF200DP
 
 //------------------------------------------------------------------------
 #define THREE_LINE_DISPLAY		0
@@ -963,7 +963,7 @@ typedef struct
 #define NO_OF_USER_CAL_DATE		10
 
 #define DEFAULT_LCD_BRIGHTNESS	 15
-#define DEFAULT_AUTO_SENT_INTERVAL	 5
+#define DEFAULT_AUTO_SENT_INTERVAL	 3
 #define DEFAULT_XBEE_RST_INTERVAL	 360
 #define DEFAULT_DEVICES_IN_GROUP	 5
 
